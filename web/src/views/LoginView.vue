@@ -1,7 +1,13 @@
 <template>
-  <div class="min-h-screen bg-[linear-gradient(180deg,#f7efe2_0%,#efe4d4_100%)] px-4 py-6 text-stone-900">
-    <div class="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-      <section class="rounded-[2rem] border border-stone-900/10 bg-white/58 p-8 shadow-panel backdrop-blur lg:p-10">
+  <div
+    class="min-h-screen bg-[linear-gradient(180deg,#f7efe2_0%,#efe4d4_100%)] px-4 py-6 text-stone-900"
+  >
+    <div
+      class="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-6 lg:grid-cols-[1.1fr_0.9fr]"
+    >
+      <section
+        class="bg-white/58 rounded-[2rem] border border-stone-900/10 p-8 shadow-panel backdrop-blur lg:p-10"
+      >
         <p class="text-[0.7rem] uppercase tracking-[0.28em] text-stone-500">欢迎回来</p>
         <h1 class="mt-5 text-[clamp(3rem,7vw,5.8rem)] leading-[0.92] text-stone-950">
           打开 Ink，继续你的纸条灵感。
@@ -11,7 +17,9 @@
         </p>
       </section>
 
-      <section class="rounded-[2rem] border border-stone-900/10 bg-white/58 p-6 shadow-panel backdrop-blur lg:p-8">
+      <section
+        class="bg-white/58 rounded-[2rem] border border-stone-900/10 p-6 shadow-panel backdrop-blur lg:p-8"
+      >
         <p class="text-[0.68rem] uppercase tracking-[0.3em] text-stone-500">登录账号</p>
         <h2 class="mt-3 text-3xl text-stone-950">继续管理你的设备和打印内容。</h2>
 
@@ -35,15 +43,8 @@
         </div>
 
         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button class="ui-btn-primary px-5 py-3">
-            登录
-          </button>
-          <RouterLink
-            to="/devices"
-            class="ui-btn-secondary px-5 py-3"
-          >
-            先看看首页
-          </RouterLink>
+          <button class="ui-btn-primary px-5 py-3">登录</button>
+          <RouterLink to="/devices" class="ui-btn-secondary px-5 py-3"> 先看看首页 </RouterLink>
         </div>
       </section>
     </div>

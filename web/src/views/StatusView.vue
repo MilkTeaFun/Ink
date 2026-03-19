@@ -1,65 +1,68 @@
 <script setup lang="ts">
 const summary = [
-  { label: '已绑定设备', value: '2 台' },
-  { label: '执行中任务', value: '3 条' },
-  { label: '待确认打印', value: '2 条' },
-  { label: '今日完成', value: '18 条' },
-]
+  { label: "已绑定设备", value: "2 台" },
+  { label: "执行中任务", value: "3 条" },
+  { label: "待确认打印", value: "2 条" },
+  { label: "今日完成", value: "18 条" },
+];
+
 
 const devices = [
   {
-    name: '书桌咕咕机',
-    status: '已连接',
-    note: '默认设备',
+    name: "书桌咕咕机",
+    status: "已连接",
+    note: "默认设备",
   },
   {
-    name: '卧室咕咕机',
-    status: '等待绑定',
-    note: '睡前提醒',
+    name: "卧室咕咕机",
+    status: "等待绑定",
+    note: "睡前提醒",
   },
-]
+];
+
 
 const schedules = [
   {
-    title: '早报摘要',
-    source: '晨间订阅',
-    time: '每天 08:00',
-    status: '已开启',
+    title: "早报摘要",
+    source: "晨间订阅",
+    time: "每天 08:00",
+    status: "已开启",
   },
   {
-    title: '晚安提醒',
-    source: '睡前便签',
-    time: '每天 22:00',
-    status: '已开启',
+    title: "晚安提醒",
+    source: "睡前便签",
+    time: "每天 22:00",
+    status: "已开启",
   },
   {
-    title: '周末清单',
-    source: '家庭计划',
-    time: '周六 09:30',
-    status: '待确认',
+    title: "周末清单",
+    source: "家庭计划",
+    time: "周六 09:30",
+    status: "待确认",
   },
-]
+];
+
 
 const prints = [
   {
-    title: '今日待办',
-    device: '书桌咕咕机',
-    time: '14:12',
-    status: '已完成',
+    title: "今日待办",
+    device: "书桌咕咕机",
+    time: "14:12",
+    status: "已完成",
   },
   {
-    title: '购物清单',
-    device: '书桌咕咕机',
-    time: '13:47',
-    status: '打印中',
+    title: "购物清单",
+    device: "书桌咕咕机",
+    time: "13:47",
+    status: "打印中",
   },
   {
-    title: '晚安留言',
-    device: '卧室咕咕机',
-    time: '昨天',
-    status: '待确认',
+    title: "晚安留言",
+    device: "卧室咕咕机",
+    time: "昨天",
+    status: "待确认",
   },
-]
+];
 </script>
 
 <template>
@@ -71,7 +74,7 @@ const prints = [
 
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <article v-for="item in summary" :key="item.label" class="min-w-0">
-        <div class="rounded-[1.4rem] border border-white/55 bg-white/72 px-4 py-4 backdrop-blur">
+        <div class="bg-white/72 rounded-[1.4rem] border border-white/55 px-4 py-4 backdrop-blur">
           <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">{{ item.label }}</p>
           <p class="mt-3 text-3xl font-semibold text-stone-950">{{ item.value }}</p>
         </div>
@@ -106,7 +109,7 @@ const prints = [
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-800'
                 "
-            >
+              >
                 {{ device.status }}
               </span>
             </article>
@@ -139,7 +142,7 @@ const prints = [
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-stone-200 text-stone-700'
                 "
-            >
+              >
                 {{ task.status }}
               </span>
             </article>

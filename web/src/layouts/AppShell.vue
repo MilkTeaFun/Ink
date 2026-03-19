@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from "vue-router";
 
-import { navigationItems } from '@/router'
+import { navigationItems } from "@/router";
 
-const route = useRoute()
+const route = useRoute();
 </script>
 
 <template>
-  <div class="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,225,198,0.72),transparent_34%),linear-gradient(180deg,#fcfaf7_0%,#f5f1eb_100%)] text-stone-900">
+  <div
+    class="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,225,198,0.72),transparent_34%),linear-gradient(180deg,#fcfaf7_0%,#f5f1eb_100%)] text-stone-900"
+  >
     <div class="mx-auto min-h-screen max-w-[1480px] px-4 py-4 lg:px-6 lg:py-6">
-      <div class="rounded-[2rem] border border-stone-900/10 bg-white/55 shadow-[0_30px_80px_-48px_rgba(74,53,34,0.25)] backdrop-blur-2xl">
+      <div
+        class="rounded-[2rem] border border-stone-900/10 bg-white/55 shadow-[0_30px_80px_-48px_rgba(74,53,34,0.25)] backdrop-blur-2xl"
+      >
         <header class="border-b border-stone-900/10 px-4 py-4 lg:px-6">
           <div class="flex items-center justify-between gap-4 lg:hidden">
             <div class="flex items-center gap-3">
-              <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-stone-900/10 bg-white/78 text-sm font-semibold text-stone-900">
+              <span
+                class="bg-white/78 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-stone-900/10 text-sm font-semibold text-stone-900"
+              >
                 Ink
               </span>
               <div>
@@ -21,14 +27,14 @@ const route = useRoute()
               </div>
             </div>
 
-            <RouterLink to="/login" class="ui-btn-secondary px-4 py-2">
-              账号
-            </RouterLink>
+            <RouterLink to="/login" class="ui-btn-secondary px-4 py-2"> 账号 </RouterLink>
           </div>
 
           <div class="hidden items-center gap-4 lg:grid lg:grid-cols-[220px_minmax(0,1fr)_220px]">
             <div class="flex items-center gap-3">
-              <span class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-stone-900/10 bg-white/82 text-sm font-semibold text-stone-900">
+              <span
+                class="bg-white/82 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-stone-900/10 text-sm font-semibold text-stone-900"
+              >
                 Ink
               </span>
               <p class="text-base font-semibold text-stone-950">Ink 咕咕机助手</p>
@@ -36,7 +42,9 @@ const route = useRoute()
 
             <nav class="overflow-x-auto">
               <div class="mx-auto max-w-[560px]">
-                <div class="grid grid-cols-4 gap-2 rounded-[1.75rem] border border-stone-900/10 bg-white/88 p-2 backdrop-blur">
+                <div
+                  class="bg-white/88 grid grid-cols-4 gap-2 rounded-[1.75rem] border border-stone-900/10 p-2 backdrop-blur"
+                >
                   <RouterLink
                     v-for="item in navigationItems"
                     :key="item.name"
@@ -55,12 +63,8 @@ const route = useRoute()
             </nav>
 
             <div class="flex items-center justify-end gap-2">
-              <RouterLink to="/login" class="ui-btn-secondary px-4 py-2">
-                登录
-              </RouterLink>
-              <button class="ui-btn-secondary px-4 py-2">
-                退出
-              </button>
+              <RouterLink to="/login" class="ui-btn-secondary px-4 py-2"> 登录 </RouterLink>
+              <button class="ui-btn-secondary px-4 py-2">退出</button>
             </div>
           </div>
         </header>
@@ -74,7 +78,9 @@ const route = useRoute()
         </main>
       </div>
 
-      <nav class="fixed inset-x-3 bottom-3 z-30 rounded-[1.75rem] border border-stone-900/10 bg-white/90 p-2 shadow-[0_24px_50px_-30px_rgba(35,24,19,0.6)] backdrop-blur lg:hidden">
+      <nav
+        class="fixed inset-x-3 bottom-3 z-30 rounded-[1.75rem] border border-stone-900/10 bg-white/90 p-2 shadow-[0_24px_50px_-30px_rgba(35,24,19,0.6)] backdrop-blur lg:hidden"
+      >
         <div class="grid grid-cols-4 gap-2">
           <RouterLink
             v-for="item in navigationItems"

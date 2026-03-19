@@ -11,14 +11,18 @@
           <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">账号管理</p>
           <h3 class="mt-2 text-2xl font-semibold text-stone-950">登录、退出和基本账号信息。</h3>
           <div class="ui-list-card mt-4">
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">当前账号</p>
                 <p class="mt-1 text-sm text-stone-500">name@example.com</p>
               </div>
               <button class="ui-btn-secondary px-3 py-2">管理</button>
             </div>
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">登录保护</p>
                 <p class="mt-1 text-sm text-stone-500">长时间未操作自动退出</p>
@@ -32,19 +36,28 @@
           <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">打印设置</p>
           <h3 class="mt-2 text-2xl font-semibold text-stone-950">默认设备和打印方式。</h3>
           <div class="ui-list-card mt-4">
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">默认设备</p>
                 <p class="mt-1 text-sm text-stone-500">书桌咕咕机</p>
               </div>
-              <span class="text-xs font-medium uppercase tracking-[0.2em] text-stone-400">常用</span>
+              <span class="text-xs font-medium uppercase tracking-[0.2em] text-stone-400"
+                >常用</span
+              >
             </div>
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">发送前确认</p>
                 <p class="mt-1 text-sm text-stone-500">已开启</p>
               </div>
-              <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">开启</span>
+              <span
+                class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800"
+                >开启</span
+              >
             </div>
             <div class="ui-list-row">
               <p class="text-sm font-semibold text-stone-950">纸条风格</p>
@@ -69,14 +82,18 @@
           <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">AI 服务绑定</p>
           <h3 class="mt-2 text-2xl font-semibold text-stone-950">以后会在这里管理模型与服务商。</h3>
           <div class="ui-list-card mt-4">
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">默认 AI 服务</p>
                 <p class="mt-1 text-sm text-stone-500">暂未绑定</p>
               </div>
               <button class="ui-btn-primary">去绑定</button>
             </div>
-            <div class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              class="ui-list-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div>
                 <p class="text-sm font-semibold text-stone-950">回答风格</p>
                 <p class="mt-1 text-sm text-stone-500">清楚温柔</p>
@@ -88,7 +105,9 @@
 
         <article class="ui-panel">
           <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">授权</p>
-          <h3 class="mt-2 text-2xl font-semibold text-stone-950">外部来源和服务权限都会放在这里。</h3>
+          <h3 class="mt-2 text-2xl font-semibold text-stone-950">
+            外部来源和服务权限都会放在这里。
+          </h3>
           <div class="ui-list-card mt-4">
             <div class="ui-list-row">
               <p class="text-sm font-semibold text-stone-950">连接服务授权</p>
