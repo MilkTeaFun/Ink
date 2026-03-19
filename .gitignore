@@ -11,6 +11,7 @@
 /server/coverage.out
 
 /web/node_modules/
+/web/.vercel/
 /web/dist/
 /web/coverage/
 /web/playwright-report/
