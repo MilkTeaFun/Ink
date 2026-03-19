@@ -25,9 +25,8 @@ Ink is a comprehensive solution for managing Memobird (咕咕机) thermal printe
 
 ## Contributing
 
-Contributions and suggestions are welcome! Feel free to open issues or submit pull requests.
+Contributions and suggestions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
