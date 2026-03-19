@@ -17,6 +17,11 @@ Frontend shell for the Ink Memobird console.
 ```bash
 pnpm install
 pnpm dev
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm format:check
+pnpm check
 pnpm test:run
 pnpm build
 ```

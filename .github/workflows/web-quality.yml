@@ -1,0 +1,39 @@
+name: web-quality
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/web-quality.yml"
+      - "Makefile"
+      - "web/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/web-quality.yml"
+      - "Makefile"
+      - "web/**"
+
+jobs:
+  web-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check

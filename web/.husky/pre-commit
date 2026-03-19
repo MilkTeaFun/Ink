@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd web || exit 1
+pnpm exec lint-staged --cwd .

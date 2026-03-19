@@ -1,0 +1,5 @@
+{
+  "sortImports": {},
+  "sortTailwindcss": {},
+  "ignorePatterns": ["dist/**", "coverage/**", "node_modules/**"]
+}
