@@ -70,7 +70,7 @@ const defaultTargets = [
       </div>
     </section>
 
-    <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)_280px]">
+    <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <aside class="hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-semibold text-stone-900">最近对话</h3>
@@ -108,11 +108,21 @@ const defaultTargets = [
         >
           <div>
             <h3 class="text-lg font-semibold text-stone-900">当前对话</h3>
+            <p class="mt-1 text-xs text-stone-500">默认发往：书桌咕咕机</p>
           </div>
-          <div
-            class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
-          >
-            助手：清楚温柔
+          <div class="flex gap-2">
+            <button
+              class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-800 transition-colors hover:bg-stone-200"
+              title="切换回答语气"
+            >
+              语气：清楚温柔
+            </button>
+            <button
+              class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-800 transition-colors hover:bg-stone-200"
+              title="设置目标长度"
+            >
+              长度：两段以内
+            </button>
           </div>
         </div>
 
@@ -124,7 +134,7 @@ const defaultTargets = [
             :class="
               message.role === 'user'
                 ? 'ml-auto rounded-br-sm bg-stone-900 text-white'
-                : 'rounded-bl-sm bg-stone-100 text-stone-900'
+                : 'rounded-bl-sm border border-stone-200 bg-white text-stone-900 shadow-sm'
             "
           >
             {{ message.text }}
@@ -132,10 +142,17 @@ const defaultTargets = [
         </div>
 
         <div class="mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
-          <div class="flex snap-x gap-2 overflow-x-auto pb-2">
-            <button class="ui-btn-secondary snap-start whitespace-nowrap">打印最新回答</button>
-            <button class="ui-btn-secondary snap-start whitespace-nowrap">选择指定回答</button>
-            <button class="ui-btn-secondary snap-start whitespace-nowrap">打印整段对话</button>
+          <div class="flex items-center justify-between">
+            <div class="flex snap-x gap-2 overflow-x-auto pb-2">
+              <button class="ui-btn-secondary snap-start whitespace-nowrap">打印最新回答</button>
+              <button class="ui-btn-secondary snap-start whitespace-nowrap">选择指定回答</button>
+              <button class="ui-btn-secondary snap-start whitespace-nowrap">打印整段对话</button>
+            </div>
+            <button
+              class="ui-btn-secondary mb-2 whitespace-nowrap text-stone-500 hover:text-stone-900"
+            >
+              保存草稿
+            </button>
           </div>
 
           <div
@@ -150,19 +167,6 @@ const defaultTargets = [
               class="flex items-center justify-between rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-2"
             >
               <div class="flex gap-2">
-                <button
-                  class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
-                  title="换个语气"
-                >
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </button>
                 <button
                   class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
                   title="重新生成"
@@ -182,33 +186,6 @@ const defaultTargets = [
           </div>
         </div>
       </div>
-
-      <aside class="hidden space-y-8 lg:block">
-        <section>
-          <h3 class="mb-4 text-lg font-semibold text-stone-900">预览摘要</h3>
-          <div class="ui-list-card">
-            <div v-for="item in previewSummary" :key="item.label" class="ui-list-row">
-              <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
-              <p class="mt-1 text-sm font-medium text-stone-900">{{ item.value }}</p>
-              <p class="mt-1 text-xs text-stone-500">{{ item.note }}</p>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <h3 class="mb-4 text-lg font-semibold text-stone-900">默认目标</h3>
-          <div class="ui-list-card">
-            <div v-for="item in defaultTargets" :key="item.label" class="ui-list-row">
-              <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
-              <p class="mt-1 text-sm font-medium text-stone-900">{{ item.value }}</p>
-              <p class="mt-1 text-xs text-stone-500">{{ item.note }}</p>
-            </div>
-            <div class="border-t border-stone-100 bg-stone-50 p-4">
-              <button class="ui-btn-secondary w-full">先保存草稿</button>
-            </div>
-          </div>
-        </section>
-      </aside>
     </div>
   </section>
 </template>

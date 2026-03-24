@@ -163,13 +163,13 @@ const prints = [
               </div>
 
               <button
-                class="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-stone-900 focus:ring-offset-2"
+                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-stone-900 focus:ring-offset-2"
                 :class="task.enabled ? 'bg-stone-900' : 'bg-stone-200'"
                 :aria-pressed="task.enabled"
                 type="button"
               >
                 <span
-                  class="mt-1 inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out"
+                  class="inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out"
                   :class="task.enabled ? 'translate-x-6' : 'translate-x-1'"
                 />
               </button>
