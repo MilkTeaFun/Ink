@@ -13,19 +13,6 @@ const messages = [
     text: "当然可以。你可以写成：今天也别太赶，先把最重要的一件事做好，晚一点记得给自己买杯热饮。",
   },
 ];
-
-
-const previewSummary = [
-  { label: "内容语气", value: "清楚温柔", note: "适合提醒、祝福和日常短句。" },
-  { label: "推荐长度", value: "两段以内", note: "控制在热敏纸上更容易一眼读完。" },
-  { label: "当前输出", value: "最新回答", note: "更适合直接发往默认设备。" },
-];
-
-
-const defaultTargets = [
-  { label: "默认设备", value: "书桌咕咕机", note: "工作台上的常用打印位。" },
-  { label: "默认打印方式", value: "最新回答", note: "不额外选择时会直接取最新一段。" },
-];
 </script>
 
 <template>
