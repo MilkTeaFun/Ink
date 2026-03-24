@@ -1,4 +1,10 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
+import {
+  createMemoryHistory,
+  createRouter,
+  createWebHistory,
+  type RouteRecordRaw,
+} from "vue-router";
+import type { RouterHistory } from "vue-router";
 
 import AppShell from "@/layouts/AppShell.vue";
 import ConnectionsView from "@/views/ConnectionsView.vue";
@@ -88,9 +94,19 @@ export const routes: RouteRecordRaw[] = [
   },
 ];
 
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
-});
+export function createAppRouter(
+  history: RouterHistory = createWebHistory(import.meta.env.BASE_URL),
+) {
+  return createRouter({
+    history,
+    routes,
+  });
+}
+
+export function createTestRouter() {
+  return createAppRouter(createMemoryHistory());
+}
+
+const router = createAppRouter();
 
 export default router;

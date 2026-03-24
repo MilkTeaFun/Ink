@@ -4,28 +4,28 @@
 
 # Ink
 
-A management tool designed for Memobird thermal printers, enabling seamless control and content delivery to your Memobird device.
+A management tool for Memobird thermal printers. The current repository primarily contains the early web console for device management and content delivery workflows.
 
-> 🚧 This project is currently in very early development!!! The technical stack and implementation details are still being explored and may be subject to significant changes.
+> This project is in early development. The current focus is the web console, and the technical stack and implementation details may still change significantly.
 
 ## Overview
 
-Ink is a comprehensive solution for managing Memobird (咕咕机) thermal printers. It provides an intuitive interface to send messages, images, and other content to your Memobird device, making it easy to print notes, reminders, and creative content on the go.
+Ink is an early-stage management experience for Memobird (咕咕机) thermal printers. The current codebase focuses on a Vue-based web shell for exploring device status, conversations, connections, and settings flows before deeper backend and device integration lands.
 
 ### Key Capabilities
 
-- **Device Management**: Connect and manage multiple Memobird devices
-- **Content Printing**: Send text, images, and formatted content to your Memobird
-- **Template Support**: Use pre-defined templates for common printing tasks
-- **Queue Management**: Manage print jobs and queue multiple items
-- **History Tracking**: Keep track of all printed content
-- **API Integration**: Seamless integration with Memobird's official API
+- **Web Console**: A Vue 3 dashboard shell for the Ink workspace
+- **Device Status Views**: Early UI for device state, tasks, and print history
+- **Conversation Flow**: UI for drafting and preparing printable content
+- **Settings and Connections**: Early management surfaces for preferences and integrations
 
 ## Roadmap
 
-### Planned Features
+### Current Focus
 
-- [ ] **Web-based Dashboard**: A modern web interface for managing your Memobird devices
+- [x] **Web-based Dashboard Shell**: Initial frontend workspace under [`web/`](web/)
+- [ ] **Backend and Device Integration**: Connect the web console to real services and Memobird APIs
+- [ ] **Print Workflows**: Move from static UI exploration to end-to-end printable actions
 
 ## Contributing
 

@@ -1,0 +1,29 @@
+name: dependency-review
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/dependency-review.yml"
+      - ".github/workflows/web-quality.yml"
+      - ".github/dependabot.yml"
+      - "web/package.json"
+      - "web/pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+

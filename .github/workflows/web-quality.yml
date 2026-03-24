@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/web-quality.yml"
+      - ".github/workflows/dependency-review.yml"
+      - ".github/dependabot.yml"
       - "Makefile"
       - "web/**"
   push:
@@ -11,25 +13,35 @@ on:
       - main
     paths:
       - ".github/workflows/web-quality.yml"
+      - ".github/workflows/dependency-review.yml"
+      - ".github/dependabot.yml"
       - "Makefile"
       - "web/**"
+
+concurrency:
+  group: web-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   web-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
     env:
       HUSKY: 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
