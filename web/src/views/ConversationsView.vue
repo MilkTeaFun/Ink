@@ -29,34 +29,31 @@ const defaultTargets = [
 </script>
 
 <template>
-  <section class="space-y-6 pb-24 lg:pb-0">
+  <section class="space-y-8 pb-24 lg:pb-8">
     <div>
-      <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">对话</p>
-      <h2 class="mt-2 text-3xl text-stone-950">通过对话整理内容，再决定打印哪一段。</h2>
+      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">对话</h2>
+      <p class="mt-2 text-base text-stone-500">通过对话整理内容，再决定打印哪一段。</p>
     </div>
 
-    <section class="space-y-3 lg:hidden">
+    <section class="space-y-4 lg:hidden">
       <div class="flex items-center justify-between">
-        <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">最近对话</p>
-        <button class="ui-btn-secondary px-3 py-2">新建</button>
+        <h3 class="text-lg font-semibold text-stone-900">最近对话</h3>
+        <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
       </div>
 
-      <div class="flex gap-3 overflow-x-auto pb-2">
+      <div class="flex snap-x gap-4 overflow-x-auto pb-4">
         <article
           v-for="chat in chats"
           :key="chat.title"
-          class="min-w-[220px] rounded-[1.2rem] border px-4 py-4 transition"
+          class="min-w-[240px] snap-center rounded-xl border p-5 transition-colors"
           :class="
             chat.active
-              ? 'border-stone-900/80 bg-stone-950 text-stone-50'
-              : 'bg-white/74 border-white/60 text-stone-900'
+              ? 'border-stone-900 bg-stone-900 text-white'
+              : 'border-stone-200 bg-white text-stone-900 hover:border-stone-300'
           "
         >
           <div class="flex items-start justify-between gap-2">
-            <p
-              class="text-sm font-semibold"
-              :class="chat.active ? 'text-stone-50' : 'text-stone-950'"
-            >
+            <p class="text-sm font-medium" :class="chat.active ? 'text-white' : 'text-stone-900'">
               {{ chat.title }}
             </p>
             <span class="text-xs" :class="chat.active ? 'text-stone-300' : 'text-stone-500'">{{
@@ -64,8 +61,8 @@ const defaultTargets = [
             }}</span>
           </div>
           <p
-            class="mt-2 text-sm leading-6"
-            :class="chat.active ? 'text-stone-300' : 'text-stone-600'"
+            class="mt-2 text-sm leading-relaxed"
+            :class="chat.active ? 'text-stone-300' : 'text-stone-500'"
           >
             {{ chat.preview }}
           </p>
@@ -74,119 +71,143 @@ const defaultTargets = [
     </section>
 
     <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)_280px]">
-      <aside class="ui-panel hidden min-w-0 lg:block">
+      <aside class="hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
-          <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">最近对话</p>
-          <button class="ui-btn-secondary px-3 py-2">新建</button>
+          <h3 class="text-lg font-semibold text-stone-900">最近对话</h3>
+          <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
         </div>
 
-        <div class="ui-list-card mt-5">
+        <div class="ui-list-card">
           <article
             v-for="chat in chats"
             :key="chat.title"
-            class="ui-list-row"
-            :class="chat.active ? 'is-active text-stone-50' : 'text-stone-900'"
+            class="ui-list-row cursor-pointer"
+            :class="chat.active ? 'bg-stone-50' : ''"
           >
             <div class="flex items-start justify-between gap-2">
               <p
-                class="text-sm font-semibold"
-                :class="chat.active ? 'text-stone-50' : 'text-stone-950'"
+                class="text-sm font-medium"
+                :class="chat.active ? 'text-stone-900' : 'text-stone-700'"
               >
                 {{ chat.title }}
               </p>
-              <span class="text-xs" :class="chat.active ? 'text-stone-300' : 'text-stone-500'">{{
+              <span class="text-xs" :class="chat.active ? 'text-stone-500' : 'text-stone-400'">{{
                 chat.time
               }}</span>
             </div>
-            <p
-              class="mt-2 text-sm leading-6"
-              :class="chat.active ? 'text-stone-300' : 'text-stone-600'"
-            >
+            <p class="mt-1 line-clamp-2 text-sm text-stone-500">
               {{ chat.preview }}
             </p>
           </article>
         </div>
       </aside>
 
-      <div class="ui-panel min-w-0">
+      <div class="flex h-[calc(100vh-16rem)] min-h-[500px] min-w-0 flex-col">
         <div
-          class="flex flex-col gap-3 border-b border-stone-900/10 pb-5 sm:flex-row sm:items-end sm:justify-between"
+          class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">当前对话</p>
-            <h3 class="mt-2 text-2xl font-semibold text-stone-950">
-              先把内容整理顺，再决定打印哪一句。
-            </h3>
+            <h3 class="text-lg font-semibold text-stone-900">当前对话</h3>
           </div>
-          <div class="text-sm text-stone-600">当前助手：清楚温柔</div>
+          <div
+            class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+          >
+            助手：清楚温柔
+          </div>
         </div>
 
-        <div class="mt-6">
-          <div class="space-y-4">
-            <article
-              v-for="message in messages"
-              :key="message.text"
-              class="max-w-[88%] rounded-[1.45rem] px-4 py-3 text-sm leading-7"
-              :class="
-                message.role === 'user'
-                  ? 'ml-auto bg-stone-950 text-stone-50'
-                  : 'bg-white text-stone-700 shadow-sm'
-              "
-            >
-              {{ message.text }}
-            </article>
+        <div class="flex-1 space-y-6 overflow-y-auto pr-4">
+          <article
+            v-for="message in messages"
+            :key="message.text"
+            class="max-w-[85%] rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed"
+            :class="
+              message.role === 'user'
+                ? 'ml-auto rounded-br-sm bg-stone-900 text-white'
+                : 'rounded-bl-sm bg-stone-100 text-stone-900'
+            "
+          >
+            {{ message.text }}
+          </article>
+        </div>
+
+        <div class="mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
+          <div class="flex snap-x gap-2 overflow-x-auto pb-2">
+            <button class="ui-btn-secondary snap-start whitespace-nowrap">打印最新回答</button>
+            <button class="ui-btn-secondary snap-start whitespace-nowrap">选择指定回答</button>
+            <button class="ui-btn-secondary snap-start whitespace-nowrap">打印整段对话</button>
           </div>
 
-          <div class="mt-6 flex flex-col gap-2 border-t border-stone-900/10 pt-4 sm:flex-row">
-            <button class="ui-btn-primary w-full sm:w-auto">打印整段对话</button>
-            <button class="ui-btn-secondary w-full sm:w-auto">打印最新回答</button>
-            <button class="ui-btn-secondary w-full sm:w-auto">选择指定回答</button>
-          </div>
-
-          <div class="mt-5 border-t border-stone-900/10 pt-4">
+          <div
+            class="relative rounded-xl border border-stone-200 bg-white shadow-sm transition-all focus-within:ring-2 focus-within:ring-stone-900 focus-within:ring-offset-2"
+          >
             <textarea
-              rows="5"
-              placeholder="比如：帮我写一张今天的购物清单，语气轻松一点。"
-              class="w-full resize-none border-0 bg-transparent text-sm leading-6 text-stone-700 outline-none"
+              rows="3"
+              placeholder="发送消息..."
+              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-0"
             />
             <div
-              class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+              class="flex items-center justify-between rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-2"
             >
-              <div class="flex flex-wrap gap-2">
-                <button class="ui-btn-secondary px-4 py-2">重新生成</button>
-                <button class="ui-btn-secondary px-4 py-2">换个语气</button>
+              <div class="flex gap-2">
+                <button
+                  class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
+                  title="换个语气"
+                >
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </button>
+                <button
+                  class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
+                  title="重新生成"
+                >
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
               </div>
-              <button class="ui-btn-primary w-full sm:w-auto">发送</button>
+              <button class="ui-btn-primary px-4 py-1.5">发送</button>
             </div>
           </div>
         </div>
       </div>
 
-      <aside class="ui-panel space-y-5">
-        <article class="border-b border-stone-900/10 pb-5">
-          <p class="text-sm font-semibold text-stone-950">预览摘要</p>
-          <div class="ui-list-card mt-4">
+      <aside class="hidden space-y-8 lg:block">
+        <section>
+          <h3 class="mb-4 text-lg font-semibold text-stone-900">预览摘要</h3>
+          <div class="ui-list-card">
             <div v-for="item in previewSummary" :key="item.label" class="ui-list-row">
-              <p class="text-sm text-stone-500">{{ item.label }}</p>
-              <p class="mt-1 text-base font-semibold text-stone-950">{{ item.value }}</p>
-              <p class="mt-2 text-sm leading-6 text-stone-500">{{ item.note }}</p>
+              <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
+              <p class="mt-1 text-sm font-medium text-stone-900">{{ item.value }}</p>
+              <p class="mt-1 text-xs text-stone-500">{{ item.note }}</p>
             </div>
           </div>
-        </article>
+        </section>
 
-        <article>
-          <p class="text-sm font-semibold text-stone-950">默认目标</p>
-          <div class="ui-list-card mt-3">
+        <section>
+          <h3 class="mb-4 text-lg font-semibold text-stone-900">默认目标</h3>
+          <div class="ui-list-card">
             <div v-for="item in defaultTargets" :key="item.label" class="ui-list-row">
-              <p class="text-sm text-stone-500">{{ item.label }}</p>
-              <p class="mt-1 text-base font-semibold text-stone-950">{{ item.value }}</p>
-              <p class="mt-2 text-sm leading-6 text-stone-500">{{ item.note }}</p>
+              <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
+              <p class="mt-1 text-sm font-medium text-stone-900">{{ item.value }}</p>
+              <p class="mt-1 text-xs text-stone-500">{{ item.note }}</p>
             </div>
-            <div class="ui-list-row">
+            <div class="border-t border-stone-100 bg-stone-50 p-4">
               <button class="ui-btn-secondary w-full">先保存草稿</button>
             </div>
           </div>
-        </article>
+        </section>
       </aside>
     </div>
   </section>

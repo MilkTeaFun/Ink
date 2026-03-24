@@ -66,35 +66,33 @@ const prints = [
 </script>
 
 <template>
-  <section class="space-y-6 pb-24 lg:pb-0">
-    <div class="space-y-2">
-      <p class="text-[0.62rem] uppercase tracking-[0.24em] text-stone-500">状态</p>
-      <h2 class="text-[1.95rem] font-semibold tracking-[-0.05em] text-stone-950">
-        设备、任务和打印记录都在这里。
-      </h2>
+  <section class="space-y-8 pb-24 lg:pb-8">
+    <div>
+      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">状态</h2>
+      <p class="mt-2 text-base text-stone-500">设备、任务和打印记录都在这里。</p>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <article
         v-for="item in summary"
         :key="item.label"
-        class="bg-white/72 rounded-[1.35rem] border border-white/60 px-4 py-4 backdrop-blur"
+        class="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
       >
-        <p class="text-[0.62rem] uppercase tracking-[0.22em] text-stone-500">{{ item.label }}</p>
-        <div class="mt-2 flex items-end justify-between gap-3">
-          <p class="text-[1.9rem] font-semibold leading-none tracking-[-0.05em] text-stone-950">
+        <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
+        <div class="mt-3 flex items-end justify-between gap-3">
+          <p class="text-2xl font-semibold text-stone-900">
             {{ item.value }}
           </p>
-          <div class="mb-1 h-1.5 w-16 overflow-hidden rounded-full bg-stone-200/70">
+          <div class="mb-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-stone-100">
             <div
-              class="h-full rounded-full"
+              class="h-full rounded-full transition-all duration-500"
               :class="
                 item.tone === 'green'
                   ? 'bg-emerald-500'
                   : item.tone === 'amber'
                     ? 'bg-amber-500'
                     : item.tone === 'stone'
-                      ? 'bg-stone-500'
+                      ? 'bg-stone-400'
                       : 'bg-stone-800'
               "
               :style="{ width: `${item.progress}%` }"
@@ -104,20 +102,18 @@ const prints = [
       </article>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div class="space-y-4">
-        <section class="ui-panel">
-          <div class="flex items-start justify-between gap-4">
+    <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div class="space-y-8">
+        <section>
+          <div class="mb-4 flex items-center justify-between">
             <div>
-              <p class="text-[0.62rem] uppercase tracking-[0.22em] text-stone-500">已绑定设备</p>
-              <h3 class="mt-2 text-[1.65rem] font-semibold tracking-[-0.05em] text-stone-950">
-                先确认哪台设备在待命。
-              </h3>
+              <h3 class="text-lg font-semibold text-stone-900">已绑定设备</h3>
+              <p class="mt-1 text-sm text-stone-500">先确认哪台设备在待命。</p>
             </div>
-            <button class="ui-btn-secondary px-3 py-2 text-xs">管理设备</button>
+            <button class="ui-btn-secondary px-3 py-1.5 text-sm">管理设备</button>
           </div>
 
-          <div class="ui-list-card mt-4">
+          <div class="ui-list-card">
             <article
               v-for="device in devices"
               :key="device.name"
@@ -125,22 +121,22 @@ const prints = [
             >
               <div class="flex min-w-0 items-center gap-3">
                 <div
-                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#f6ede3] text-xs font-semibold text-[#6d4d31]"
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm font-semibold text-stone-700"
                 >
                   {{ device.name.slice(0, 1) }}
                 </div>
                 <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-stone-950">{{ device.name }}</p>
-                  <p class="mt-1 text-xs text-stone-500">{{ device.note }}</p>
+                  <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
+                  <p class="mt-0.5 text-xs text-stone-500">{{ device.note }}</p>
                 </div>
               </div>
 
               <span
-                class="inline-flex rounded-full px-3 py-1 text-[0.7rem] font-semibold"
+                class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="
                   device.status === '已连接'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-amber-100 text-amber-700'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
+                    : 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
                 "
               >
                 {{ device.status }}
@@ -149,34 +145,32 @@ const prints = [
           </div>
         </section>
 
-        <section class="ui-panel">
-          <div>
-            <p class="text-[0.62rem] uppercase tracking-[0.22em] text-stone-500">定时任务</p>
-            <h3 class="mt-2 text-[1.65rem] font-semibold tracking-[-0.05em] text-stone-950">
-              哪些内容会按计划自动准备。
-            </h3>
+        <section>
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold text-stone-900">定时任务</h3>
+            <p class="mt-1 text-sm text-stone-500">哪些内容会按计划自动准备。</p>
           </div>
 
-          <div class="mt-4 space-y-4">
+          <div class="ui-list-card divide-y divide-stone-100">
             <article
               v-for="task in schedules"
               :key="`${task.title}-${task.time}`"
-              class="border-stone-900/8 flex items-center justify-between gap-4 border-b pb-4 last:border-b-0 last:pb-0"
+              class="flex items-center justify-between gap-4 p-4 transition-colors hover:bg-stone-50"
             >
               <div class="min-w-0">
-                <p class="text-sm font-semibold text-stone-950">{{ task.title }}</p>
-                <p class="mt-1 text-xs text-stone-500">{{ task.source }} · {{ task.time }}</p>
+                <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
+                <p class="mt-0.5 text-xs text-stone-500">{{ task.source }} · {{ task.time }}</p>
               </div>
 
               <button
-                class="relative h-6 w-11 shrink-0 rounded-full transition"
-                :class="task.enabled ? 'bg-stone-700' : 'bg-stone-300'"
+                class="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-stone-900 focus:ring-offset-2"
+                :class="task.enabled ? 'bg-stone-900' : 'bg-stone-200'"
                 :aria-pressed="task.enabled"
                 type="button"
               >
                 <span
-                  class="absolute top-1 h-4 w-4 rounded-full bg-white transition"
-                  :class="task.enabled ? 'left-6' : 'left-1'"
+                  class="mt-1 inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out"
+                  :class="task.enabled ? 'translate-x-6' : 'translate-x-1'"
                 />
               </button>
             </article>
@@ -184,18 +178,16 @@ const prints = [
         </section>
       </div>
 
-      <aside class="ui-panel">
-        <div class="flex items-start justify-between gap-4">
+      <aside>
+        <div class="mb-4 flex items-center justify-between">
           <div>
-            <p class="text-[0.62rem] uppercase tracking-[0.22em] text-stone-500">打印记录</p>
-            <h3 class="mt-2 text-[1.65rem] font-semibold tracking-[-0.05em] text-stone-950">
-              最近状态
-            </h3>
+            <h3 class="text-lg font-semibold text-stone-900">打印记录</h3>
+            <p class="mt-1 text-sm text-stone-500">最近状态</p>
           </div>
-          <button class="ui-btn-secondary px-3 py-2 text-xs">筛选</button>
+          <button class="ui-btn-secondary px-3 py-1.5 text-sm">筛选</button>
         </div>
 
-        <div class="ui-list-card mt-4">
+        <div class="ui-list-card p-4">
           <div class="ui-timeline">
             <article
               v-for="item in prints"
@@ -204,17 +196,17 @@ const prints = [
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-stone-950">{{ item.title }}</p>
-                  <p class="mt-1 text-xs text-stone-500">{{ item.device }} · {{ item.time }}</p>
+                  <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
+                  <p class="mt-0.5 text-xs text-stone-500">{{ item.device }} · {{ item.time }}</p>
                 </div>
                 <span
-                  class="inline-flex rounded-full px-2.5 py-1 text-[0.68rem] font-semibold"
+                  class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                   :class="
                     item.status === '已完成'
-                      ? 'bg-lime-100 text-lime-700'
+                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
                       : item.status === '打印中'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-stone-200 text-stone-700'
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
+                        : 'bg-stone-100 text-stone-700 ring-1 ring-inset ring-stone-500/10'
                   "
                 >
                   {{ item.status }}

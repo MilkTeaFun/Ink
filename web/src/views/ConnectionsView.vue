@@ -20,39 +20,39 @@ const accessMethods = [
 </script>
 
 <template>
-  <section class="space-y-8 pb-24 lg:pb-0">
+  <section class="space-y-8 pb-24 lg:pb-8">
     <div>
-      <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">连接</p>
-      <h2 class="mt-2 text-3xl text-stone-950">未来扩展会从这里开始。</h2>
+      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">连接</h2>
+      <p class="mt-2 text-base text-stone-500">未来扩展会从这里开始。</p>
     </div>
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
-        <section class="ui-panel">
-          <div class="flex items-center justify-between">
+        <section>
+          <div class="mb-4 flex items-center justify-between">
             <div>
-              <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">已连接来源</p>
-              <h3 class="mt-2 text-2xl font-semibold text-stone-950">哪些外部内容已经接进来。</h3>
+              <h3 class="text-lg font-semibold text-stone-900">已连接来源</h3>
+              <p class="mt-1 text-sm text-stone-500">哪些外部内容已经接进来。</p>
             </div>
-            <button class="ui-btn-primary">新增连接</button>
+            <button class="ui-btn-primary px-3 py-1.5 text-sm">新增连接</button>
           </div>
 
-          <div class="ui-list-card mt-5">
+          <div class="ui-list-card">
             <article
               v-for="source in connectedSources"
               :key="source.name"
               class="ui-list-row grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
             >
               <div>
-                <p class="text-base font-semibold text-stone-950">{{ source.name }}</p>
-                <p class="mt-1 text-sm text-stone-500">{{ source.type }} · {{ source.note }}</p>
+                <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
+                <p class="mt-0.5 text-xs text-stone-500">{{ source.type }} · {{ source.note }}</p>
               </div>
               <span
-                class="inline-flex h-fit rounded-full px-3 py-1 text-xs font-semibold"
+                class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="
                   source.status === '已连接'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-stone-200 text-stone-700'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
+                    : 'bg-stone-100 text-stone-700 ring-1 ring-inset ring-stone-500/10'
                 "
               >
                 {{ source.status }}
@@ -61,36 +61,42 @@ const accessMethods = [
           </div>
         </section>
 
-        <section class="ui-panel">
-          <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">规划中的连接</p>
-          <div class="ui-list-card mt-5">
+        <section>
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold text-stone-900">规划中的连接</h3>
+            <p class="mt-1 text-sm text-stone-500">即将支持的更多数据来源。</p>
+          </div>
+
+          <div class="ui-list-card">
             <article
               v-for="(item, index) in plannedSources"
               :key="item.name"
               class="ui-list-row flex gap-4"
             >
               <span
-                class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-stone-900/10 bg-stone-950 text-xs font-semibold tracking-[0.18em] text-stone-50"
+                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm font-semibold text-stone-500"
               >
                 {{ String(index + 1).padStart(2, "0") }}
               </span>
               <div class="min-w-0">
-                <p class="text-base font-semibold text-stone-950">{{ item.name }}</p>
-                <p class="mt-1 text-sm leading-6 text-stone-500">{{ item.detail }}</p>
+                <p class="text-sm font-medium text-stone-900">{{ item.name }}</p>
+                <p class="mt-0.5 text-sm text-stone-500">{{ item.detail }}</p>
               </div>
             </article>
           </div>
         </section>
       </div>
 
-      <aside class="ui-panel">
-        <p class="text-[0.68rem] uppercase tracking-[0.24em] text-stone-500">接入方式</p>
-        <div class="ui-list-card mt-5">
-          <div v-for="method in accessMethods" :key="method.name" class="ui-list-row">
-            <p class="text-sm font-semibold text-stone-950">{{ method.name }}</p>
-            <p class="mt-1 text-sm leading-6 text-stone-500">{{ method.detail }}</p>
+      <aside class="space-y-8">
+        <section>
+          <h3 class="mb-4 text-lg font-semibold text-stone-900">接入方式</h3>
+          <div class="ui-list-card">
+            <div v-for="method in accessMethods" :key="method.name" class="ui-list-row">
+              <p class="text-sm font-medium text-stone-900">{{ method.name }}</p>
+              <p class="mt-0.5 text-xs text-stone-500">{{ method.detail }}</p>
+            </div>
           </div>
-        </div>
+        </section>
       </aside>
     </div>
   </section>

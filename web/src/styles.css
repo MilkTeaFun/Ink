@@ -20,14 +20,18 @@
   html {
     min-height: 100%;
     scroll-behavior: smooth;
-    background: #f3eadc;
+    background: #ffffff;
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    font-family: "Noto Sans SC", sans-serif;
-    color: #231813;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    color: #1a1a1a;
   }
 
   #app {
@@ -42,9 +46,13 @@
   h1,
   h2,
   h3 {
-    font-family: "Noto Sans SC", sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.04em;
+    font-family:
+      "Inter",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 
   ::selection {
@@ -54,62 +62,27 @@
 
 @layer components {
   .ui-panel {
-    @apply rounded-[1.8rem] border px-5 py-5 backdrop-blur;
-    border-color: var(--panel-border);
-    background: var(--panel-bg);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.42),
-      0 24px 50px -42px rgba(74, 53, 34, 0.34);
+    @apply rounded-xl border border-stone-200 bg-white p-6;
   }
 
   .ui-list-card {
-    @apply overflow-hidden rounded-[1.35rem] border;
-    border-color: var(--surface-border);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 242, 235, 0.88));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+    @apply overflow-hidden rounded-lg border border-stone-200 bg-white;
   }
 
   .ui-list-row {
-    @apply relative px-4 py-4 transition duration-200;
-    transition-property: background-color, transform, box-shadow;
-    transition-timing-function: var(--ease-out-quart);
+    @apply relative px-4 py-4 transition-colors duration-200;
   }
 
-  .ui-list-row + .ui-list-row::before {
-    content: "";
-    position: absolute;
-    left: 1rem;
-    right: 1rem;
-    top: 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      rgba(53, 38, 28, 0),
-      var(--divider-strong) 18%,
-      var(--divider-strong) 82%,
-      rgba(53, 38, 28, 0)
-    );
+  .ui-list-row + .ui-list-row {
+    @apply border-t border-stone-100;
   }
 
   .ui-list-row:hover {
-    background: rgba(255, 255, 255, 0.34);
-    transform: translateY(-1px);
+    @apply bg-stone-50;
   }
 
   .ui-list-row.is-active {
-    background: linear-gradient(135deg, rgba(55, 40, 29, 0.96), rgba(93, 67, 43, 0.88));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-
-  .ui-list-row.is-active::after {
-    content: "";
-    position: absolute;
-    left: 0.8rem;
-    top: 1rem;
-    bottom: 1rem;
-    width: 2px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 241, 224, 0.96), rgba(226, 188, 146, 0.8));
+    @apply bg-stone-100;
   }
 
   .ui-timeline {
@@ -123,98 +96,54 @@
     top: 0.9rem;
     bottom: 0.9rem;
     width: 1px;
-    background: linear-gradient(180deg, rgba(198, 142, 92, 0.4), rgba(53, 38, 28, 0.1));
+    @apply bg-stone-200;
   }
 
   .ui-timeline-item {
-    @apply relative rounded-[1.2rem] px-4 py-4 transition duration-200;
-    transition-property: background-color, transform;
-    transition-timing-function: var(--ease-out-quart);
+    @apply relative rounded-lg px-4 py-4 transition-colors duration-200;
   }
 
   .ui-timeline-item::before {
     content: "";
     position: absolute;
     left: -1.05rem;
-    top: 1.15rem;
-    width: 0.7rem;
-    height: 0.7rem;
+    top: 1.45rem;
+    width: 0.5rem;
+    height: 0.5rem;
     border-radius: 999px;
-    border: 2px solid rgba(246, 238, 229, 0.95);
-    background: rgba(79, 57, 38, 0.8);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.78);
+    @apply border-[1.5px] border-white bg-stone-300;
   }
 
-  .ui-timeline-item + .ui-timeline-item::after {
-    content: "";
-    position: absolute;
-    left: 0.35rem;
-    right: 0.75rem;
-    top: 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      rgba(53, 38, 28, 0),
-      var(--divider-strong) 18%,
-      var(--divider-strong) 82%,
-      rgba(53, 38, 28, 0)
-    );
+  .ui-timeline-item + .ui-timeline-item {
+    @apply border-t border-stone-100;
   }
 
   .ui-timeline-item:hover {
-    background: rgba(255, 255, 255, 0.34);
-    transform: translateY(-1px);
+    @apply bg-stone-50;
   }
 
   .ui-tab-track {
-    @apply mx-auto flex w-fit min-w-max gap-2 rounded-[1.5rem] border border-stone-900/10 p-2 backdrop-blur;
-    background: rgba(255, 255, 255, 0.72);
+    @apply mx-auto flex w-fit min-w-max gap-1 rounded-lg border border-stone-200 bg-stone-50/50 p-1;
   }
 
   .ui-tab-link {
-    @apply relative min-w-[108px] rounded-[1.25rem] px-4 py-3 text-center text-stone-600 transition duration-200;
-    transition-timing-function: var(--ease-out-quart);
-    transform: translateY(0);
-  }
-
-  .ui-tab-link::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 0.55rem;
-    width: 42%;
-    height: 2px;
-    border-radius: 999px;
-    background: rgba(53, 38, 28, 0.78);
-    transform: translateX(-50%) scaleX(0.2);
-    opacity: 0;
-    transition:
-      transform 220ms var(--ease-out-quart),
-      opacity 220ms var(--ease-out-quart);
+    @apply relative min-w-[108px] rounded-md px-4 py-2.5 text-center text-stone-600 transition-colors duration-200;
   }
 
   .ui-tab-link:hover {
-    @apply bg-white/80 text-stone-900;
-    transform: translateY(-1px);
+    @apply bg-stone-100/50 text-stone-900;
   }
 
   .ui-tab-link.is-active {
-    @apply border border-[#e4cfb8] bg-[linear-gradient(180deg,rgba(255,248,241,0.96),rgba(245,233,220,0.96))] text-stone-950;
-    animation: tab-settle 260ms var(--ease-out-quint);
-  }
-
-  .ui-tab-link.is-active::after {
-    transform: translateX(-50%) scaleX(1);
-    opacity: 1;
+    @apply bg-white text-stone-900 shadow-sm ring-1 ring-stone-200/50;
   }
 
   .ui-tab-label {
-    @apply block text-sm font-semibold;
+    @apply block text-sm font-medium;
   }
 
   .ui-tab-hint {
-    @apply mt-1 block text-xs text-stone-500;
-    transition: color 220ms var(--ease-out-quart);
+    @apply mt-0.5 block text-xs text-stone-500;
   }
 
   .ui-tab-link.is-active .ui-tab-hint {
@@ -222,39 +151,11 @@
   }
 
   .ui-btn-primary {
-    @apply inline-flex items-center justify-center rounded-full border border-[#e2c8ac] px-5 py-2.5 text-sm font-semibold text-stone-900;
-    background: linear-gradient(180deg, rgba(247, 220, 192, 0.96), rgba(235, 196, 160, 0.96));
-    transition:
-      transform 180ms var(--ease-out-quart),
-      background-color 180ms var(--ease-out-quart),
-      border-color 180ms var(--ease-out-quart);
-  }
-
-  .ui-btn-primary:hover {
-    transform: translateY(-1px);
-    background: linear-gradient(180deg, rgba(249, 227, 203, 0.98), rgba(238, 201, 169, 0.98));
-  }
-
-  .ui-btn-primary:active {
-    transform: scale(0.98);
+    @apply inline-flex items-center justify-center rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-stone-800 active:scale-[0.98];
   }
 
   .ui-btn-secondary {
-    @apply inline-flex items-center justify-center rounded-full border border-stone-900/10 px-4 py-2.5 text-sm font-medium text-stone-700 backdrop-blur;
-    background: rgba(255, 255, 255, 0.78);
-    transition:
-      transform 180ms var(--ease-out-quart),
-      background-color 180ms var(--ease-out-quart),
-      border-color 180ms var(--ease-out-quart);
-  }
-
-  .ui-btn-secondary:hover {
-    @apply border-stone-900/15 bg-white;
-    transform: translateY(-1px);
-  }
-
-  .ui-btn-secondary:active {
-    transform: scale(0.98);
+    @apply inline-flex items-center justify-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-900 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 active:scale-[0.98];
   }
 }
 
