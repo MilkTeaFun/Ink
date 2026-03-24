@@ -66,10 +66,10 @@ const prints = [
 </script>
 
 <template>
-  <section class="space-y-8 pb-24 lg:pb-8">
+  <section class="mx-auto max-w-5xl space-y-8 px-4 pb-24 pt-4 sm:px-0 lg:pb-12">
     <div>
-      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">状态</h2>
-      <p class="mt-2 text-base text-stone-500">设备、任务和打印记录都在这里。</p>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
+      <p class="mt-1 text-sm text-stone-500">设备、任务和打印记录都在这里。</p>
     </div>
 
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -107,7 +107,7 @@ const prints = [
         <section>
           <div class="mb-4 flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-stone-900">已绑定设备</h3>
+              <h3 class="text-base font-semibold leading-6 text-stone-900">已绑定设备</h3>
               <p class="mt-1 text-sm text-stone-500">先确认哪台设备在待命。</p>
             </div>
             <button class="ui-btn-secondary px-3 py-1.5 text-sm">管理设备</button>
@@ -127,7 +127,7 @@ const prints = [
                 </div>
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
-                  <p class="mt-0.5 text-xs text-stone-500">{{ device.note }}</p>
+                  <p class="mt-0.5 text-sm text-stone-500">{{ device.note }}</p>
                 </div>
               </div>
 
@@ -147,7 +147,7 @@ const prints = [
 
         <section>
           <div class="mb-4">
-            <h3 class="text-lg font-semibold text-stone-900">定时任务</h3>
+            <h3 class="text-base font-semibold leading-6 text-stone-900">定时任务</h3>
             <p class="mt-1 text-sm text-stone-500">哪些内容会按计划自动准备。</p>
           </div>
 
@@ -159,7 +159,7 @@ const prints = [
             >
               <div class="min-w-0">
                 <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
-                <p class="mt-0.5 text-xs text-stone-500">{{ task.source }} · {{ task.time }}</p>
+                <p class="mt-0.5 text-sm text-stone-500">{{ task.source }} · {{ task.time }}</p>
               </div>
 
               <button
@@ -181,7 +181,7 @@ const prints = [
       <aside>
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <h3 class="text-lg font-semibold text-stone-900">打印记录</h3>
+            <h3 class="text-base font-semibold leading-6 text-stone-900">打印记录</h3>
             <p class="mt-1 text-sm text-stone-500">最近状态</p>
           </div>
           <button class="ui-btn-secondary px-3 py-1.5 text-sm">筛选</button>
@@ -197,7 +197,7 @@ const prints = [
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
-                  <p class="mt-0.5 text-xs text-stone-500">{{ item.device }} · {{ item.time }}</p>
+                  <p class="mt-0.5 text-sm text-stone-500">{{ item.device }} · {{ item.time }}</p>
                 </div>
                 <span
                   class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"

@@ -20,10 +20,10 @@ const accessMethods = [
 </script>
 
 <template>
-  <section class="space-y-8 pb-24 lg:pb-8">
+  <section class="mx-auto max-w-5xl space-y-8 px-4 pb-24 pt-4 sm:px-0 lg:pb-12">
     <div>
-      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">连接</h2>
-      <p class="mt-2 text-base text-stone-500">未来扩展会从这里开始。</p>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">连接</h2>
+      <p class="mt-1 text-sm text-stone-500">未来扩展会从这里开始。</p>
     </div>
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -31,7 +31,7 @@ const accessMethods = [
         <section>
           <div class="mb-4 flex items-center justify-between">
             <div>
-              <h3 class="text-lg font-semibold text-stone-900">已连接来源</h3>
+              <h3 class="text-base font-semibold leading-6 text-stone-900">已连接来源</h3>
               <p class="mt-1 text-sm text-stone-500">哪些外部内容已经接进来。</p>
             </div>
             <button class="ui-btn-primary px-3 py-1.5 text-sm">新增连接</button>
@@ -45,7 +45,7 @@ const accessMethods = [
             >
               <div>
                 <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
-                <p class="mt-0.5 text-xs text-stone-500">{{ source.type }} · {{ source.note }}</p>
+                <p class="mt-0.5 text-sm text-stone-500">{{ source.type }} · {{ source.note }}</p>
               </div>
               <span
                 class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -63,7 +63,7 @@ const accessMethods = [
 
         <section>
           <div class="mb-4">
-            <h3 class="text-lg font-semibold text-stone-900">规划中的连接</h3>
+            <h3 class="text-base font-semibold leading-6 text-stone-900">规划中的连接</h3>
             <p class="mt-1 text-sm text-stone-500">即将支持的更多数据来源。</p>
           </div>
 
@@ -89,11 +89,11 @@ const accessMethods = [
 
       <aside class="space-y-8">
         <section>
-          <h3 class="mb-4 text-lg font-semibold text-stone-900">接入方式</h3>
+          <h3 class="mb-4 text-base font-semibold leading-6 text-stone-900">接入方式</h3>
           <div class="ui-list-card">
             <div v-for="method in accessMethods" :key="method.name" class="ui-list-row">
               <p class="text-sm font-medium text-stone-900">{{ method.name }}</p>
-              <p class="mt-0.5 text-xs text-stone-500">{{ method.detail }}</p>
+              <p class="mt-0.5 text-sm text-stone-500">{{ method.detail }}</p>
             </div>
           </div>
         </section>

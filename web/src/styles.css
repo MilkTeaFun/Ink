@@ -21,6 +21,7 @@
     min-height: 100%;
     scroll-behavior: smooth;
     background: #fafaf9;
+    overflow-y: scroll;
   }
 
   body {

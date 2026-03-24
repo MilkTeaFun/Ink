@@ -29,15 +29,15 @@ const defaultTargets = [
 </script>
 
 <template>
-  <section class="space-y-8 pb-24 lg:pb-8">
+  <section class="mx-auto max-w-5xl space-y-8 px-4 pb-24 pt-4 sm:px-0 lg:pb-12">
     <div>
-      <h2 class="text-3xl font-semibold tracking-tight text-stone-900">对话</h2>
-      <p class="mt-2 text-base text-stone-500">通过对话整理内容，再决定打印哪一段。</p>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">对话</h2>
+      <p class="mt-1 text-sm text-stone-500">通过对话整理内容，再决定打印哪一段。</p>
     </div>
 
     <section class="space-y-4 lg:hidden">
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold text-stone-900">最近对话</h3>
+        <h3 class="text-base font-semibold leading-6 text-stone-900">最近对话</h3>
         <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
       </div>
 
@@ -73,7 +73,7 @@ const defaultTargets = [
     <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <aside class="hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-stone-900">最近对话</h3>
+          <h3 class="text-base font-semibold leading-6 text-stone-900">最近对话</h3>
           <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
         </div>
 
@@ -107,8 +107,8 @@ const defaultTargets = [
           class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <h3 class="text-lg font-semibold text-stone-900">当前对话</h3>
-            <p class="mt-1 text-xs text-stone-500">默认发往：书桌咕咕机</p>
+            <h3 class="text-base font-semibold leading-6 text-stone-900">当前对话</h3>
+            <p class="mt-1 text-sm text-stone-500">默认发往：书桌咕咕机</p>
           </div>
           <div class="flex gap-2">
             <button
