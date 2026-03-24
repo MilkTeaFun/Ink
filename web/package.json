@@ -21,7 +21,7 @@
     "@fontsource/noto-sans-sc": "^5.2.9",
     "pinia": "^3.0.4",
     "vue": "^3.5.30",
-    "vue-router": "^5.0.3"
+    "vue-router": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
