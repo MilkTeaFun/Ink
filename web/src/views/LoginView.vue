@@ -4,9 +4,9 @@
       class="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]"
     >
       <section class="p-8 lg:p-10">
-        <p class="text-[0.7rem] font-medium uppercase tracking-[0.28em] text-stone-500">欢迎回来</p>
+        <p class="text-[0.7rem] font-medium tracking-[0.28em] text-stone-500 uppercase">欢迎回来</p>
         <h1
-          class="mt-5 text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.1] tracking-tight text-stone-900"
+          class="mt-5 text-[clamp(2rem,5vw,3.5rem)] leading-[1.1] font-semibold tracking-tight text-stone-900"
         >
           打开 Ink，继续你的纸条灵感。
         </h1>
@@ -25,7 +25,7 @@
             <input
               type="email"
               placeholder="name@example.com"
-              class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
+              class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             />
           </div>
           <div>
@@ -33,7 +33,7 @@
             <input
               type="password"
               placeholder="请输入密码"
-              class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
+              class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             />
           </div>
         </div>

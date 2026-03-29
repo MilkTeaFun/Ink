@@ -5,7 +5,6 @@ const chats = [
   { title: "购物清单", preview: "鸡蛋、吐司、番茄、酸奶", time: "昨天", active: false },
 ];
 
-
 const messages = [
   { role: "user", text: "帮我整理一张温柔一点的今日提醒，适合打印在小纸条上。" },
   {
@@ -16,7 +15,7 @@ const messages = [
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pb-24 pt-4 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">对话</h2>
       <p class="mt-1 text-sm text-stone-500">通过对话整理内容，再决定打印哪一段。</p>
@@ -24,7 +23,7 @@ const messages = [
 
     <section class="space-y-4 lg:hidden">
       <div class="flex items-center justify-between">
-        <h3 class="text-base font-semibold leading-6 text-stone-900">最近对话</h3>
+        <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
         <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
       </div>
 
@@ -60,7 +59,7 @@ const messages = [
     <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <aside class="hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
-          <h3 class="text-base font-semibold leading-6 text-stone-900">最近对话</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
           <button class="ui-btn-secondary px-3 py-1.5 text-sm">新建</button>
         </div>
 
@@ -94,7 +93,7 @@ const messages = [
           class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
-            <h3 class="text-base font-semibold leading-6 text-stone-900">当前对话</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">当前对话</h3>
             <p class="mt-1 text-sm text-stone-500">默认发往：书桌咕咕机</p>
           </div>
           <div class="flex gap-2">
@@ -148,7 +147,7 @@ const messages = [
             <textarea
               rows="3"
               placeholder="发送消息..."
-              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-0"
+              class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-400 focus:ring-0 focus:outline-none"
             />
             <div
               class="flex items-center justify-between rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-2"

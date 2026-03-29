@@ -6,7 +6,6 @@ const summary = [
   { label: "今日完成", value: "18 条", tone: "green", progress: 92 },
 ];
 
-
 const devices = [
   {
     name: "书桌咕咕机",
@@ -19,7 +18,6 @@ const devices = [
     note: "睡前提醒",
   },
 ];
-
 
 const schedules = [
   {
@@ -41,7 +39,6 @@ const schedules = [
     enabled: false,
   },
 ];
-
 
 const prints = [
   {
@@ -66,7 +63,7 @@ const prints = [
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pb-24 pt-4 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
       <p class="mt-1 text-sm text-stone-500">设备、任务和打印记录都在这里。</p>
@@ -107,7 +104,7 @@ const prints = [
         <section>
           <div class="mb-4 flex items-center justify-between">
             <div>
-              <h3 class="text-base font-semibold leading-6 text-stone-900">已绑定设备</h3>
+              <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
               <p class="mt-1 text-sm text-stone-500">先确认哪台设备在待命。</p>
             </div>
             <button class="ui-btn-secondary px-3 py-1.5 text-sm">管理设备</button>
@@ -135,8 +132,8 @@ const prints = [
                 class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                 :class="
                   device.status === '已连接'
-                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
-                    : 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
+                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
+                    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
                 "
               >
                 {{ device.status }}
@@ -147,7 +144,7 @@ const prints = [
 
         <section>
           <div class="mb-4">
-            <h3 class="text-base font-semibold leading-6 text-stone-900">定时任务</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
             <p class="mt-1 text-sm text-stone-500">哪些内容会按计划自动准备。</p>
           </div>
 
@@ -163,7 +160,7 @@ const prints = [
               </div>
 
               <button
-                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-stone-900 focus:ring-offset-2"
+                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:ring-2 focus:ring-stone-900 focus:ring-offset-2 focus:outline-none"
                 :class="task.enabled ? 'bg-stone-900' : 'bg-stone-200'"
                 :aria-pressed="task.enabled"
                 type="button"
@@ -181,7 +178,7 @@ const prints = [
       <aside>
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <h3 class="text-base font-semibold leading-6 text-stone-900">打印记录</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">打印记录</h3>
             <p class="mt-1 text-sm text-stone-500">最近状态</p>
           </div>
           <button class="ui-btn-secondary px-3 py-1.5 text-sm">筛选</button>
@@ -203,10 +200,10 @@ const prints = [
                   class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                   :class="
                     item.status === '已完成'
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20'
+                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
                       : item.status === '打印中'
-                        ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'
-                        : 'bg-stone-100 text-stone-700 ring-1 ring-inset ring-stone-500/10'
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
+                        : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
                   "
                 >
                   {{ item.status }}
