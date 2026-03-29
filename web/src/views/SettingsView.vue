@@ -1,5 +1,5 @@
 <template>
-  <section class="mx-auto max-w-5xl space-y-10 pb-24 pt-4 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-10 pt-4 pb-24 lg:pb-12">
     <div class="px-4 sm:px-0">
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设置</h2>
       <p class="mt-1 text-sm text-stone-500">管理账号、打印、主题和授权选项。</p>
@@ -9,7 +9,7 @@
       <!-- 账号管理 -->
       <article class="grid grid-cols-1 gap-x-8 gap-y-6 px-4 pt-10 sm:px-0 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-semibold leading-6 text-stone-900">账号管理</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">账号管理</h3>
           <p class="mt-1 text-sm text-stone-500">登录、退出和基本账号信息。</p>
         </div>
         <div class="md:col-span-2">
@@ -39,7 +39,7 @@
       <!-- 打印设置 -->
       <article class="grid grid-cols-1 gap-x-8 gap-y-6 px-4 pt-10 sm:px-0 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-semibold leading-6 text-stone-900">打印设置</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">打印设置</h3>
           <p class="mt-1 text-sm text-stone-500">默认设备和打印方式。</p>
         </div>
         <div class="md:col-span-2">
@@ -64,7 +64,7 @@
                 <p class="mt-0.5 text-sm text-stone-500">已开启</p>
               </div>
               <span
-                class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+                class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/20 ring-inset"
                 >开启</span
               >
             </div>
@@ -84,7 +84,7 @@
       <!-- 页面主题 -->
       <article class="grid grid-cols-1 gap-x-8 gap-y-6 px-4 pt-10 sm:px-0 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-semibold leading-6 text-stone-900">页面主题</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">页面主题</h3>
           <p class="mt-1 text-sm text-stone-500">切换应用程序的视觉风格。</p>
         </div>
         <div class="md:col-span-2">
@@ -103,7 +103,7 @@
       <!-- AI 服务绑定 -->
       <article class="grid grid-cols-1 gap-x-8 gap-y-6 px-4 pt-10 sm:px-0 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-semibold leading-6 text-stone-900">AI 服务</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">AI 服务</h3>
           <p class="mt-1 text-sm text-stone-500">管理模型与服务商配置。</p>
         </div>
         <div class="md:col-span-2">
@@ -133,7 +133,7 @@
       <!-- 授权 -->
       <article class="grid grid-cols-1 gap-x-8 gap-y-6 px-4 pt-10 sm:px-0 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-semibold leading-6 text-stone-900">授权与隐私</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">授权与隐私</h3>
           <p class="mt-1 text-sm text-stone-500">外部来源和服务权限管理。</p>
         </div>
         <div class="md:col-span-2">
