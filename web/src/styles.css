@@ -83,6 +83,42 @@
     @apply bg-stone-100;
   }
 
+  .ui-settings-group {
+    @apply space-y-3;
+  }
+
+  .ui-settings-row {
+    @apply flex flex-col gap-3 rounded-2xl bg-stone-50 px-4 py-4 transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .ui-settings-row:hover {
+    @apply bg-stone-100/80;
+  }
+
+  .ui-settings-copy {
+    @apply min-w-0 flex-1;
+  }
+
+  .ui-settings-choice-grid {
+    @apply grid gap-2 rounded-2xl bg-stone-50 p-2 sm:grid-cols-3;
+  }
+
+  .ui-toggle {
+    @apply relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-stone-200 transition-colors duration-200 ease-in-out focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2 focus-visible:outline-none;
+  }
+
+  .ui-toggle.is-on {
+    @apply bg-stone-900;
+  }
+
+  .ui-toggle-thumb {
+    @apply inline-block h-4 w-4 translate-x-1 rounded-full bg-white transition duration-200 ease-in-out;
+  }
+
+  .ui-toggle.is-on .ui-toggle-thumb {
+    @apply translate-x-6;
+  }
+
   .ui-timeline {
     @apply relative space-y-1 pl-5;
   }
@@ -185,6 +221,8 @@
   .page-swap-leave-active,
   .ui-list-row,
   .ui-timeline-item,
+  .ui-toggle,
+  .ui-toggle-thumb,
   .ui-tab-link,
   .ui-tab-link::after,
   .ui-btn-primary,

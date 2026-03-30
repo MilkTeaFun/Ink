@@ -36,7 +36,7 @@ describe("AppShell", () => {
   });
 
   it.each([
-    ["/status", "状态", "连接"],
+    ["/status", "状态", "打印"],
     ["/settings", "设置", "状态"],
   ])(
     "applies active state classes for %s in both desktop and mobile navigation",
@@ -67,7 +67,7 @@ describe("AppShell", () => {
   );
 
   it("keeps login entry points available in both header variants", async () => {
-    const { wrapper } = await mountShellAt("/connections");
+    const { wrapper } = await mountShellAt("/prints");
 
     expect(wrapper.find("a[href='/login']").exists()).toBe(true);
     expect(wrapper.findAll("a[href='/login']").map((link) => link.text())).toEqual([

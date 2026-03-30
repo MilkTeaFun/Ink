@@ -11,7 +11,7 @@ describe("router configuration", () => {
     expect(navigationItems.map((item) => item.path)).toEqual([
       "/status",
       "/conversations",
-      "/connections",
+      "/prints",
       "/settings",
     ]);
 
@@ -45,5 +45,14 @@ describe("router configuration", () => {
 
     expect(loginRoute?.name).toBe("login");
     expect(loginRoute?.meta?.title).toBe("欢迎使用 Ink");
+  });
+
+  it("redirects the retired connections route to /prints", async () => {
+    const router = createAppRouter(createMemoryHistory());
+
+    router.push("/connections");
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe("/prints");
   });
 });

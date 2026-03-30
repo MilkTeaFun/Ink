@@ -7,9 +7,9 @@ import {
 import type { RouterHistory } from "vue-router";
 
 import AppShell from "@/layouts/AppShell.vue";
-import ConnectionsView from "@/views/ConnectionsView.vue";
 import ConversationsView from "@/views/ConversationsView.vue";
 import LoginView from "@/views/LoginView.vue";
+import PrintsView from "@/views/PrintsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import StatusView from "@/views/StatusView.vue";
 
@@ -46,14 +46,14 @@ const shellChildren: RouteRecordRaw[] = [
     },
   },
   {
-    path: "connections",
-    name: "connections",
-    component: ConnectionsView,
+    path: "prints",
+    name: "prints",
+    component: PrintsView,
     meta: {
-      label: "连接",
-      title: "连接",
-      description: "未来在这里接入 RSS 和其他在线服务，扩展可打印内容来源。",
-      navHint: "外部来源",
+      label: "打印",
+      title: "打印",
+      description: "管理待确认内容、定时任务和打印记录，把打印流程集中在一起。",
+      navHint: "打印流程",
     },
   },
   {
@@ -91,6 +91,10 @@ export const routes: RouteRecordRaw[] = [
       title: "欢迎使用 Ink",
       description: "登录后就可以继续管理设备、整理对话内容，并把纸条发到你想要的咕咕机。",
     },
+  },
+  {
+    path: "/connections",
+    redirect: "/prints",
   },
 ];
 

@@ -35,7 +35,7 @@ describe("AppRoot", () => {
   it.each([
     ["/status", "状态"],
     ["/conversations", "对话"],
-    ["/connections", "连接"],
+    ["/prints", "打印"],
     ["/settings", "设置"],
   ])("renders the workspace shell for %s", async (path, heading) => {
     const { wrapper } = await mountAt(path);
@@ -64,7 +64,6 @@ describe("AppRoot", () => {
     expect(wrapper.find("nav.fixed").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("状态");
     expect(wrapper.text()).not.toContain("对话");
-    expect(wrapper.text()).not.toContain("连接");
     expect(wrapper.text()).not.toContain("设置");
   });
 });

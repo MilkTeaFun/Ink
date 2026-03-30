@@ -1,8 +1,8 @@
 import { mount } from "@vue/test-utils";
 
-import ConnectionsView from "@/views/ConnectionsView.vue";
 import ConversationsView from "@/views/ConversationsView.vue";
 import LoginView from "@/views/LoginView.vue";
+import PrintsView from "@/views/PrintsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import StatusView from "@/views/StatusView.vue";
 
@@ -43,13 +43,15 @@ describe("workspace views", () => {
     expect(wrapper.find("a[href='/']").text()).toBe("先看看首页");
   });
 
-  it("renders the future connections surface", () => {
-    const wrapper = mount(ConnectionsView);
+  it("renders the print management surface", () => {
+    const wrapper = mount(PrintsView);
 
     expect(wrapper.findAll(".ui-list-card").at(0)?.findAll("article")).toHaveLength(2);
     expect(wrapper.findAll(".ui-list-card").at(1)?.findAll("article")).toHaveLength(3);
-    expect(wrapper.findAll(".ui-list-card").at(2)?.findAll(".ui-list-row")).toHaveLength(3);
-    expect(wrapper.text()).toContain("新增连接");
+    expect(wrapper.findAll(".ui-timeline-item")).toHaveLength(3);
+    expect(wrapper.findAll(".ui-list-card").at(3)?.findAll(".ui-list-row")).toHaveLength(3);
+    expect(wrapper.text()).toContain("新建定时任务");
+    expect(wrapper.text()).toContain("默认打印设置");
   });
 
   it("renders the settings management surface", () => {

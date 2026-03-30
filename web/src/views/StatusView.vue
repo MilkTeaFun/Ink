@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from "vue";
+
 const summary = [
   { label: "已绑定设备", value: "2 台", tone: "neutral", progress: 100 },
-  { label: "执行中任务", value: "3 条", tone: "amber", progress: 64 },
+  { label: "已启用任务", value: "2 条", tone: "amber", progress: 64 },
   { label: "待确认打印", value: "2 条", tone: "stone", progress: 42 },
   { label: "今日完成", value: "18 条", tone: "green", progress: 92 },
 ];
@@ -19,7 +21,7 @@ const devices = [
   },
 ];
 
-const schedules = [
+const schedules = ref([
   {
     title: "早报摘要",
     source: "晨间订阅",
@@ -38,7 +40,7 @@ const schedules = [
     time: "周六 09:30",
     enabled: false,
   },
-];
+]);
 
 const prints = [
   {
@@ -66,7 +68,7 @@ const prints = [
   <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
-      <p class="mt-1 text-sm text-stone-500">设备、任务和打印记录都在这里。</p>
+      <p class="mt-1 text-sm text-stone-500">这里只看设备是否在线、任务是否启用。</p>
     </div>
 
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -102,12 +104,11 @@ const prints = [
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
         <section>
-          <div class="mb-4 flex items-center justify-between">
+          <div class="mb-4">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
               <p class="mt-1 text-sm text-stone-500">先确认哪台设备在待命。</p>
             </div>
-            <button class="ui-btn-secondary px-3 py-1.5 text-sm">管理设备</button>
           </div>
 
           <div class="ui-list-card">
@@ -143,16 +144,21 @@ const prints = [
         </section>
 
         <section>
-          <div class="mb-4">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
-            <p class="mt-1 text-sm text-stone-500">哪些内容会按计划自动准备。</p>
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base leading-6 font-semibold text-stone-900">自动打印</h3>
+              <p class="mt-1 text-sm text-stone-500">这里只保留启停，创建和编辑请去打印页。</p>
+            </div>
+            <RouterLink to="/prints" class="ui-btn-secondary px-3 py-1.5 text-sm">
+              前往打印
+            </RouterLink>
           </div>
 
-          <div class="ui-list-card divide-y divide-stone-100">
+          <div class="ui-list-card">
             <article
               v-for="task in schedules"
               :key="`${task.title}-${task.time}`"
-              class="flex items-center justify-between gap-4 p-4 transition-colors hover:bg-stone-50"
+              class="ui-list-row flex items-center justify-between gap-4"
             >
               <div class="min-w-0">
                 <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
@@ -160,15 +166,14 @@ const prints = [
               </div>
 
               <button
-                class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:ring-2 focus:ring-stone-900 focus:ring-offset-2 focus:outline-none"
-                :class="task.enabled ? 'bg-stone-900' : 'bg-stone-200'"
-                :aria-pressed="task.enabled"
                 type="button"
+                class="ui-toggle"
+                :class="{ 'is-on': task.enabled }"
+                :aria-label="`${task.enabled ? '关闭' : '开启'}${task.title}`"
+                :aria-pressed="task.enabled"
+                @click="task.enabled = !task.enabled"
               >
-                <span
-                  class="inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out"
-                  :class="task.enabled ? 'translate-x-6' : 'translate-x-1'"
-                />
+                <span class="ui-toggle-thumb" />
               </button>
             </article>
           </div>
@@ -176,12 +181,11 @@ const prints = [
       </div>
 
       <aside>
-        <div class="mb-4 flex items-center justify-between">
+        <div class="mb-4">
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">打印记录</h3>
-            <p class="mt-1 text-sm text-stone-500">最近状态</p>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">最近状态</h3>
+            <p class="mt-1 text-sm text-stone-500">看一下最近有没有卡住或待确认的任务。</p>
           </div>
-          <button class="ui-btn-secondary px-3 py-1.5 text-sm">筛选</button>
         </div>
 
         <div class="ui-list-card p-4">
