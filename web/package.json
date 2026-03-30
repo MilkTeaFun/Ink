@@ -51,5 +51,12 @@
     "*.{json,jsonc,json5,css,scss,less,html,md,mdx,yaml,yml,toml}": [
       "pnpm exec oxfmt -c .oxfmtrc.json --no-error-on-unmatched-pattern"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion": "2.0.3",
+      "picomatch": "4.0.4",
+      "yaml": "2.8.3"
+    }
   }
 }
