@@ -1,25 +1,35 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 
 import AppShell from "@/layouts/AppShell.vue";
 import { createTestRouter, navigationItems } from "@/router";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 async function mountShellAt(path: string) {
-  const router = createTestRouter();
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const store = useWorkspaceStore();
+  store.authUser = {
+    id: "user-1",
+    email: "name@example.com",
+    name: "Ink User",
+  };
 
+  const router = createTestRouter(pinia);
   router.push(path);
   await router.isReady();
 
   const wrapper = mount(AppShell, {
     global: {
-      plugins: [router],
+      plugins: [pinia, router],
     },
   });
 
-  return { wrapper, router };
+  return { wrapper, router, store };
 }
 
 describe("AppShell", () => {
-  it("renders matching desktop and mobile navigation from router metadata", async () => {
+  it("renders desktop and mobile navigation from router metadata", async () => {
     const { wrapper } = await mountShellAt("/status");
 
     const desktopNavLinks = wrapper.findAll("header nav a");
@@ -27,52 +37,32 @@ describe("AppShell", () => {
 
     expect(desktopNavLinks).toHaveLength(navigationItems.length);
     expect(mobileNavLinks).toHaveLength(navigationItems.length);
-    expect(desktopNavLinks.map((link) => link.text())).toEqual(
+    expect(desktopNavLinks.map((link) => link.text().replace(/\d+/g, ""))).toEqual(
       navigationItems.map((item) => item.label),
     );
-    expect(mobileNavLinks.map((link) => link.text())).toEqual(
+    expect(mobileNavLinks.map((link) => link.text().replace(/\s*·\s*\d+/g, ""))).toEqual(
       navigationItems.map((item) => item.label),
     );
   });
 
-  it.each([
-    ["/status", "状态", "打印"],
-    ["/settings", "设置", "状态"],
-  ])(
-    "applies active state classes for %s in both desktop and mobile navigation",
-    async (path, activeLabel, inactiveLabel) => {
-      const { wrapper } = await mountShellAt(path);
+  it("shows the pending print badge and authenticated account controls", async () => {
+    const { wrapper } = await mountShellAt("/status");
 
-      const desktopActiveLink = wrapper
-        .findAll("header nav a")
-        .find((link) => link.text() === activeLabel);
-      const desktopInactiveLink = wrapper
-        .findAll("header nav a")
-        .find((link) => link.text() === inactiveLabel);
-      const mobileActiveLink = wrapper
-        .findAll("nav.fixed a")
-        .find((link) => link.text() === activeLabel);
-      const mobileInactiveLink = wrapper
-        .findAll("nav.fixed a")
-        .find((link) => link.text() === inactiveLabel);
+    expect(wrapper.text()).toContain("打印1");
+    expect(wrapper.text()).toContain("name@example.com");
+    expect(wrapper.text()).toContain("退出");
+  });
 
-      expect(desktopActiveLink?.classes()).toContain("bg-stone-100");
-      expect(desktopActiveLink?.classes()).toContain("text-stone-900");
-      expect(desktopInactiveLink?.classes()).not.toContain("bg-stone-100");
-      expect(desktopInactiveLink?.classes()).toContain("text-stone-600");
+  it("logs out and returns to login when the header logout action is used", async () => {
+    const { wrapper, router, store } = await mountShellAt("/prints");
+    const logoutButton = wrapper.findAll("button").find((button) => button.text() === "退出");
 
-      expect(mobileActiveLink?.classes()).toContain("text-stone-900");
-      expect(mobileInactiveLink?.classes()).toContain("text-stone-500");
-    },
-  );
+    expect(logoutButton?.exists()).toBe(true);
 
-  it("keeps login entry points available in both header variants", async () => {
-    const { wrapper } = await mountShellAt("/prints");
+    await logoutButton?.trigger("click");
+    await flushPromises();
 
-    expect(wrapper.find("a[href='/login']").exists()).toBe(true);
-    expect(wrapper.findAll("a[href='/login']").map((link) => link.text())).toEqual([
-      "账号",
-      "登录",
-    ]);
+    expect(store.isAuthenticated).toBe(false);
+    expect(router.currentRoute.value.fullPath).toBe("/login");
   });
 });

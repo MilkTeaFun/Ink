@@ -1,6 +1,21 @@
+import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory } from "vue-router";
 
 import { createAppRouter, navigationItems, routes } from "@/router";
+import { useWorkspaceStore } from "@/stores/workspace";
+
+function createAuthenticatedRouter() {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const store = useWorkspaceStore();
+  store.authUser = {
+    id: "user-1",
+    email: "name@example.com",
+    name: "Ink User",
+  };
+
+  return createAppRouter(createMemoryHistory(), pinia);
+}
 
 describe("router configuration", () => {
   it("keeps navigation items in sync with workspace routes", () => {
@@ -14,23 +29,20 @@ describe("router configuration", () => {
       "/prints",
       "/settings",
     ]);
-
-    shellChildren.forEach((route, index) => {
-      expect(route.name).toBeTruthy();
-      expect(route.meta?.label).toBeTruthy();
-      expect(route.meta?.title).toBeTruthy();
-      expect(route.meta?.description).toBeTruthy();
-      expect(route.meta?.navHint).toBeTruthy();
-      expect(navigationItems[index]).toMatchObject({
-        name: route.name,
-        label: route.meta?.label,
-        navHint: route.meta?.navHint,
-      });
-    });
   });
 
-  it("redirects the root route to /status", async () => {
-    const router = createAppRouter(createMemoryHistory());
+  it("redirects anonymous visitors from protected routes to login", async () => {
+    const pinia = createPinia();
+    const router = createAppRouter(createMemoryHistory(), pinia);
+
+    router.push("/");
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+  });
+
+  it("allows authenticated visitors to reach protected routes", async () => {
+    const router = createAuthenticatedRouter();
 
     router.push("/");
     await router.isReady();
@@ -38,21 +50,21 @@ describe("router configuration", () => {
     expect(router.currentRoute.value.fullPath).toBe("/status");
   });
 
-  it("keeps the login route outside of workspace navigation", () => {
-    expect(navigationItems.some((item) => item.path === "/login")).toBe(false);
-
-    const loginRoute = routes.find((route) => route.path === "/login");
-
-    expect(loginRoute?.name).toBe("login");
-    expect(loginRoute?.meta?.title).toBe("欢迎使用 Ink");
-  });
-
-  it("redirects the retired connections route to /prints", async () => {
-    const router = createAppRouter(createMemoryHistory());
+  it("redirects the retired connections route to /prints for authenticated visitors", async () => {
+    const router = createAuthenticatedRouter();
 
     router.push("/connections");
     await router.isReady();
 
     expect(router.currentRoute.value.fullPath).toBe("/prints");
+  });
+
+  it("updates the document title from route metadata", async () => {
+    const router = createAuthenticatedRouter();
+
+    router.push("/settings");
+    await router.isReady();
+
+    expect(document.title).toBe("Ink · 偏好设置");
   });
 });

@@ -7,6 +7,8 @@ import {
 import type { RouterHistory } from "vue-router";
 
 import AppShell from "@/layouts/AppShell.vue";
+import { pinia } from "@/stores/pinia";
+import { useWorkspaceStore } from "@/stores/workspace";
 import ConversationsView from "@/views/ConversationsView.vue";
 import LoginView from "@/views/LoginView.vue";
 import PrintsView from "@/views/PrintsView.vue";
@@ -19,6 +21,7 @@ declare module "vue-router" {
     title?: string;
     description?: string;
     navHint?: string;
+    requiresAuth?: boolean;
   }
 }
 
@@ -32,6 +35,7 @@ const shellChildren: RouteRecordRaw[] = [
       title: "状态",
       description: "查看设备绑定情况、定时任务和最近的打印记录。",
       navHint: "设备与任务",
+      requiresAuth: true,
     },
   },
   {
@@ -43,6 +47,7 @@ const shellChildren: RouteRecordRaw[] = [
       title: "内容对话",
       description: "像聊天一样整理内容，确认满意后，再把它发去打印。",
       navHint: "整理内容",
+      requiresAuth: true,
     },
   },
   {
@@ -54,6 +59,7 @@ const shellChildren: RouteRecordRaw[] = [
       title: "打印",
       description: "管理待确认内容、定时任务和打印记录，把打印流程集中在一起。",
       navHint: "打印流程",
+      requiresAuth: true,
     },
   },
   {
@@ -65,6 +71,7 @@ const shellChildren: RouteRecordRaw[] = [
       title: "偏好设置",
       description: "调整默认设备、助手风格和打印习惯，让每次使用都更顺手。",
       navHint: "习惯与偏好",
+      requiresAuth: true,
     },
   },
 ];
@@ -100,15 +107,44 @@ export const routes: RouteRecordRaw[] = [
 
 export function createAppRouter(
   history: RouterHistory = createWebHistory(import.meta.env.BASE_URL),
+  piniaInstance = pinia,
 ) {
-  return createRouter({
+  const router = createRouter({
     history,
     routes,
   });
+
+  router.beforeEach((to) => {
+    const workspaceStore = useWorkspaceStore(piniaInstance);
+    const isAuthenticated = workspaceStore.isAuthenticated;
+
+    if (to.meta.requiresAuth && !isAuthenticated) {
+      return {
+        path: "/login",
+        query: {
+          redirect: to.fullPath,
+        },
+      };
+    }
+
+    if (to.path === "/login" && isAuthenticated) {
+      const nextPath = typeof to.query.redirect === "string" ? to.query.redirect : "/status";
+      return nextPath === "/login" ? "/status" : nextPath;
+    }
+
+    return true;
+  });
+
+  router.afterEach((to) => {
+    const title = to.meta.title ? `Ink · ${to.meta.title}` : "Ink";
+    document.title = title;
+  });
+
+  return router;
 }
 
-export function createTestRouter() {
-  return createAppRouter(createMemoryHistory());
+export function createTestRouter(piniaInstance = pinia) {
+  return createAppRouter(createMemoryHistory(), piniaInstance);
 }
 
 const router = createAppRouter();

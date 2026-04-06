@@ -1,9 +1,22 @@
 <script setup lang="ts">
-import { RouterLink, RouterView, useRoute } from "vue-router";
+import { computed } from "vue";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import { navigationItems } from "@/router";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 const route = useRoute();
+const router = useRouter();
+const workspaceStore = useWorkspaceStore();
+
+const pendingBadge = computed(() =>
+  workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
+);
+
+async function handleLogout() {
+  workspaceStore.logout();
+  await router.replace("/login");
+}
 </script>
 
 <template>
@@ -14,19 +27,27 @@ const route = useRoute();
           <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
           <div>
             <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <p class="text-xs text-stone-500">{{ workspaceStore.welcomeLabel }}</p>
           </div>
         </div>
 
-        <RouterLink to="/login" class="text-sm font-medium text-stone-600 hover:text-stone-900">
-          账号
-        </RouterLink>
+        <button
+          type="button"
+          class="text-sm font-medium text-stone-600 hover:text-stone-900"
+          @click="handleLogout"
+        >
+          退出
+        </button>
       </div>
 
       <div class="mx-auto hidden max-w-7xl items-center justify-between lg:flex">
         <div class="flex items-center gap-8">
           <div class="flex items-center gap-3">
             <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <div>
+              <p class="text-sm font-semibold text-stone-950">Ink</p>
+              <p class="text-xs text-stone-500">{{ workspaceStore.welcomeLabel }}</p>
+            </div>
           </div>
 
           <nav class="flex items-center gap-1">
@@ -41,18 +62,45 @@ const route = useRoute();
                   : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
               "
             >
-              {{ item.label }}
+              <span>{{ item.label }}</span>
+              <span
+                v-if="item.name === 'prints' && pendingBadge"
+                class="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] text-white"
+              >
+                {{ pendingBadge }}
+              </span>
             </RouterLink>
           </nav>
         </div>
 
         <div class="flex items-center gap-4">
-          <RouterLink to="/login" class="text-sm font-medium text-stone-600 hover:text-stone-900">
-            登录
-          </RouterLink>
+          <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
+          <button
+            type="button"
+            class="text-sm font-medium text-stone-600 hover:text-stone-900"
+            @click="handleLogout"
+          >
+            退出
+          </button>
         </div>
       </div>
     </header>
+
+    <div
+      v-if="workspaceStore.flashMessage"
+      class="border-b px-4 py-3 text-sm lg:px-8"
+      :class="
+        workspaceStore.flashTone === 'success'
+          ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+          : workspaceStore.flashTone === 'error'
+            ? 'border-rose-100 bg-rose-50 text-rose-700'
+            : 'border-stone-200 bg-stone-50 text-stone-700'
+      "
+    >
+      <div class="mx-auto max-w-7xl">
+        {{ workspaceStore.flashMessage }}
+      </div>
+    </div>
 
     <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8">
       <RouterView v-slot="{ Component, route: currentRoute }">
@@ -77,7 +125,10 @@ const route = useRoute();
               : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
           "
         >
-          <span class="mt-1 block text-xs font-medium">{{ item.label }}</span>
+          <span class="mt-1 block text-xs font-medium">
+            {{ item.label }}
+            <span v-if="item.name === 'prints' && pendingBadge">· {{ pendingBadge }}</span>
+          </span>
         </RouterLink>
       </div>
     </nav>
