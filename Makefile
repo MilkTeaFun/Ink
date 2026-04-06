@@ -1,4 +1,4 @@
-.PHONY: dev-web test-web build-web check-web
+.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api check-api
 
 dev-web:
 	cd web && pnpm dev
@@ -11,3 +11,35 @@ build-web:
 
 check-web:
 	cd web && pnpm check
+
+setup-api-env:
+	./server/scripts/ensure_dev_env.sh
+
+dev-db:
+	docker compose up -d --wait postgres
+
+reset-db:
+	docker compose down -v
+
+logs-db:
+	docker compose logs -f postgres
+
+migrate-up: setup-api-env dev-db
+	cd server && go run ./cmd/migrate up
+
+seed-dev: setup-api-env dev-db
+	cd server && go run ./cmd/seed dev
+
+bootstrap-api: migrate-up seed-dev
+
+dev-api: bootstrap-api
+	cd server && go run ./cmd/api
+
+test-api:
+	cd server && go test ./...
+
+build-api:
+	cd server && go build ./...
+
+check-api:
+	cd server && test -z "$$(gofmt -l .)" && go test ./... && go build ./...

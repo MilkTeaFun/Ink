@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { watchEffect } from "vue";
+import { onMounted, watchEffect } from "vue";
 
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
+
+onMounted(() => {
+  void workspaceStore.initializeAuth();
+});
 
 watchEffect(() => {
   if (typeof document === "undefined") {

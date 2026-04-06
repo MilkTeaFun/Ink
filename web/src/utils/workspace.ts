@@ -81,6 +81,10 @@ export function getPrintStatusLabel(status: PrintStatus) {
     return "已完成";
   }
 
+  if (status === "cancelled") {
+    return "已取消";
+  }
+
   return "失败";
 }
 

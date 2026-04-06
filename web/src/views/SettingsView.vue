@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -13,36 +14,57 @@ const themes = [
   { label: "系统跟随", value: "system" },
 ] as const;
 
-const answerStyleOptions = [
-  { label: "清楚温柔", value: "clear-gentle" },
-  { label: "温柔鼓励", value: "warm-encouraging" },
-  { label: "直接简洁", value: "concise-direct" },
-] as const;
-
-const noteStyleOptions = [
-  { label: "简洁清晰", value: "clean" },
-  { label: "柔和留白", value: "gentle" },
-  { label: "清单格式", value: "list" },
-] as const;
+const currentPassword = ref("");
+const newPassword = ref("");
+const confirmPassword = ref("");
+const passwordFormError = ref("");
+const currentPasswordVisible = ref(false);
+const newPasswordVisible = ref(false);
+const confirmPasswordVisible = ref(false);
 
 function handleDefaultDeviceChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
   workspaceStore.setDefaultDevice(target?.value ?? workspaceStore.defaultDeviceId);
 }
 
-function handleNoteStyleChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  workspaceStore.setNoteStyle((target?.value ?? workspaceStore.activeNoteStyle) as never);
-}
-
-function handleAnswerStyleChange(event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  workspaceStore.setAnswerStyle((target?.value ?? workspaceStore.activeAnswerStyle) as never);
-}
-
 async function handleLogout() {
-  workspaceStore.logout();
+  await workspaceStore.logout();
   await router.replace("/login");
+}
+
+async function handlePasswordSubmit() {
+  passwordFormError.value = "";
+
+  if (!currentPassword.value.trim()) {
+    passwordFormError.value = "请输入当前密码。";
+    return;
+  }
+
+  if (newPassword.value.trim().length < 8) {
+    passwordFormError.value = "新密码至少需要 8 位。";
+    return;
+  }
+
+  if (newPassword.value !== confirmPassword.value) {
+    passwordFormError.value = "两次输入的新密码不一致。";
+    return;
+  }
+
+  const success = await workspaceStore.changePassword(currentPassword.value, newPassword.value);
+  if (!success) {
+    passwordFormError.value = workspaceStore.authError;
+    return;
+  }
+
+  currentPassword.value = "";
+  newPassword.value = "";
+  confirmPassword.value = "";
+  await router.replace({
+    path: "/login",
+    query: {
+      notice: "password-updated",
+    },
+  });
 }
 </script>
 
@@ -50,7 +72,6 @@ async function handleLogout() {
   <section class="mx-auto max-w-5xl space-y-8 pt-4 pb-24 lg:pb-12">
     <div class="max-w-2xl px-4 sm:px-0">
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设置</h2>
-      <p class="mt-1 text-sm text-stone-500">管理账号、打印、主题和授权选项。</p>
     </div>
 
     <div class="space-y-12">
@@ -59,7 +80,6 @@ async function handleLogout() {
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">账号管理</h3>
-          <p class="mt-1 text-sm text-stone-500">登录状态、退出和本地会话保护都在这里。</p>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
@@ -84,8 +104,8 @@ async function handleLogout() {
                 <p class="mt-0.5 text-sm text-stone-500">
                   {{
                     workspaceStore.loginProtectionEnabled
-                      ? "刷新后需要重新登录，不保留本地会话。"
-                      : "刷新后继续保留当前本地会话。"
+                      ? "刷新后需要重新登录"
+                      : "刷新后保留登录状态"
                   }}
                 </p>
               </div>
@@ -100,6 +120,87 @@ async function handleLogout() {
                 <span class="ui-toggle-thumb" />
               </button>
             </div>
+            <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <p class="text-sm font-medium text-stone-900">修改密码</p>
+
+              <form class="mt-4 space-y-4" @submit.prevent="handlePasswordSubmit">
+                <div class="grid gap-4 md:grid-cols-3">
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">当前密码</span>
+                    <div
+                      class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
+                    >
+                      <input
+                        v-model="currentPassword"
+                        :type="currentPasswordVisible ? 'text' : 'password'"
+                        autocomplete="current-password"
+                        class="min-w-0 flex-1 bg-transparent py-2 text-sm text-stone-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        @click="currentPasswordVisible = !currentPasswordVisible"
+                      >
+                        {{ currentPasswordVisible ? "隐藏" : "显示" }}
+                      </button>
+                    </div>
+                  </label>
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">新密码</span>
+                    <div
+                      class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
+                    >
+                      <input
+                        v-model="newPassword"
+                        :type="newPasswordVisible ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        class="min-w-0 flex-1 bg-transparent py-2 text-sm text-stone-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        @click="newPasswordVisible = !newPasswordVisible"
+                      >
+                        {{ newPasswordVisible ? "隐藏" : "显示" }}
+                      </button>
+                    </div>
+                  </label>
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">确认新密码</span>
+                    <div
+                      class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
+                    >
+                      <input
+                        v-model="confirmPassword"
+                        :type="confirmPasswordVisible ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        class="min-w-0 flex-1 bg-transparent py-2 text-sm text-stone-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        @click="confirmPasswordVisible = !confirmPasswordVisible"
+                      >
+                        {{ confirmPasswordVisible ? "隐藏" : "显示" }}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+                <p
+                  v-if="passwordFormError"
+                  class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                >
+                  {{ passwordFormError }}
+                </p>
+                <button
+                  type="submit"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  :disabled="workspaceStore.passwordChangeLoading"
+                >
+                  {{ workspaceStore.passwordChangeLoading ? "提交中..." : "更新密码" }}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </article>
@@ -109,16 +210,12 @@ async function handleLogout() {
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">打印设置</h3>
-          <p class="mt-1 text-sm text-stone-500">
-            默认设备、发送确认和纸条风格会立即同步到其他页面。
-          </p>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">默认设备</p>
-                <p class="mt-0.5 text-sm text-stone-500">对话和新建打印都会优先发往这里。</p>
               </div>
               <select
                 :value="workspaceStore.defaultDeviceId"
@@ -156,25 +253,6 @@ async function handleLogout() {
                 <span class="ui-toggle-thumb" />
               </button>
             </div>
-            <div class="ui-settings-row">
-              <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">纸条风格</p>
-                <p class="mt-0.5 text-sm text-stone-500">会影响对话页生成内容的组织方式。</p>
-              </div>
-              <select
-                :value="workspaceStore.activeNoteStyle"
-                class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
-                @change="handleNoteStyleChange"
-              >
-                <option
-                  v-for="option in noteStyleOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
           </div>
         </div>
       </article>
@@ -184,7 +262,6 @@ async function handleLogout() {
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">页面主题</h3>
-          <p class="mt-1 text-sm text-stone-500">切换应用视觉模式，设置会保存在本地。</p>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-choice-grid">
@@ -215,9 +292,6 @@ async function handleLogout() {
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">AI 服务</h3>
-          <p class="mt-1 text-sm text-stone-500">
-            当前阶段使用前端 mock service，也保留服务商绑定状态。
-          </p>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
@@ -228,7 +302,7 @@ async function handleLogout() {
                   {{
                     workspaceStore.serviceBinding.bound
                       ? workspaceStore.serviceBinding.providerName
-                      : "暂未绑定"
+                      : "未连接"
                   }}
                 </p>
               </div>
@@ -242,32 +316,13 @@ async function handleLogout() {
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">回答风格</p>
-                <p class="mt-0.5 text-sm text-stone-500">会直接影响对话页新的回复生成方式。</p>
-              </div>
-              <select
-                :value="workspaceStore.activeAnswerStyle"
-                class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
-                @change="handleAnswerStyleChange"
-              >
-                <option
-                  v-for="option in answerStyleOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div class="ui-settings-row">
-              <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">当前模型标签</p>
                 <p class="mt-0.5 text-sm text-stone-500">{{ workspaceStore.activeModelLabel }}</p>
               </div>
               <span
                 class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
               >
-                {{ workspaceStore.serviceBinding.bound ? "mock 已绑定" : "mock 未绑定" }}
+                {{ workspaceStore.serviceBinding.bound ? "已连接" : "未连接" }}
               </span>
             </div>
           </div>
@@ -278,8 +333,7 @@ async function handleLogout() {
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">授权与隐私</h3>
-          <p class="mt-1 text-sm text-stone-500">无后端阶段用来源状态来模拟授权、异常和重连。</p>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">插件</h3>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
@@ -294,9 +348,9 @@ async function handleLogout() {
               <button
                 type="button"
                 class="ui-btn-secondary px-3 py-1.5 text-sm"
-                @click="workspaceStore.cycleSourceStatus(source.id)"
+                @click="workspaceStore.toggleSourceConnection(source.id)"
               >
-                切换状态
+                {{ source.status === "connected" ? "解绑" : "连接" }}
               </button>
             </div>
           </div>

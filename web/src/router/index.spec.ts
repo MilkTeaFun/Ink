@@ -13,6 +13,11 @@ function createAuthenticatedRouter() {
     email: "name@example.com",
     name: "Ink User",
   };
+  store.authSession = {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
 
   return createAppRouter(createMemoryHistory(), pinia);
 }
