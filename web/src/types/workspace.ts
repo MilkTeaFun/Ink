@@ -1,16 +1,19 @@
 export type DeviceStatus = "connected" | "pending" | "offline";
-export type PrintStatus = "pending" | "queued" | "completed" | "failed";
+export type PrintStatus = "pending" | "queued" | "completed" | "failed" | "cancelled";
 export type ConversationMessageRole = "user" | "assistant";
 export type ThemeMode = "soft" | "light" | "system";
 export type SourceConnectionStatus = "connected" | "disconnected" | "error";
-export type AnswerStyle = "clear-gentle" | "warm-encouraging" | "concise-direct";
-export type NoteStyle = "clean" | "gentle" | "list";
-export type ResponseLength = "short" | "medium" | "long";
 
 export interface User {
   id: string;
   email: string;
   name: string;
+}
+
+export interface AuthSession {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: string;
 }
 
 export interface Device {
@@ -68,9 +71,6 @@ export interface Preferences {
   loginProtectionEnabled: boolean;
   sendConfirmationEnabled: boolean;
   theme: ThemeMode;
-  answerStyle: AnswerStyle;
-  noteStyle: NoteStyle;
-  responseLength: ResponseLength;
   defaultDeviceId: string;
 }
 
@@ -82,6 +82,7 @@ export interface ServiceBinding {
 
 export interface PersistedWorkspaceState {
   authUser: User | null;
+  authSession: AuthSession | null;
   devices: Device[];
   conversations: Conversation[];
   activeConversationId: string;

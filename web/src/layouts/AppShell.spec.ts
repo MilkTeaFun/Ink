@@ -14,6 +14,11 @@ async function mountShellAt(path: string) {
     email: "name@example.com",
     name: "Ink User",
   };
+  store.authSession = {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
 
   const router = createTestRouter(pinia);
   router.push(path);

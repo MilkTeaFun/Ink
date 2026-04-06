@@ -1,17 +1,23 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
-import { generateReplyWithMockService, loginWithMockService } from "@/services/mockInk";
+import {
+  AuthApiError,
+  changePasswordWithApi,
+  fetchCurrentUser,
+  loginWithApi,
+  logoutWithApi,
+  refreshAuthSession,
+} from "@/services/auth";
+import { generateReplyWithMockService } from "@/services/mockInk";
 import type {
-  AnswerStyle,
+  AuthSession,
   Conversation,
   ConversationMessage,
   Device,
-  NoteStyle,
   PersistedWorkspaceState,
   Preferences,
   PrintJob,
-  ResponseLength,
   Schedule,
   ServiceBinding,
   SourceConnection,
@@ -212,22 +218,20 @@ function createSeedState(): PersistedWorkspaceState {
     },
   ];
   const preferences: Preferences = {
-    loginProtectionEnabled: true,
+    loginProtectionEnabled: false,
     sendConfirmationEnabled: true,
     theme: "light",
-    answerStyle: "clear-gentle",
-    noteStyle: "clean",
-    responseLength: "medium",
     defaultDeviceId: "device-desk",
   };
   const serviceBinding: ServiceBinding = {
     providerName: null,
-    modelName: "清楚温柔",
+    modelName: "Ink AI",
     bound: false,
   };
 
   return {
     authUser: null,
+    authSession: null,
     devices,
     conversations: conversationList,
     activeConversationId: "conv-today",
@@ -278,8 +282,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const persisted = readPersistedWorkspaceState();
 
   const authUser = ref<User | null>(persisted.authUser);
+  const authSession = ref<AuthSession | null>(persisted.authSession);
   const authLoading = ref(false);
   const authError = ref("");
+  const authBootstrapping = ref(false);
+  const passwordChangeLoading = ref(false);
 
   const devices = ref<Device[]>(persisted.devices);
   const conversations = ref<Conversation[]>(persisted.conversations);
@@ -291,16 +298,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const loginProtectionEnabled = ref(persisted.preferences.loginProtectionEnabled);
   const sendConfirmationEnabled = ref(persisted.preferences.sendConfirmationEnabled);
   const selectedTheme = ref<ThemeMode>(persisted.preferences.theme);
-  const activeAnswerStyle = ref<AnswerStyle>(persisted.preferences.answerStyle);
-  const activeNoteStyle = ref<NoteStyle>(persisted.preferences.noteStyle);
-  const responseLength = ref<ResponseLength>(persisted.preferences.responseLength);
   const defaultDeviceId = ref(persisted.preferences.defaultDeviceId);
 
   const serviceBinding = ref<ServiceBinding>(persisted.serviceBinding);
 
   const isGenerating = ref(false);
   const generationError = ref("");
-  const selectedAssistantMessageId = ref("");
+  const selectedConversationMessageIds = ref<string[]>([]);
   const isCreatingPrint = ref(false);
   const flashMessage = ref("");
   const flashTone = ref<"success" | "error" | "info">("info");
@@ -319,21 +323,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       conversations.value[0] ??
       null,
   );
-  const assistantMessages = computed(
-    () =>
-      activeConversation.value?.messages.filter((message) => message.role === "assistant") ?? [],
+  const conversationMessages = computed(() => activeConversation.value?.messages ?? []);
+  const selectedConversationMessages = computed(() =>
+    conversationMessages.value.filter((message) =>
+      selectedConversationMessageIds.value.includes(message.id),
+    ),
   );
-  const selectedAssistantMessage = computed(() => {
-    if (selectedAssistantMessageId.value) {
-      return (
-        assistantMessages.value.find(
-          (message) => message.id === selectedAssistantMessageId.value,
-        ) ?? null
-      );
-    }
-
-    return assistantMessages.value.at(-1) ?? null;
-  });
   const defaultDevice = computed(
     () => devices.value.find((device) => device.id === defaultDeviceId.value) ?? null,
   );
@@ -364,19 +359,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const activeDeviceLabel = computed(() => defaultDevice.value?.name ?? "");
   const activeModelLabel = computed(() => serviceBinding.value.modelName);
   const todayPrintCount = computed(() => todayCompletedCount.value);
-  const welcomeLabel = computed(() => {
-    if (activeAnswerStyle.value === "warm-encouraging") {
-      return "慢一点，也能把想说的话说好";
-    }
-
-    if (activeAnswerStyle.value === "concise-direct") {
-      return "说重点，剩下的交给打印";
-    }
-
-    return "简单一点，也可以很舒服";
-  });
+  const welcomeLabel = computed(() => "整理内容，准备打印");
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
-  const isAuthenticated = computed(() => authUser.value !== null);
+  const isAuthenticated = computed(() => authUser.value !== null && authSession.value !== null);
 
   const summaryCards = computed(() => [
     {
@@ -411,6 +396,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   const persistableState = computed<PersistedWorkspaceState>(() => ({
     authUser: loginProtectionEnabled.value ? null : authUser.value,
+    authSession: loginProtectionEnabled.value ? null : authSession.value,
     devices: devices.value,
     conversations: conversations.value,
     activeConversationId: activeConversationId.value,
@@ -421,9 +407,6 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       loginProtectionEnabled: loginProtectionEnabled.value,
       sendConfirmationEnabled: sendConfirmationEnabled.value,
       theme: selectedTheme.value,
-      answerStyle: activeAnswerStyle.value,
-      noteStyle: activeNoteStyle.value,
-      responseLength: responseLength.value,
       defaultDeviceId: defaultDeviceId.value,
     },
     serviceBinding: serviceBinding.value,
@@ -484,7 +467,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function selectConversation(conversationId: string) {
     activeConversationId.value = conversationId;
     generationError.value = "";
-    selectedAssistantMessageId.value = "";
+    selectedConversationMessageIds.value = [];
   }
 
   function createConversation() {
@@ -500,6 +483,43 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     conversations.value = [conversation, ...conversations.value];
     selectConversation(conversation.id);
     showFlash("已创建新的对话草稿。");
+  }
+
+  function deleteConversation(conversationId: string) {
+    const remaining = conversations.value.filter(
+      (conversation) => conversation.id !== conversationId,
+    );
+
+    if (remaining.length === conversations.value.length) {
+      return false;
+    }
+
+    if (remaining.length === 0) {
+      const replacement: Conversation = {
+        id: createId("conversation"),
+        title: "新对话",
+        preview: "从这里开始整理新的内容",
+        updatedAt: getNow(),
+        draft: "",
+        messages: [],
+      };
+
+      conversations.value = [replacement];
+      selectConversation(replacement.id);
+      showFlash("对话已删除。", "success");
+      return true;
+    }
+
+    conversations.value = remaining;
+
+    if (activeConversationId.value === conversationId) {
+      activeConversationId.value = remaining[0].id;
+    }
+
+    selectedConversationMessageIds.value = [];
+    generationError.value = "";
+    showFlash("对话已删除。", "success");
+    return true;
   }
 
   function updateCurrentDraft(value: string) {
@@ -519,12 +539,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return;
     }
 
-    showFlash("草稿已保存在本地。", "success");
-  }
-
-  function ensureSelectedAssistantMessage() {
-    const latestAssistant = assistantMessages.value.at(-1);
-    selectedAssistantMessageId.value = latestAssistant?.id ?? "";
+    showFlash("草稿已保存。", "success");
   }
 
   async function sendCurrentDraft() {
@@ -563,12 +578,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     touchConversation(conversation.id);
 
     try {
-      const reply = await generateReplyWithMockService({
-        prompt,
-        answerStyle: activeAnswerStyle.value,
-        noteStyle: activeNoteStyle.value,
-        responseLength: responseLength.value,
-      });
+      const reply = await generateReplyWithMockService({ prompt });
       const assistantMessage: ConversationMessage = {
         id: createId("message"),
         role: "assistant",
@@ -583,7 +593,6 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         messages: [...current.messages, assistantMessage],
       }));
       touchConversation(conversation.id);
-      selectedAssistantMessageId.value = assistantMessage.id;
       showFlash("新回复已生成。", "success");
       return true;
     } catch (error) {
@@ -627,12 +636,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }));
 
     try {
-      const reply = await generateReplyWithMockService({
-        prompt: latestUserMessage.text,
-        answerStyle: activeAnswerStyle.value,
-        noteStyle: activeNoteStyle.value,
-        responseLength: responseLength.value,
-      });
+      const reply = await generateReplyWithMockService({ prompt: latestUserMessage.text });
       const assistantMessage: ConversationMessage = {
         id: createId("message"),
         role: "assistant",
@@ -647,7 +651,6 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         messages: [...current.messages, assistantMessage],
       }));
       touchConversation(conversation.id);
-      selectedAssistantMessageId.value = assistantMessage.id;
       showFlash("已经重新生成一版回复。", "success");
       return true;
     } catch (error) {
@@ -714,28 +717,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return job;
   }
 
-  async function createPrintFromLatestReply() {
-    const message = assistantMessages.value.at(-1);
-
-    if (!message) {
-      showFlash("当前还没有可打印的回答。", "error");
+  async function createPrintFromSelectedMessages() {
+    if (selectedConversationMessages.value.length === 0) {
+      showFlash("请先选中至少一条消息。", "error");
       return null;
     }
 
-    return addPrintJob(activeConversation.value?.title ?? "最新回答", message.text, "对话最新回答");
-  }
+    const content = selectedConversationMessages.value
+      .map((message) => `${message.role === "user" ? "我" : "Ink"}：${message.text}`)
+      .join("\n\n");
 
-  async function createPrintFromSelectedReply() {
-    if (!selectedAssistantMessage.value) {
-      showFlash("请先选中一条回答。", "error");
-      return null;
-    }
-
-    return addPrintJob(
-      activeConversation.value?.title ?? "选中回答",
-      selectedAssistantMessage.value.text,
-      "对话选中回答",
-    );
+    return addPrintJob(activeConversation.value?.title ?? "选中问答", content, "对话选中问答");
   }
 
   async function createPrintFromConversation() {
@@ -746,12 +738,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return null;
     }
 
-    const content = conversation.messages.map((message) => message.text).join("\n");
-    return addPrintJob(conversation.title, content, "整段对话");
+    const content = conversation.messages
+      .map((message) => `${message.role === "user" ? "我" : "Ink"}：${message.text}`)
+      .join("\n\n");
+    return addPrintJob(conversation.title, content, "当前对话");
   }
 
-  async function createManualPrint() {
-    return addPrintJob("手动新建纸条", "新的打印内容已创建，你可以稍后继续编辑。", "手动打印");
+  async function createManualPrint(options?: { title?: string; content?: string }) {
+    return addPrintJob(
+      options?.title?.trim() || "手动新建纸条",
+      options?.content?.trim() || "新的打印内容已创建，你可以稍后继续编辑。",
+      "手动打印",
+    );
   }
 
   async function confirmPrint(jobId: string) {
@@ -775,6 +773,26 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return true;
   }
 
+  function cancelPrint(jobId: string) {
+    const target = printJobs.value.find((job) => job.id === jobId);
+
+    if (!target || (target.status !== "pending" && target.status !== "queued")) {
+      return false;
+    }
+
+    printJobs.value = printJobs.value.map((job) =>
+      job.id === jobId
+        ? {
+            ...job,
+            status: "cancelled",
+            updatedAt: getNow(),
+          }
+        : job,
+    );
+    showFlash("已取消打印。", "success");
+    return true;
+  }
+
   function updatePrintDevice(jobId: string, deviceId: string) {
     printJobs.value = printJobs.value.map((job) =>
       job.id === jobId
@@ -788,6 +806,57 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     showFlash("打印目标设备已更新。", "success");
   }
 
+  function addDevice(options?: { name?: string; note?: string; setAsDefault?: boolean }) {
+    const nextIndex = devices.value.length + 1;
+    const device: Device = {
+      id: createId("device"),
+      name: options?.name?.trim() || `咕咕机 ${nextIndex}`,
+      status: "pending",
+      note: options?.note?.trim() || "等待绑定",
+    };
+
+    devices.value = [...devices.value, device];
+    if (options?.setAsDefault) {
+      defaultDeviceId.value = device.id;
+    }
+    showFlash("已添加新设备。", "success");
+    return device;
+  }
+
+  function removeDevice(deviceId: string) {
+    const target = devices.value.find((device) => device.id === deviceId);
+
+    if (!target) {
+      return false;
+    }
+
+    const remainingDevices = devices.value.filter((device) => device.id !== deviceId);
+    const fallbackDeviceId =
+      defaultDeviceId.value === deviceId ? (remainingDevices[0]?.id ?? "") : defaultDeviceId.value;
+
+    devices.value = remainingDevices;
+    defaultDeviceId.value = fallbackDeviceId;
+    printJobs.value = printJobs.value.map((job) =>
+      job.deviceId === deviceId
+        ? {
+            ...job,
+            deviceId: fallbackDeviceId,
+            updatedAt: getNow(),
+          }
+        : job,
+    );
+    schedules.value = schedules.value.map((schedule) =>
+      schedule.deviceId === deviceId
+        ? {
+            ...schedule,
+            deviceId: fallbackDeviceId,
+          }
+        : schedule,
+    );
+    showFlash(target.status === "pending" ? "已移除设备。" : "已解绑设备。", "success");
+    return true;
+  }
+
   function toggleSchedule(scheduleId: string) {
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, enabled: !schedule.enabled } : schedule,
@@ -795,13 +864,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     showFlash("定时任务状态已更新。", "success");
   }
 
-  function createSchedule() {
+  function createSchedule(options?: {
+    title?: string;
+    source?: string;
+    timeLabel?: string;
+    deviceId?: string;
+  }) {
     const schedule: Schedule = {
       id: createId("schedule"),
-      title: "新的定时任务",
-      source: "手动创建",
-      timeLabel: "每天 19:30",
-      deviceId: defaultDeviceId.value,
+      title: options?.title?.trim() || "新的定时任务",
+      source: options?.source?.trim() || "手动创建",
+      timeLabel: options?.timeLabel?.trim() || "每天 19:30",
+      deviceId: options?.deviceId || defaultDeviceId.value,
       enabled: true,
     };
 
@@ -816,57 +890,30 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     showFlash("定时任务设备已更新。", "success");
   }
 
-  function cycleSourceStatus(sourceId: string) {
-    const nextStatus = {
-      connected: "error",
-      error: "disconnected",
-      disconnected: "connected",
-    } as const;
+  function toggleSourceConnection(sourceId: string) {
+    const target = sources.value.find((source) => source.id === sourceId);
 
+    if (!target) {
+      return false;
+    }
+
+    const nextStatus = target.status === "connected" ? "disconnected" : "connected";
     sources.value = sources.value.map((source) =>
       source.id === sourceId
         ? {
             ...source,
-            status: nextStatus[source.status],
-            note:
-              nextStatus[source.status] === "connected"
-                ? "连接正常"
-                : nextStatus[source.status] === "error"
-                  ? "最近同步失败，请重新授权"
-                  : "尚未连接到此来源",
+            status: nextStatus,
+            note: nextStatus === "connected" ? "连接正常" : "尚未连接到此来源",
           }
         : source,
     );
-    showFlash("来源状态已更新。", "success");
+    showFlash(nextStatus === "connected" ? "插件已连接。" : "插件已解绑。", "success");
+    return true;
   }
 
   function setDefaultDevice(deviceId: string) {
     defaultDeviceId.value = deviceId;
     showFlash("默认设备已更新。", "success");
-  }
-
-  function setAnswerStyle(style: AnswerStyle) {
-    activeAnswerStyle.value = style;
-    serviceBinding.value = {
-      ...serviceBinding.value,
-      modelName:
-        style === "warm-encouraging"
-          ? "温柔鼓励"
-          : style === "concise-direct"
-            ? "直接简洁"
-            : "清楚温柔",
-    };
-    showFlash("回答风格已更新。", "success");
-  }
-
-  function setNoteStyle(style: NoteStyle) {
-    activeNoteStyle.value = style;
-    showFlash("纸条风格已更新。", "success");
-  }
-
-  function setResponseLength(length: ResponseLength) {
-    responseLength.value = length;
-    showFlash("回复长度偏好已更新。");
   }
 
   function setTheme(theme: ThemeMode) {
@@ -881,16 +928,94 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function setLoginProtection(enabled: boolean) {
     loginProtectionEnabled.value = enabled;
-    showFlash(enabled ? "刷新后会要求重新登录。" : "已允许保留本地登录状态。");
+    showFlash(enabled ? "刷新后会要求重新登录。" : "刷新后将保留登录状态。");
   }
 
   function bindService() {
     serviceBinding.value = {
-      providerName: "Ink Mock AI",
+      providerName: "Ink AI",
       modelName: activeModelLabel.value,
       bound: true,
     };
-    showFlash("已绑定前端 mock AI 服务。", "success");
+    showFlash("服务已连接。", "success");
+  }
+
+  function setAuthState(user: User, session: AuthSession) {
+    authUser.value = user;
+    authSession.value = session;
+    authError.value = "";
+  }
+
+  function clearAuthState() {
+    authUser.value = null;
+    authSession.value = null;
+    authError.value = "";
+  }
+
+  async function refreshSessionIfNeeded() {
+    const current = authSession.value;
+
+    if (!current) {
+      return false;
+    }
+
+    const expiresAt = new Date(current.accessTokenExpiresAt).getTime();
+
+    if (Number.isNaN(expiresAt)) {
+      clearAuthState();
+      return false;
+    }
+
+    if (expiresAt > Date.now() + 30_000) {
+      return true;
+    }
+
+    try {
+      const refreshed = await refreshAuthSession(current.refreshToken);
+      setAuthState(refreshed.user, refreshed.session);
+      return true;
+    } catch (error) {
+      clearAuthState();
+
+      if (error instanceof AuthApiError) {
+        authError.value = error.message;
+      }
+
+      return false;
+    }
+  }
+
+  async function initializeAuth() {
+    if (!authSession.value) {
+      clearAuthState();
+      return false;
+    }
+
+    authBootstrapping.value = true;
+
+    try {
+      const sessionReady = await refreshSessionIfNeeded();
+
+      if (!sessionReady || !authSession.value) {
+        return false;
+      }
+
+      if (authUser.value) {
+        authError.value = "";
+        return true;
+      }
+
+      const user = await fetchCurrentUser(authSession.value.accessToken);
+      authUser.value = user;
+      authError.value = "";
+      return true;
+    } catch (error) {
+      clearAuthState();
+      authError.value = error instanceof Error ? error.message : "登录状态已失效，请重新登录。";
+      return false;
+    } finally {
+      authBootstrapping.value = false;
+    }
   }
 
   async function login(email: string, password: string) {
@@ -898,7 +1023,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authError.value = "";
 
     try {
-      authUser.value = await loginWithMockService({ email, password });
+      const result = await loginWithApi({ email, password });
+      setAuthState(result.user, result.session);
       showFlash("登录成功。", "success");
       return true;
     } catch (error) {
@@ -910,9 +1036,50 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
   }
 
-  function logout() {
-    authUser.value = null;
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const current = authSession.value;
+
+    if (!current) {
+      authError.value = "登录状态已失效，请重新登录。";
+      return false;
+    }
+
+    passwordChangeLoading.value = true;
     authError.value = "";
+
+    try {
+      await changePasswordWithApi({
+        accessToken: current.accessToken,
+        currentPassword,
+        newPassword,
+      });
+      clearAuthState();
+      showFlash("密码已更新，请重新登录。", "success");
+      return true;
+    } catch (error) {
+      authError.value = error instanceof Error ? error.message : "修改密码失败，请稍后重试。";
+      showFlash(authError.value, "error");
+      return false;
+    } finally {
+      passwordChangeLoading.value = false;
+    }
+  }
+
+  async function logout() {
+    const current = authSession.value;
+
+    if (current) {
+      try {
+        await logoutWithApi({
+          accessToken: current.accessToken,
+          refreshToken: current.refreshToken,
+        });
+      } catch {
+        // Local sign-out should still succeed if the backend session already expired.
+      }
+    }
+
+    clearAuthState();
     showFlash("已退出当前账号。");
   }
 
@@ -924,16 +1091,19 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return deviceMap.value[deviceId]?.name ?? "未设置设备";
   }
 
-  function selectAssistantMessage(messageId: string) {
-    selectedAssistantMessageId.value = messageId;
+  function toggleConversationMessageSelection(messageId: string) {
+    selectedConversationMessageIds.value = selectedConversationMessageIds.value.includes(messageId)
+      ? selectedConversationMessageIds.value.filter((current) => current !== messageId)
+      : [...selectedConversationMessageIds.value, messageId];
   }
-
-  ensureSelectedAssistantMessage();
 
   return {
     authUser,
+    authSession,
     authLoading,
     authError,
+    authBootstrapping,
+    passwordChangeLoading,
     devices,
     conversations,
     activeConversationId,
@@ -943,20 +1113,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     loginProtectionEnabled,
     sendConfirmationEnabled,
     selectedTheme,
-    activeAnswerStyle,
-    activeNoteStyle,
-    responseLength,
     defaultDeviceId,
     serviceBinding,
     isGenerating,
     generationError,
-    selectedAssistantMessageId,
+    selectedConversationMessageIds,
     isCreatingPrint,
     flashMessage,
     flashTone,
     activeConversation,
-    assistantMessages,
-    selectedAssistantMessage,
+    conversationMessages,
+    selectedConversationMessages,
     defaultDevice,
     pendingPrintJobs,
     recentPrintJobs,
@@ -972,28 +1139,31 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     isAuthenticated,
     selectConversation,
     createConversation,
+    deleteConversation,
     updateCurrentDraft,
     saveCurrentDraft,
     sendCurrentDraft,
     regenerateLatestReply,
-    createPrintFromLatestReply,
-    createPrintFromSelectedReply,
+    createPrintFromSelectedMessages,
     createPrintFromConversation,
     createManualPrint,
     confirmPrint,
+    cancelPrint,
     updatePrintDevice,
+    addDevice,
+    removeDevice,
     toggleSchedule,
     createSchedule,
     updateScheduleDevice,
-    cycleSourceStatus,
+    toggleSourceConnection,
     setDefaultDevice,
-    setAnswerStyle,
-    setNoteStyle,
-    setResponseLength,
     setTheme,
     setSendConfirmation,
     setLoginProtection,
     bindService,
+    initializeAuth,
+    refreshSessionIfNeeded,
+    changePassword,
     login,
     logout,
     formatPrintTime,
@@ -1001,6 +1171,6 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     getDeviceStatusLabel,
     getPrintStatusLabel,
     getSourceStatusLabel,
-    selectAssistantMessage,
+    toggleConversationMessageSelection,
   };
 });

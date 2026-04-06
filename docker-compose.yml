@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ink
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ink-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ink"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  ink-postgres-data:

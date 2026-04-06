@@ -6,23 +6,29 @@ import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
 
-const answerStyleOptions = [
-  { label: "清楚温柔", value: "clear-gentle" },
-  { label: "温柔鼓励", value: "warm-encouraging" },
-  { label: "直接简洁", value: "concise-direct" },
-] as const;
-
-const responseLengthOptions = [
-  { label: "一句到两句", value: "short" },
-  { label: "两段以内", value: "medium" },
-  { label: "稍微详细", value: "long" },
-] as const;
-
 const hasMessages = computed(() => (workspaceStore.activeConversation?.messages.length ?? 0) > 0);
 
 function handleDraftInput(event: Event) {
   const target = event.target as HTMLTextAreaElement | null;
   workspaceStore.updateCurrentDraft(target?.value ?? "");
+}
+
+function handleDeleteCurrentConversation() {
+  const current = workspaceStore.activeConversation;
+
+  if (!current) {
+    return;
+  }
+
+  const hasContent = current.messages.length > 0 || current.draft.trim().length > 0;
+  if (hasContent && typeof window !== "undefined") {
+    const confirmed = window.confirm(`删除“${current.title}”？`);
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  workspaceStore.deleteConversation(current.id);
 }
 </script>
 
@@ -30,14 +36,12 @@ function handleDraftInput(event: Event) {
   <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">对话</h2>
-      <p class="mt-1 text-sm text-stone-500">通过对话整理内容，再决定打印哪一段。</p>
     </div>
 
     <section class="space-y-4 lg:hidden">
       <div class="flex items-center justify-between gap-3">
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
-          <p class="mt-1 text-sm text-stone-500">草稿和消息会保存在本地。</p>
         </div>
         <button
           class="ui-btn-secondary px-3 py-1.5 text-sm"
@@ -97,7 +101,6 @@ function handleDraftInput(event: Event) {
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
-            <p class="mt-1 text-sm text-stone-500">会话、草稿和选择结果实时同步。</p>
           </div>
           <button
             class="ui-btn-secondary px-3 py-1.5 text-sm"
@@ -157,52 +160,20 @@ function handleDraftInput(event: Event) {
               默认发往：{{ workspaceStore.activeDeviceLabel || "尚未设置" }}
             </p>
           </div>
-          <div class="flex flex-col gap-2 sm:items-end">
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="option in answerStyleOptions"
-                :key="option.value"
-                type="button"
-                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
-                :class="
-                  workspaceStore.activeAnswerStyle === option.value
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-100 text-stone-800 hover:bg-stone-200'
-                "
-                @click="workspaceStore.setAnswerStyle(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="option in responseLengthOptions"
-                :key="option.value"
-                type="button"
-                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors"
-                :class="
-                  workspaceStore.responseLength === option.value
-                    ? 'bg-stone-900 text-white'
-                    : 'bg-stone-100 text-stone-800 hover:bg-stone-200'
-                "
-                @click="workspaceStore.setResponseLength(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            class="ui-btn-secondary px-3 py-1.5 text-sm"
+            @click="handleDeleteCurrentConversation"
+          >
+            删除对话
+          </button>
         </div>
 
         <div
           v-if="!hasMessages"
           class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 text-center"
         >
-          <div class="max-w-sm">
-            <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
-            <p class="mt-2 text-sm leading-relaxed text-stone-500">
-              输入一段想整理的内容，Ink 会先帮你生成一版适合打印的小纸条文案。
-            </p>
-          </div>
+          <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
         </div>
 
         <div v-else class="flex-1 space-y-4 overflow-y-auto pr-2">
@@ -211,33 +182,51 @@ function handleDraftInput(event: Event) {
             :key="message.id"
             class="space-y-2"
           >
-            <button
-              type="button"
-              class="block max-w-[88%] rounded-2xl px-5 py-3.5 text-left text-[15px] leading-relaxed"
-              :class="
-                message.role === 'user'
-                  ? 'ml-auto cursor-default rounded-br-sm bg-stone-900 text-white'
-                  : workspaceStore.selectedAssistantMessage?.id === message.id
-                    ? 'rounded-bl-sm border border-stone-900 bg-stone-50 text-stone-900 shadow-sm'
-                    : 'rounded-bl-sm border border-stone-200 bg-white text-stone-900 shadow-sm'
-              "
-              :disabled="message.role === 'user'"
-              @click="
-                message.role === 'assistant' && workspaceStore.selectAssistantMessage(message.id)
-              "
-            >
-              {{ message.text }}
-            </button>
             <div
-              v-if="message.role === 'assistant'"
-              class="px-1 text-xs text-stone-500"
-              :class="workspaceStore.selectedAssistantMessage?.id === message.id ? 'ml-1' : 'ml-1'"
+              class="flex items-center gap-3"
+              :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
             >
-              {{
-                workspaceStore.selectedAssistantMessage?.id === message.id
-                  ? "已选中用于打印"
-                  : "点击可选中这条回答"
-              }}
+              <button
+                type="button"
+                class="block max-w-[88%] rounded-2xl border px-5 py-3.5 text-left text-[15px] leading-relaxed shadow-sm transition-colors"
+                :class="
+                  message.role === 'user'
+                    ? workspaceStore.selectedConversationMessageIds.includes(message.id)
+                      ? 'rounded-br-sm border-stone-900 bg-stone-800 text-white ring-1 ring-stone-400'
+                      : 'rounded-br-sm border-stone-900 bg-stone-900 text-white'
+                    : workspaceStore.selectedConversationMessageIds.includes(message.id)
+                      ? 'rounded-bl-sm border-amber-500 bg-amber-50 text-stone-900 ring-1 ring-amber-200'
+                      : 'rounded-bl-sm border-stone-200 bg-white text-stone-900'
+                "
+                @click="workspaceStore.toggleConversationMessageSelection(message.id)"
+              >
+                {{ message.text }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
+                :class="
+                  workspaceStore.selectedConversationMessageIds.includes(message.id)
+                    ? 'border-amber-500 bg-amber-500'
+                    : 'border-stone-300 bg-white'
+                "
+                :aria-label="
+                  workspaceStore.selectedConversationMessageIds.includes(message.id)
+                    ? '取消选择这条消息'
+                    : '选择这条消息'
+                "
+                :aria-pressed="workspaceStore.selectedConversationMessageIds.includes(message.id)"
+                @click="workspaceStore.toggleConversationMessageSelection(message.id)"
+              >
+                <span
+                  class="h-2 w-2 rounded-full"
+                  :class="
+                    workspaceStore.selectedConversationMessageIds.includes(message.id)
+                      ? 'bg-white'
+                      : 'bg-transparent'
+                  "
+                />
+              </button>
             </div>
           </article>
 
@@ -254,21 +243,15 @@ function handleDraftInput(event: Event) {
             <div class="flex flex-wrap gap-2">
               <button
                 class="ui-btn-secondary whitespace-nowrap"
-                @click="workspaceStore.createPrintFromLatestReply"
+                @click="workspaceStore.createPrintFromSelectedMessages"
               >
-                打印最新回答
-              </button>
-              <button
-                class="ui-btn-secondary whitespace-nowrap"
-                @click="workspaceStore.createPrintFromSelectedReply"
-              >
-                打印选中回答
+                打印选中问答
               </button>
               <button
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.createPrintFromConversation"
               >
-                打印整段对话
+                打印当前对话
               </button>
             </div>
             <div class="flex items-center gap-2">
@@ -305,8 +288,7 @@ function handleDraftInput(event: Event) {
               class="flex flex-col gap-3 rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-                <span>纸条风格：{{ workspaceStore.activeNoteStyle }}</span>
-                <span>回复长度：{{ workspaceStore.responseLength }}</span>
+                <span>已选中 {{ workspaceStore.selectedConversationMessageIds.length }} 条</span>
                 <span
                   >发送前确认：{{
                     workspaceStore.sendConfirmationEnabled ? "已开启" : "已关闭"

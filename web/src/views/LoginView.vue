@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -8,19 +8,23 @@ const router = useRouter();
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
 
-const email = ref("name@example.com");
-const password = ref("demo-password");
+const email = ref("admin");
+const password = ref("");
 const formError = ref("");
+const passwordVisible = ref(false);
 
 const isFormValid = computed(
-  () => /\S+@\S+\.\S+/.test(email.value) && password.value.trim().length > 0,
+  () => email.value.trim().length > 0 && password.value.trim().length > 0,
+);
+const noticeMessage = computed(() =>
+  route.query.notice === "password-updated" ? "密码已更新，请使用新密码重新登录。" : "",
 );
 
 async function handleSubmit() {
   formError.value = "";
 
   if (!isFormValid.value) {
-    formError.value = "请输入有效邮箱和密码。";
+    formError.value = "请输入账号和密码。";
     return;
   }
 
@@ -48,35 +52,47 @@ async function handleSubmit() {
         >
           打开 Ink，继续你的纸条灵感。
         </h1>
-        <p class="mt-6 max-w-xl text-base leading-relaxed text-stone-500">
-          管理设备、整理内容、选好要打印的小纸条。整个过程会尽量保持简单，不需要你记很多技术细节。
-        </p>
       </section>
 
       <section class="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm lg:p-10">
         <h2 class="text-xl font-semibold text-stone-900">登录账号</h2>
-        <p class="mt-1 text-sm text-stone-500">继续管理你的设备和打印内容。</p>
+
+        <p
+          v-if="noticeMessage"
+          class="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+        >
+          {{ noticeMessage }}
+        </p>
 
         <form class="mt-8 space-y-5" @submit.prevent="handleSubmit">
           <div>
-            <label for="email" class="mb-2 block text-sm font-medium text-stone-900">邮箱</label>
+            <label for="email" class="mb-2 block text-sm font-medium text-stone-900">账号</label>
             <input
               id="email"
               v-model="email"
-              type="email"
-              placeholder="name@example.com"
+              type="text"
+              placeholder="admin"
               class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             />
           </div>
           <div>
             <label for="password" class="mb-2 block text-sm font-medium text-stone-900">密码</label>
-            <input
-              id="password"
-              v-model="password"
-              type="password"
-              placeholder="请输入密码"
-              class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-            />
+            <div class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3">
+              <input
+                id="password"
+                v-model="password"
+                :type="passwordVisible ? 'text' : 'password'"
+                placeholder="请输入密码"
+                class="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                @click="passwordVisible = !passwordVisible"
+              >
+                {{ passwordVisible ? "隐藏" : "显示" }}
+              </button>
+            </div>
           </div>
           <p v-if="formError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {{ formError }}
@@ -89,18 +105,8 @@ async function handleSubmit() {
             >
               {{ workspaceStore.authLoading ? "登录中..." : "登录" }}
             </button>
-            <RouterLink to="/" class="ui-btn-secondary w-full px-6 py-2.5 sm:w-auto"
-              >先看看首页</RouterLink
-            >
           </div>
         </form>
-
-        <div
-          class="mt-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600"
-        >
-          这是无后端阶段的前端 mock 登录。输入任意有效邮箱即可登录，密码填 `wrong` 或邮箱包含 `fail`
-          会触发错误提示。
-        </div>
       </section>
     </div>
   </div>

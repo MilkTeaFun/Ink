@@ -1,18 +1,50 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
+const addDeviceOpen = ref(false);
+const deviceName = ref("");
+const deviceNote = ref("");
+const setAsDefault = ref(false);
+const addDeviceError = ref("");
+
+function openAddDeviceDialog() {
+  addDeviceOpen.value = true;
+  addDeviceError.value = "";
+  deviceName.value = "";
+  deviceNote.value = "";
+  setAsDefault.value = false;
+}
+
+function closeAddDeviceDialog() {
+  addDeviceOpen.value = false;
+}
+
+function submitAddDevice() {
+  addDeviceError.value = "";
+
+  if (!deviceName.value.trim()) {
+    addDeviceError.value = "请输入设备名称。";
+    return;
+  }
+
+  workspaceStore.addDevice({
+    name: deviceName.value,
+    note: deviceNote.value,
+    setAsDefault: setAsDefault.value,
+  });
+  closeAddDeviceDialog();
+}
 </script>
 
 <template>
   <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
-      <p class="mt-1 text-sm text-stone-500">
-        设备、任务和最近打印记录会从同一份共享状态里实时更新。
-      </p>
     </div>
 
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -48,20 +80,22 @@ const workspaceStore = useWorkspaceStore();
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
         <section>
-          <div class="mb-4">
-            <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
-              <p class="mt-1 text-sm text-stone-500">
-                默认设备、离线设备和待绑定设备都显示在这里。
-              </p>
-            </div>
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
+            <button
+              type="button"
+              class="ui-btn-secondary px-3 py-1.5 text-sm"
+              @click="openAddDeviceDialog"
+            >
+              添加设备
+            </button>
           </div>
 
           <div class="ui-list-card">
             <article
               v-for="device in workspaceStore.devices"
               :key="device.id"
-              class="ui-list-row flex items-center justify-between gap-3"
+              class="ui-list-row flex items-center justify-between gap-4"
             >
               <div class="flex min-w-0 items-center gap-3">
                 <div
@@ -78,18 +112,35 @@ const workspaceStore = useWorkspaceStore();
                 </div>
               </div>
 
-              <span
-                class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                :class="
-                  device.status === 'connected'
-                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
-                    : device.status === 'pending'
-                      ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                      : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                "
-              >
-                {{ workspaceStore.getDeviceStatusLabel(device.status) }}
-              </span>
+              <div class="flex shrink-0 items-center gap-2">
+                <span
+                  class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  :class="
+                    device.status === 'connected'
+                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
+                      : device.status === 'pending'
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
+                        : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
+                  "
+                >
+                  {{ workspaceStore.getDeviceStatusLabel(device.status) }}
+                </span>
+                <button
+                  v-if="device.id !== workspaceStore.defaultDeviceId"
+                  type="button"
+                  class="ui-btn-secondary px-3 py-1.5 text-sm"
+                  @click="workspaceStore.setDefaultDevice(device.id)"
+                >
+                  设为默认
+                </button>
+                <button
+                  type="button"
+                  class="ui-btn-secondary px-3 py-1.5 text-sm"
+                  @click="workspaceStore.removeDevice(device.id)"
+                >
+                  {{ device.status === "pending" ? "移除" : "解绑" }}
+                </button>
+              </div>
             </article>
           </div>
         </section>
@@ -98,9 +149,6 @@ const workspaceStore = useWorkspaceStore();
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">自动打印</h3>
-              <p class="mt-1 text-sm text-stone-500">
-                状态页保留启停，创建和详细调整集中到打印页。
-              </p>
             </div>
             <RouterLink to="/prints" class="ui-btn-secondary px-3 py-1.5 text-sm">
               前往打印
@@ -112,7 +160,6 @@ const workspaceStore = useWorkspaceStore();
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">还没有自动打印计划</h4>
-            <p class="mt-2 text-sm text-stone-500">去打印页创建第一条定时任务。</p>
           </div>
 
           <div v-else class="ui-list-card">
@@ -148,9 +195,6 @@ const workspaceStore = useWorkspaceStore();
         <div class="mb-4">
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">最近状态</h3>
-            <p class="mt-1 text-sm text-stone-500">
-              打印队列、完成记录和失败状态都从同一处读出来。
-            </p>
           </div>
         </div>
 
@@ -176,9 +220,11 @@ const workspaceStore = useWorkspaceStore();
                       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
                       : item.status === 'queued'
                         ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                        : item.status === 'failed'
-                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
-                          : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
+                        : item.status === 'cancelled'
+                          ? 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
+                          : item.status === 'failed'
+                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
+                            : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
                   "
                 >
                   {{ workspaceStore.getPrintStatusLabel(item.status) }}
@@ -189,5 +235,60 @@ const workspaceStore = useWorkspaceStore();
         </div>
       </aside>
     </div>
+
+    <AppDialog
+      :open="addDeviceOpen"
+      title="添加设备"
+      description="添加后可在状态页继续设为默认或解绑。"
+      @close="closeAddDeviceDialog"
+    >
+      <form class="space-y-4" @submit.prevent="submitAddDevice">
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">设备名称</span>
+          <input
+            v-model="deviceName"
+            type="text"
+            placeholder="例如：客厅咕咕机"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">设备备注</span>
+          <input
+            v-model="deviceNote"
+            type="text"
+            placeholder="例如：窗边打印机"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label
+          class="flex items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3"
+        >
+          <input
+            v-model="setAsDefault"
+            type="checkbox"
+            class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+          />
+          <span class="text-sm text-stone-900">设为默认设备</span>
+        </label>
+
+        <p v-if="addDeviceError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {{ addDeviceError }}
+        </p>
+
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2 text-sm"
+            @click="closeAddDeviceDialog"
+          >
+            取消
+          </button>
+          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">添加设备</button>
+        </div>
+      </form>
+    </AppDialog>
   </section>
 </template>

@@ -14,7 +14,7 @@ const pendingBadge = computed(() =>
 );
 
 async function handleLogout() {
-  workspaceStore.logout();
+  await workspaceStore.logout();
   await router.replace("/login");
 }
 </script>
@@ -25,10 +25,7 @@ async function handleLogout() {
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
           <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-          <div>
-            <p class="text-sm font-semibold text-stone-950">Ink</p>
-            <p class="text-xs text-stone-500">{{ workspaceStore.welcomeLabel }}</p>
-          </div>
+          <p class="text-sm font-semibold text-stone-950">Ink</p>
         </div>
 
         <button
@@ -44,10 +41,7 @@ async function handleLogout() {
         <div class="flex items-center gap-8">
           <div class="flex items-center gap-3">
             <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-            <div>
-              <p class="text-sm font-semibold text-stone-950">Ink</p>
-              <p class="text-xs text-stone-500">{{ workspaceStore.welcomeLabel }}</p>
-            </div>
+            <p class="text-sm font-semibold text-stone-950">Ink</p>
           </div>
 
           <nav class="flex items-center gap-1">

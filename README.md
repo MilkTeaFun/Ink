@@ -24,8 +24,21 @@ Ink is an early-stage management experience for Memobird (咕咕机) thermal pri
 ### Current Focus
 
 - [x] **Web-based Dashboard Shell**: Initial frontend workspace under [`web/`](web/)
+- [x] **Backend Authentication Service**: Initial Go account service under [`server/`](server/)
 - [ ] **Backend and Device Integration**: Connect the web console to real services and Memobird APIs
 - [ ] **Print Workflows**: Move from static UI exploration to end-to-end printable actions
+
+## Local backend
+
+For the current auth backend, the shortest local setup is:
+
+1. `make dev-db`
+2. `make migrate-up`
+3. `make seed-dev`
+4. `make dev-api`
+5. `make dev-web`
+
+If you prefer a one-command bootstrap for the API, `make dev-api` will automatically prepare `.env`, ensure PostgreSQL is running, apply migrations, and create the development admin account before starting the server. The initial password is generated once and saved to `server/.dev-admin-password`.
 
 ## Contributing
 

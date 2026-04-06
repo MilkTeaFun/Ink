@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -9,8 +10,18 @@ const workspaceStore = useWorkspaceStore();
 const defaultSettings = computed(() => [
   { label: "默认设备", value: workspaceStore.activeDeviceLabel || "暂未设置" },
   { label: "发送前确认", value: workspaceStore.sendConfirmationEnabled ? "已开启" : "已关闭" },
-  { label: "纸条风格", value: workspaceStore.activeNoteStyle },
 ]);
+
+const printDialogOpen = ref(false);
+const scheduleDialogOpen = ref(false);
+const printTitle = ref("");
+const printContent = ref("");
+const printError = ref("");
+const scheduleTitle = ref("");
+const scheduleSource = ref("");
+const scheduleTime = ref("每天 19:30");
+const scheduleDeviceId = ref("");
+const scheduleError = ref("");
 
 function handlePrintDeviceChange(jobId: string, event: Event) {
   const target = event.target as HTMLSelectElement | null;
@@ -21,6 +32,72 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
   const target = event.target as HTMLSelectElement | null;
   workspaceStore.updateScheduleDevice(scheduleId, target?.value ?? workspaceStore.defaultDeviceId);
 }
+
+function openPrintDialog() {
+  printDialogOpen.value = true;
+  printTitle.value = "";
+  printContent.value = "";
+  printError.value = "";
+}
+
+function closePrintDialog() {
+  printDialogOpen.value = false;
+}
+
+async function submitPrintDialog() {
+  printError.value = "";
+
+  if (!printTitle.value.trim()) {
+    printError.value = "请输入打印标题。";
+    return;
+  }
+
+  if (!printContent.value.trim()) {
+    printError.value = "请输入打印内容。";
+    return;
+  }
+
+  await workspaceStore.createManualPrint({
+    title: printTitle.value,
+    content: printContent.value,
+  });
+  closePrintDialog();
+}
+
+function openScheduleDialog() {
+  scheduleDialogOpen.value = true;
+  scheduleTitle.value = "";
+  scheduleSource.value = "";
+  scheduleTime.value = "每天 19:30";
+  scheduleDeviceId.value = workspaceStore.defaultDeviceId;
+  scheduleError.value = "";
+}
+
+function closeScheduleDialog() {
+  scheduleDialogOpen.value = false;
+}
+
+function submitScheduleDialog() {
+  scheduleError.value = "";
+
+  if (!scheduleTitle.value.trim()) {
+    scheduleError.value = "请输入任务名称。";
+    return;
+  }
+
+  if (!scheduleTime.value.trim()) {
+    scheduleError.value = "请输入执行时间。";
+    return;
+  }
+
+  workspaceStore.createSchedule({
+    title: scheduleTitle.value,
+    source: scheduleSource.value || "手动创建",
+    timeLabel: scheduleTime.value,
+    deviceId: scheduleDeviceId.value || workspaceStore.defaultDeviceId,
+  });
+  closeScheduleDialog();
+}
 </script>
 
 <template>
@@ -28,16 +105,12 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-stone-900">打印</h2>
-        <p class="mt-1 text-sm text-stone-500">待确认内容、定时任务和打印记录都集中放在这里。</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button
-          class="ui-btn-primary px-3 py-1.5 text-sm"
-          @click="workspaceStore.createManualPrint"
-        >
+        <button class="ui-btn-primary px-3 py-1.5 text-sm" @click="openPrintDialog">
           新建打印
         </button>
-        <button class="ui-btn-secondary px-3 py-1.5 text-sm" @click="workspaceStore.createSchedule">
+        <button class="ui-btn-secondary px-3 py-1.5 text-sm" @click="openScheduleDialog">
           新建定时任务
         </button>
       </div>
@@ -48,7 +121,6 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
         <section>
           <div class="mb-4">
             <h3 class="text-base leading-6 font-semibold text-stone-900">待处理打印</h3>
-            <p class="mt-1 text-sm text-stone-500">这里会收纳待确认和已进队列的打印任务。</p>
           </div>
 
           <div
@@ -56,9 +128,6 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">当前没有待处理打印</h4>
-            <p class="mt-2 text-sm text-stone-500">
-              去对话页生成一条回答，或者直接手动新建一张纸条。
-            </p>
           </div>
 
           <div v-else class="ui-list-card">
@@ -93,16 +162,19 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
                   </p>
                 </div>
 
-                <div class="flex flex-wrap gap-2">
+                <div class="flex shrink-0 items-start gap-2 self-start">
                   <button
                     v-if="item.status === 'pending'"
-                    class="ui-btn-primary px-3 py-1.5 text-sm"
+                    class="ui-btn-primary px-3 py-1.5 text-sm whitespace-nowrap"
                     @click="workspaceStore.confirmPrint(item.id)"
                   >
                     确认打印
                   </button>
-                  <button v-else class="ui-btn-secondary px-3 py-1.5 text-sm" disabled>
-                    等待完成
+                  <button
+                    class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
+                    @click="workspaceStore.cancelPrint(item.id)"
+                  >
+                    取消打印
                   </button>
                 </div>
               </div>
@@ -129,14 +201,7 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
 
         <section>
           <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
-              <p class="mt-1 text-sm text-stone-500">这里可以启停自动打印计划，并修改目标设备。</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="text-xs text-stone-500">模板库筹备中</span>
-              <button class="ui-btn-secondary px-3 py-1.5 text-sm" disabled>管理模板</button>
-            </div>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
           </div>
 
           <div
@@ -144,9 +209,6 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">还没有定时任务</h4>
-            <p class="mt-2 text-sm text-stone-500">
-              先创建一个自动打印计划，再回来调整时间和设备。
-            </p>
           </div>
 
           <div v-else class="ui-list-card">
@@ -199,9 +261,6 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
         <section>
           <div class="mb-4">
             <h3 class="text-base leading-6 font-semibold text-stone-900">最近打印</h3>
-            <p class="mt-1 text-sm text-stone-500">
-              查看最近完成的任务，确认有没有卡住或失败的记录。
-            </p>
           </div>
 
           <div class="ui-list-card p-4">
@@ -226,9 +285,11 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
                         ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
                         : item.status === 'queued'
                           ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                          : item.status === 'failed'
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
-                            : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
+                          : item.status === 'cancelled'
+                            ? 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
+                            : item.status === 'failed'
+                              ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
+                              : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
                     "
                   >
                     {{ workspaceStore.getPrintStatusLabel(item.status) }}
@@ -245,7 +306,6 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">默认打印设置</h3>
-              <p class="mt-1 text-sm text-stone-500">新建打印和对话页会优先套用这些配置。</p>
             </div>
             <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm"
               >调整</RouterLink
@@ -262,23 +322,14 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
 
         <section>
           <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">内容来源</h3>
-              <p class="mt-1 text-sm text-stone-500">
-                直接在这里切换来源状态，模拟授权和异常恢复。
-              </p>
-            </div>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">已连接插件</h3>
             <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm"
               >更多设置</RouterLink
             >
           </div>
 
           <div class="ui-list-card">
-            <article
-              v-for="source in workspaceStore.sources"
-              :key="source.id"
-              class="ui-list-row grid gap-3"
-            >
+            <article v-for="source in workspaceStore.sources" :key="source.id" class="ui-list-row">
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
@@ -297,16 +348,120 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
                   {{ workspaceStore.getSourceStatusLabel(source.status) }}
                 </span>
               </div>
-              <button
-                class="ui-btn-secondary px-3 py-1.5 text-sm"
-                @click="workspaceStore.cycleSourceStatus(source.id)"
-              >
-                切换状态
-              </button>
             </article>
           </div>
         </section>
       </aside>
     </div>
+
+    <AppDialog
+      :open="printDialogOpen"
+      title="新建打印"
+      description="创建一条新的打印内容。"
+      @close="closePrintDialog"
+    >
+      <form class="space-y-4" @submit.prevent="submitPrintDialog">
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">打印标题</span>
+          <input
+            v-model="printTitle"
+            type="text"
+            placeholder="例如：晚安留言"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">打印内容</span>
+          <textarea
+            v-model="printContent"
+            rows="4"
+            placeholder="输入要打印的内容"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <p v-if="printError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {{ printError }}
+        </p>
+
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2 text-sm"
+            @click="closePrintDialog"
+          >
+            取消
+          </button>
+          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">创建打印</button>
+        </div>
+      </form>
+    </AppDialog>
+
+    <AppDialog
+      :open="scheduleDialogOpen"
+      title="新建定时任务"
+      description="创建一条自动打印计划。"
+      @close="closeScheduleDialog"
+    >
+      <form class="space-y-4" @submit.prevent="submitScheduleDialog">
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">任务名称</span>
+          <input
+            v-model="scheduleTitle"
+            type="text"
+            placeholder="例如：晨间提醒"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">内容来源</span>
+          <input
+            v-model="scheduleSource"
+            type="text"
+            placeholder="例如：手动创建"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">执行时间</span>
+          <input
+            v-model="scheduleTime"
+            type="text"
+            placeholder="例如：每天 19:30"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">发送设备</span>
+          <select
+            v-model="scheduleDeviceId"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          >
+            <option v-for="device in workspaceStore.devices" :key="device.id" :value="device.id">
+              {{ device.name }}
+            </option>
+          </select>
+        </label>
+
+        <p v-if="scheduleError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {{ scheduleError }}
+        </p>
+
+        <div class="flex justify-end gap-3">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2 text-sm"
+            @click="closeScheduleDialog"
+          >
+            取消
+          </button>
+          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">创建任务</button>
+        </div>
+      </form>
+    </AppDialog>
   </section>
 </template>

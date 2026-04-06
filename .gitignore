@@ -10,7 +10,7 @@
 /web/coverage/
 /web/playwright-report/
 /web/test-results/
+/server/.dev-admin-password
 
 AGENTS.md
 CLAUDE.md
-

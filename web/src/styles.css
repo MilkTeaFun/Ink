@@ -233,10 +233,23 @@
     transform 180ms var(--ease-out-quart);
 }
 
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+  transition:
+    opacity 180ms var(--ease-out-quart),
+    transform 180ms var(--ease-out-quart);
+}
+
 .page-swap-enter-from,
 .page-swap-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
 }
 
 @media (prefers-reduced-motion: reduce) {
