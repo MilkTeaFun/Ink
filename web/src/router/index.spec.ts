@@ -1,8 +1,13 @@
 import { createPinia, setActivePinia } from "pinia";
+import { afterEach, vi } from "vitest";
 import { createMemoryHistory } from "vue-router";
 
 import { createAppRouter, navigationItems, routes } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function createAuthenticatedRouter() {
   const pinia = createPinia();
@@ -62,6 +67,37 @@ describe("router configuration", () => {
     await router.isReady();
 
     expect(router.currentRoute.value.fullPath).toBe("/prints");
+  });
+
+  it("restores a persisted session before redirecting protected routes", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          user: {
+            id: "user-1",
+            email: "name@example.com",
+            name: "Ink User",
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useWorkspaceStore();
+    store.authSession = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+
+    const router = createAppRouter(createMemoryHistory(), pinia);
+    router.push("/status");
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(store.authUser?.email).toBe("name@example.com");
   });
 
   it("updates the document title from route metadata", async () => {

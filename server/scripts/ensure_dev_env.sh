@@ -17,6 +17,8 @@ if ! command -v openssl >/dev/null 2>&1; then
 fi
 
 JWT_SECRET=$(openssl rand -hex 32)
+umask 077
 sed "s/^JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" "$TEMPLATE_FILE" >"$ENV_FILE"
+chmod 600 "$ENV_FILE"
 
 echo "Created $ENV_FILE with local development defaults."

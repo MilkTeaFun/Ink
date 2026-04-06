@@ -59,10 +59,21 @@ async function request<T>(input: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
 
-  const response = await fetch(input, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    throw new AuthApiError(
+      0,
+      "network_error",
+      error instanceof Error
+        ? `网络异常，请检查连接后重试。${error.message ? ` (${error.message})` : ""}`
+        : "网络异常，请检查连接后重试。",
+    );
+  }
 
   if (!response.ok) {
     let errorPayload: ApiErrorResponse | null = null;

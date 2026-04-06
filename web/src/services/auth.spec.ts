@@ -129,5 +129,17 @@ describe("auth service", () => {
         password: "wrong",
       }),
     ).rejects.toEqual(new AuthApiError(401, "invalid_credentials", "账号或密码不正确。", "req-1"));
+
+    fetchMock.mockRejectedValueOnce(new Error("network error"));
+
+    await expect(
+      loginWithApi({
+        email: "name@example.com",
+        password: "wrong",
+      }),
+    ).rejects.toMatchObject({
+      status: 0,
+      code: "network_error",
+    });
   });
 });

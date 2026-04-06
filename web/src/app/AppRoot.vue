@@ -6,7 +6,9 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const workspaceStore = useWorkspaceStore();
 
 onMounted(() => {
-  void workspaceStore.initializeAuth();
+  if (workspaceStore.authSession && !workspaceStore.authUser && !workspaceStore.authBootstrapping) {
+    void workspaceStore.initializeAuth();
+  }
 });
 
 watchEffect(() => {

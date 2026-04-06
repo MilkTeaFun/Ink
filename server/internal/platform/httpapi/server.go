@@ -16,12 +16,14 @@ import (
 	"github.com/ruhuang/ink/server/internal/session"
 )
 
+// Server exposes the HTTP handlers for authentication endpoints.
 type Server struct {
 	auth        auth.AuthService
 	logger      *slog.Logger
 	rateLimiter *LoginRateLimiter
 }
 
+// NewServer wires the auth service, logger, and login rate limiter into an HTTP server.
 func NewServer(authService auth.AuthService, logger *slog.Logger, rateWindow time.Duration, rateMax int) *Server {
 	return &Server{
 		auth:        authService,
@@ -30,6 +32,7 @@ func NewServer(authService auth.AuthService, logger *slog.Logger, rateWindow tim
 	}
 }
 
+// Handler builds the HTTP handler tree for the auth API.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -261,6 +264,7 @@ func requestIP(r *http.Request) string {
 	return strings.TrimSpace(r.RemoteAddr)
 }
 
+// LoginRateLimiter limits repeated login attempts within a fixed time window.
 type LoginRateLimiter struct {
 	mu     sync.Mutex
 	window time.Duration
@@ -268,6 +272,7 @@ type LoginRateLimiter struct {
 	hits   map[string][]time.Time
 }
 
+// NewLoginRateLimiter creates a rate limiter for login attempts.
 func NewLoginRateLimiter(window time.Duration, max int) *LoginRateLimiter {
 	return &LoginRateLimiter{
 		window: window,
@@ -276,6 +281,7 @@ func NewLoginRateLimiter(window time.Duration, max int) *LoginRateLimiter {
 	}
 }
 
+// Allow records a login attempt and reports whether it is still within the limit.
 func (l *LoginRateLimiter) Allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -304,6 +310,7 @@ type contextKey string
 
 const requestIDKey contextKey = "request_id"
 
+// WithRequestID stores the request identifier on a context.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDKey, requestID)
 }

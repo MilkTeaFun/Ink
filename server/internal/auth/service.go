@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	// Authentication domain errors returned by the service.
 	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrInvalidRefreshToken = errors.New("invalid refresh token")
 	ErrInvalidAccessToken  = errors.New("invalid access token")
@@ -24,18 +25,21 @@ var (
 	ErrWeakPassword        = errors.New("weak password")
 )
 
+// LoginInput contains the credentials and client metadata for a login attempt.
 type LoginInput struct {
 	Email    string
 	Password string
 	Meta     ClientMeta
 }
 
+// ClientMeta describes the client that initiated an auth action.
 type ClientMeta struct {
 	ClientType session.ClientType
 	UserAgent  string
 	IPAddress  string
 }
 
+// TokenPair bundles the issued access and refresh tokens.
 type TokenPair struct {
 	AccessToken           string
 	AccessTokenExpiresAt  time.Time
@@ -43,22 +47,26 @@ type TokenPair struct {
 	RefreshTokenExpiresAt time.Time
 }
 
+// AuthResult contains the signed-in user and their active session tokens.
 type AuthResult struct {
 	User  UserDTO
 	Token TokenPair
 }
 
+// UserDTO is the public representation returned to clients.
 type UserDTO struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
 }
 
+// AccessClaims represents the validated claims extracted from an access token.
 type AccessClaims struct {
 	UserID    string
 	SessionID string
 }
 
+// AuthService defines the authentication use cases exposed to transports.
 type AuthService interface {
 	Login(ctx context.Context, input LoginInput) (AuthResult, error)
 	Refresh(ctx context.Context, refreshToken string, meta ClientMeta) (AuthResult, error)
@@ -73,6 +81,7 @@ type AuthService interface {
 	) error
 }
 
+// UserRepository provides user persistence required by the auth service.
 type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*user.User, error)
 	FindUserByID(ctx context.Context, id string) (*user.User, error)
@@ -80,6 +89,7 @@ type UserRepository interface {
 	UpdatePasswordHash(ctx context.Context, userID string, passwordHash string, at time.Time) error
 }
 
+// SessionRepository provides session persistence required by the auth service.
 type SessionRepository interface {
 	Create(ctx context.Context, current session.Session) error
 	FindByRefreshTokenHash(ctx context.Context, hash string) (*session.Session, error)
@@ -90,28 +100,34 @@ type SessionRepository interface {
 	RevokeByUserID(ctx context.Context, userID string, revokedAt time.Time) error
 }
 
+// AuditLogger records authentication audit events.
 type AuditLogger interface {
 	Log(ctx context.Context, event AuditEvent) error
 }
 
+// PasswordHasher hashes and verifies user passwords.
 type PasswordHasher interface {
 	Hash(password string) (string, error)
 	Compare(hash string, password string) error
 }
 
+// AccessTokenManager issues and parses access tokens.
 type AccessTokenManager interface {
 	Issue(user user.User, sessionID string, now time.Time) (token string, expiresAt time.Time, err error)
 	Parse(token string) (*AccessClaims, error)
 }
 
+// Clock provides the current time.
 type Clock interface {
 	Now() time.Time
 }
 
+// IDGenerator creates stable prefixed identifiers.
 type IDGenerator interface {
 	New(prefix string) string
 }
 
+// AuditEvent captures a security-relevant authentication event.
 type AuditEvent struct {
 	UserID     *string
 	EventType  string
@@ -122,6 +138,7 @@ type AuditEvent struct {
 	CreatedAt  time.Time
 }
 
+// Service implements the auth use cases over repository interfaces.
 type Service struct {
 	users      UserRepository
 	sessions   SessionRepository
@@ -133,6 +150,7 @@ type Service struct {
 	refreshTTL time.Duration
 }
 
+// NewService wires the auth service dependencies.
 func NewService(
 	users UserRepository,
 	sessions SessionRepository,
@@ -155,10 +173,12 @@ func NewService(
 	}
 }
 
+// NormalizeEmail trims and lowercases user input before lookup.
 func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// MapUser converts a stored user record into the public DTO.
 func MapUser(entity user.User) UserDTO {
 	return UserDTO{
 		ID:    entity.ID,
@@ -167,6 +187,7 @@ func MapUser(entity user.User) UserDTO {
 	}
 }
 
+// Login verifies credentials and creates a fresh session token pair.
 func (s *Service) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
 	now := s.clock.Now()
 	email := NormalizeEmail(input.Email)
@@ -235,6 +256,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (AuthResult, erro
 	}, nil
 }
 
+// Refresh rotates an existing refresh token into a new session.
 func (s *Service) Refresh(ctx context.Context, refreshToken string, meta ClientMeta) (AuthResult, error) {
 	now := s.clock.Now()
 	current, err := s.sessions.FindByRefreshTokenHash(ctx, HashRefreshToken(refreshToken))
@@ -294,6 +316,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string, meta ClientM
 	}, nil
 }
 
+// Logout revokes the current session family or access-token session when possible.
 func (s *Service) Logout(ctx context.Context, accessToken string, refreshToken string) error {
 	now := s.clock.Now()
 
@@ -325,6 +348,7 @@ func (s *Service) Logout(ctx context.Context, accessToken string, refreshToken s
 	return s.sessions.RevokeByID(ctx, claims.SessionID, now)
 }
 
+// GetCurrentUser resolves the user behind a valid access token.
 func (s *Service) GetCurrentUser(ctx context.Context, accessToken string) (UserDTO, error) {
 	claims, err := s.tokens.Parse(accessToken)
 	if err != nil {
@@ -344,6 +368,7 @@ func (s *Service) GetCurrentUser(ctx context.Context, accessToken string) (UserD
 	return MapUser(*account), nil
 }
 
+// ChangePassword verifies the current password and revokes existing sessions.
 func (s *Service) ChangePassword(
 	ctx context.Context,
 	accessToken string,
@@ -482,6 +507,7 @@ func (s *Service) buildRotatedSession(
 	}, nil
 }
 
+// NewRefreshToken generates a new opaque refresh token.
 func NewRefreshToken() (string, error) {
 	payload := make([]byte, 32)
 	if _, err := rand.Read(payload); err != nil {
@@ -491,6 +517,7 @@ func NewRefreshToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(payload), nil
 }
 
+// HashRefreshToken returns the SHA-256 digest used for refresh-token lookup.
 func HashRefreshToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
@@ -505,9 +532,10 @@ func chooseString(preferred string, fallback string) string {
 }
 
 func isStrongEnoughPassword(currentPassword string, nextPassword string) bool {
-	trimmed := strings.TrimSpace(nextPassword)
+	trimmedCurrent := strings.TrimSpace(currentPassword)
+	trimmedNext := strings.TrimSpace(nextPassword)
 
-	return len(trimmed) >= 8 && trimmed != currentPassword
+	return len(trimmedNext) >= 8 && trimmedNext != trimmedCurrent
 }
 
 func (s *Service) logEvent(ctx context.Context, event AuditEvent) {

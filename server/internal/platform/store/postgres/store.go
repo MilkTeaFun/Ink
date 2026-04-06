@@ -14,14 +14,17 @@ import (
 	"github.com/ruhuang/ink/server/internal/user"
 )
 
+// Store implements the auth repositories on top of PostgreSQL.
 type Store struct {
 	db *pgxpool.Pool
 }
 
+// New creates a PostgreSQL-backed auth store.
 func New(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
+// FindByEmail loads a user by email address.
 func (s *Store) FindByEmail(ctx context.Context, email string) (*user.User, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, email, password_hash, display_name, status, created_at, updated_at, last_login_at
@@ -32,6 +35,7 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (*user.User, erro
 	return scanUser(row)
 }
 
+// FindUserByID loads a user by identifier.
 func (s *Store) FindUserByID(ctx context.Context, id string) (*user.User, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, email, password_hash, display_name, status, created_at, updated_at, last_login_at
@@ -42,11 +46,13 @@ func (s *Store) FindUserByID(ctx context.Context, id string) (*user.User, error)
 	return scanUser(row)
 }
 
+// UpdateLastLoginAt stores the latest successful login time for a user.
 func (s *Store) UpdateLastLoginAt(ctx context.Context, userID string, at time.Time) error {
 	_, err := s.db.Exec(ctx, `update users set last_login_at = $2, updated_at = $2 where id = $1`, userID, at)
 	return err
 }
 
+// UpdatePasswordHash replaces the stored password digest for a user.
 func (s *Store) UpdatePasswordHash(
 	ctx context.Context,
 	userID string,
@@ -61,6 +67,7 @@ func (s *Store) UpdatePasswordHash(
 	return err
 }
 
+// Create inserts a new auth session row.
 func (s *Store) Create(ctx context.Context, current session.Session) error {
 	_, err := s.db.Exec(ctx, `
 		insert into auth_sessions (
@@ -82,6 +89,7 @@ func (s *Store) Create(ctx context.Context, current session.Session) error {
 	return err
 }
 
+// FindByRefreshTokenHash loads a session by refresh-token digest.
 func (s *Store) FindByRefreshTokenHash(ctx context.Context, hash string) (*session.Session, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, family_id, user_id, refresh_token_hash, client_type, user_agent, ip_address,
@@ -93,6 +101,7 @@ func (s *Store) FindByRefreshTokenHash(ctx context.Context, hash string) (*sessi
 	return scanSession(row)
 }
 
+// FindSessionByID loads a session by identifier.
 func (s *Store) FindSessionByID(ctx context.Context, id string) (*session.Session, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, family_id, user_id, refresh_token_hash, client_type, user_agent, ip_address,
@@ -104,6 +113,7 @@ func (s *Store) FindSessionByID(ctx context.Context, id string) (*session.Sessio
 	return scanSession(row)
 }
 
+// Rotate marks the current session as rotated and inserts the replacement session atomically.
 func (s *Store) Rotate(
 	ctx context.Context,
 	current session.Session,
@@ -153,6 +163,7 @@ func (s *Store) Rotate(
 	return tx.Commit(ctx)
 }
 
+// RevokeFamily revokes every session in the same refresh-token family.
 func (s *Store) RevokeFamily(ctx context.Context, familyID string, revokedAt time.Time) error {
 	_, err := s.db.Exec(ctx, `
 		update auth_sessions
@@ -162,6 +173,7 @@ func (s *Store) RevokeFamily(ctx context.Context, familyID string, revokedAt tim
 	return err
 }
 
+// RevokeByID revokes a single session by identifier.
 func (s *Store) RevokeByID(ctx context.Context, sessionID string, revokedAt time.Time) error {
 	_, err := s.db.Exec(ctx, `
 		update auth_sessions
@@ -171,6 +183,7 @@ func (s *Store) RevokeByID(ctx context.Context, sessionID string, revokedAt time
 	return err
 }
 
+// RevokeByUserID revokes all sessions belonging to a user.
 func (s *Store) RevokeByUserID(ctx context.Context, userID string, revokedAt time.Time) error {
 	_, err := s.db.Exec(ctx, `
 		update auth_sessions
@@ -180,6 +193,7 @@ func (s *Store) RevokeByUserID(ctx context.Context, userID string, revokedAt tim
 	return err
 }
 
+// Log persists an authentication audit event.
 func (s *Store) Log(ctx context.Context, event auth.AuditEvent) error {
 	var detail any
 	if event.Detail != nil {

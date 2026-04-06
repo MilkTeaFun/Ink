@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config contains the runtime settings required by the auth service.
 type Config struct {
 	AppName         string
 	Port            int
@@ -21,6 +22,7 @@ type Config struct {
 	RateLimitMax    int
 }
 
+// Load reads application configuration from the current environment.
 func Load() (Config, error) {
 	cfg := Config{
 		AppName:         envString("APP_NAME", "ink-auth"),
@@ -44,6 +46,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// LoadDotEnv loads the first local dotenv file that exists.
 func LoadDotEnv() error {
 	candidates := []string{
 		".env",
@@ -59,6 +62,7 @@ func LoadDotEnv() error {
 	return nil
 }
 
+// ResolveProjectPath resolves a path from either the repo root or server directory.
 func ResolveProjectPath(path string) string {
 	candidates := []string{
 		path,

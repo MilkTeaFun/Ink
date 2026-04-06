@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// RunFile executes the SQL statements contained in a seed file.
 func RunFile(ctx context.Context, db *pgxpool.Pool, path string) error {
 	sqlBytes, err := os.ReadFile(path)
 	if err != nil {

@@ -114,8 +114,17 @@ export function createAppRouter(
     routes,
   });
 
-  router.beforeEach((to) => {
+  router.beforeEach(async (to) => {
     const workspaceStore = useWorkspaceStore(piniaInstance);
+
+    if (
+      workspaceStore.authSession &&
+      !workspaceStore.authUser &&
+      !workspaceStore.authBootstrapping
+    ) {
+      await workspaceStore.initializeAuth();
+    }
+
     const isAuthenticated = workspaceStore.isAuthenticated;
 
     if (to.meta.requiresAuth && !isAuthenticated) {
