@@ -20,10 +20,12 @@ const (
 	devAdminDisplayName = "Administrator"
 )
 
+// DevAdminOptions configures how the development admin account is bootstrapped.
 type DevAdminOptions struct {
 	CredentialsPath string
 }
 
+// DevAdminResult describes whether the development admin user was created.
 type DevAdminResult struct {
 	Created         bool
 	Login           string
@@ -31,6 +33,7 @@ type DevAdminResult struct {
 	CredentialsPath string
 }
 
+// EnsureDevAdmin creates the local development admin account when it is missing.
 func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptions) (DevAdminResult, error) {
 	result := DevAdminResult{
 		Login:           devAdminLogin,

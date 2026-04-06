@@ -12,14 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Runner applies SQL migrations in filename order.
 type Runner struct {
 	db *pgxpool.Pool
 }
 
+// NewRunner constructs a migration runner for the provided database pool.
 func NewRunner(db *pgxpool.Pool) *Runner {
 	return &Runner{db: db}
 }
 
+// Up applies every migration file that has not been recorded yet.
 func (r *Runner) Up(ctx context.Context, dir string) ([]string, error) {
 	if err := r.ensureSchemaMigrationsTable(ctx); err != nil {
 		return nil, err

@@ -10,6 +10,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/user"
 )
 
+// JWTAccessManager issues and parses signed access tokens.
 type JWTAccessManager struct {
 	secret []byte
 	ttl    time.Duration
@@ -22,6 +23,7 @@ type claims struct {
 	jwt.RegisteredClaims
 }
 
+// NewJWTAccessManager builds an access-token manager for a single issuer.
 func NewJWTAccessManager(secret string, issuer string, ttl time.Duration) *JWTAccessManager {
 	return &JWTAccessManager{
 		secret: []byte(secret),
@@ -30,6 +32,7 @@ func NewJWTAccessManager(secret string, issuer string, ttl time.Duration) *JWTAc
 	}
 }
 
+// Issue creates a signed access token for the given account and session.
 func (m *JWTAccessManager) Issue(account user.User, sessionID string, now time.Time) (string, time.Time, error) {
 	expiresAt := now.Add(m.ttl)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims{
@@ -51,6 +54,7 @@ func (m *JWTAccessManager) Issue(account user.User, sessionID string, now time.T
 	return signed, expiresAt, nil
 }
 
+// Parse validates a raw token string and extracts access-token claims.
 func (m *JWTAccessManager) Parse(raw string) (*auth.AccessClaims, error) {
 	parsed, err := jwt.ParseWithClaims(raw, &claims{}, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {

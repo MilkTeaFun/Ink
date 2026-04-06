@@ -321,6 +321,57 @@ func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 	}
 }
 
+func TestChangePasswordRejectsWhitespaceOnlyDifference(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+	users := &fakeUserRepo{
+		byID: map[string]*user.User{
+			"user-1": {
+				ID:           "user-1",
+				Email:        "name@example.com",
+				DisplayName:  "Ink User",
+				Status:       user.StatusActive,
+				PasswordHash: "stored-hash",
+			},
+		},
+	}
+	sessions := newFakeSessionRepo()
+	sessions.create(session.Session{
+		ID:               "ss_old",
+		FamilyID:         "sf_1",
+		UserID:           "user-1",
+		RefreshTokenHash: HashRefreshToken("refresh-1"),
+		ClientType:       session.ClientTypeWeb,
+		ExpiresAt:        now.Add(time.Hour),
+		CreatedAt:        now,
+		LastUsedAt:       now,
+	})
+
+	service := NewService(
+		users,
+		sessions,
+		&fakeAuditLogger{},
+		fakeHasher{
+			expectedHash:     "stored-hash",
+			expectedPassword: "demo-password",
+		},
+		fakeAccessTokenManager{},
+		fakeClock{now: now},
+		fakeIDGenerator{},
+		24*time.Hour,
+	)
+
+	err := service.ChangePassword(
+		context.Background(),
+		"access-token",
+		"demo-password",
+		" demo-password ",
+		ClientMeta{ClientType: session.ClientTypeWeb},
+	)
+	if !errors.Is(err, ErrWeakPassword) {
+		t.Fatalf("expected weak password error, got %v", err)
+	}
+}
+
 type fakeUserRepo struct {
 	byEmail             map[string]*user.User
 	byID                map[string]*user.User
