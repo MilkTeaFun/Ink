@@ -21,16 +21,23 @@ describe("workspace store", () => {
   });
 
   it("exposes stable defaults and derived summaries", () => {
-    const store = useWorkspaceStore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 7, 12, 0, 0));
 
-    expect(store.activeDeviceLabel).toBe("书桌咕咕机");
-    expect(store.activeModelLabel).toBe("Ink AI");
-    expect(store.todayPrintCount).toBe(2);
-    expect(store.welcomeLabel).toBe("整理内容，准备打印");
-    expect(store.isConfigured).toBe(true);
-    expect(store.loginProtectionEnabled).toBe(false);
-    expect(store.pendingConfirmationCount).toBe(1);
-    expect(store.enabledSchedulesCount).toBe(2);
+    try {
+      const store = useWorkspaceStore();
+
+      expect(store.activeDeviceLabel).toBe("书桌咕咕机");
+      expect(store.activeModelLabel).toBe("Ink AI");
+      expect(store.todayPrintCount).toBe(2);
+      expect(store.welcomeLabel).toBe("整理内容，准备打印");
+      expect(store.isConfigured).toBe(true);
+      expect(store.loginProtectionEnabled).toBe(false);
+      expect(store.pendingConfirmationCount).toBe(1);
+      expect(store.enabledSchedulesCount).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("updates configuration from settings actions instead of local hard-coded values", () => {
