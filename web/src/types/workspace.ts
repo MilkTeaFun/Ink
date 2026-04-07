@@ -82,7 +82,6 @@ export interface ServiceBinding {
 
 export interface PersistedWorkspaceState {
   authUser: User | null;
-  authSession: AuthSession | null;
   devices: Device[];
   conversations: Conversation[];
   activeConversationId: string;

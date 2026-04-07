@@ -124,7 +124,7 @@ type Clock interface {
 
 // IDGenerator creates stable prefixed identifiers.
 type IDGenerator interface {
-	New(prefix string) string
+	New(prefix string) (string, error)
 }
 
 // AuditEvent captures a security-relevant authentication event.
@@ -432,8 +432,16 @@ func (s *Service) newSessionTokens(
 	meta ClientMeta,
 	now time.Time,
 ) (TokenPair, string, error) {
-	familyID := s.ids.New("sf")
-	sessionID := s.ids.New("ss")
+	familyID, err := s.ids.New("sf")
+	if err != nil {
+		return TokenPair{}, "", err
+	}
+
+	sessionID, err := s.ids.New("ss")
+	if err != nil {
+		return TokenPair{}, "", err
+	}
+
 	refreshToken, err := NewRefreshToken()
 	if err != nil {
 		return TokenPair{}, "", err
@@ -476,13 +484,18 @@ func (s *Service) buildRotatedSession(
 	meta ClientMeta,
 	now time.Time,
 ) (session.Session, TokenPair, error) {
+	sessionID, err := s.ids.New("ss")
+	if err != nil {
+		return session.Session{}, TokenPair{}, err
+	}
+
 	refreshToken, err := NewRefreshToken()
 	if err != nil {
 		return session.Session{}, TokenPair{}, err
 	}
 
 	nextSession := session.Session{
-		ID:               s.ids.New("ss"),
+		ID:               sessionID,
 		FamilyID:         current.FamilyID,
 		UserID:           current.UserID,
 		RefreshTokenHash: HashRefreshToken(refreshToken),

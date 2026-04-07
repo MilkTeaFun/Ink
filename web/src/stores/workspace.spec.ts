@@ -16,6 +16,8 @@ vi.mock("@/services/auth", () => ({
 describe("workspace store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it("exposes stable defaults and derived summaries", () => {
@@ -197,5 +199,26 @@ describe("workspace store", () => {
     await expect(store.changePassword("demo-password", "next-password")).resolves.toBe(true);
     expect(store.isAuthenticated).toBe(false);
     expect(store.flashMessage).toBe("密码已更新，请重新登录。");
+  });
+
+  it("keeps auth tokens out of the workspace snapshot and stores them only for the tab session", async () => {
+    const store = useWorkspaceStore();
+
+    store.authUser = {
+      id: "user-1",
+      email: "name@example.com",
+      name: "Ink User",
+    };
+    store.authSession = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+
+    await Promise.resolve();
+
+    expect(window.sessionStorage.getItem("ink.auth.session.v1")).toContain("refresh-token");
+    expect(window.localStorage.getItem("ink.workspace.v1")).not.toContain("refresh-token");
+    expect(window.localStorage.getItem("ink.workspace.v1")).not.toContain("access-token");
   });
 });

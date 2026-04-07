@@ -48,10 +48,15 @@ export class AuthApiError extends Error {
 }
 
 function buildSession(response: AuthResponse): AuthSession {
+  const expiresInMs = Number(response.expiresIn) * 1000;
+  if (!Number.isFinite(expiresInMs) || expiresInMs <= 0) {
+    throw new AuthApiError(500, "invalid_session_payload", "登录会话无效，请重新登录。");
+  }
+
   return {
     accessToken: response.accessToken,
     refreshToken: response.refreshToken,
-    accessTokenExpiresAt: new Date(Date.now() + response.expiresIn * 1000).toISOString(),
+    accessTokenExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
   };
 }
 

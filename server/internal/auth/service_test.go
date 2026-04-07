@@ -556,6 +556,6 @@ func (f fakeClock) Now() time.Time {
 
 type fakeIDGenerator struct{}
 
-func (fakeIDGenerator) New(prefix string) string {
-	return prefix + "_next"
+func (fakeIDGenerator) New(prefix string) (string, error) {
+	return prefix + "_next", nil
 }

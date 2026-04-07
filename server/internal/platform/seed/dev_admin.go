@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/platform/password"
 )
@@ -40,7 +41,15 @@ func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptio
 		CredentialsPath: options.CredentialsPath,
 	}
 
-	exists, err := devAdminExists(ctx, db)
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return DevAdminResult{}, fmt.Errorf("begin dev admin transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	exists, err := devAdminExists(ctx, tx)
 	if err != nil {
 		return DevAdminResult{}, err
 	}
@@ -59,7 +68,7 @@ func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptio
 		return DevAdminResult{}, fmt.Errorf("hash initial password: %w", err)
 	}
 
-	if _, err := db.Exec(
+	if _, err := tx.Exec(
 		ctx,
 		`insert into users (id, email, password_hash, display_name, status, created_at, updated_at)
 		 values ($1, $2, $3, $4, 'active', $5, $5)`,
@@ -76,12 +85,20 @@ func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptio
 		return DevAdminResult{}, err
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return DevAdminResult{}, fmt.Errorf("commit dev admin transaction: %w", err)
+	}
+
 	result.Created = true
 	result.Password = initialPassword
 	return result, nil
 }
 
-func devAdminExists(ctx context.Context, db *pgxpool.Pool) (bool, error) {
+type queryRower interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func devAdminExists(ctx context.Context, db queryRower) (bool, error) {
 	var exists bool
 	if err := db.QueryRow(
 		ctx,

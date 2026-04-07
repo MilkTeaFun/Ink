@@ -19,6 +19,12 @@ type Store struct {
 	db *pgxpool.Pool
 }
 
+var (
+	_ auth.UserRepository    = (*Store)(nil)
+	_ auth.SessionRepository = (*Store)(nil)
+	_ auth.AuditLogger       = (*Store)(nil)
+)
+
 // New creates a PostgreSQL-backed auth store.
 func New(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
@@ -92,7 +98,8 @@ func (s *Store) Create(ctx context.Context, current session.Session) error {
 // FindByRefreshTokenHash loads a session by refresh-token digest.
 func (s *Store) FindByRefreshTokenHash(ctx context.Context, hash string) (*session.Session, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, family_id, user_id, refresh_token_hash, client_type, user_agent, ip_address,
+		select id, family_id, user_id, refresh_token_hash, client_type,
+			coalesce(user_agent, ''), coalesce(ip_address, ''),
 			expires_at, rotated_at, revoked_at, created_at, last_used_at
 		from auth_sessions
 		where refresh_token_hash = $1
@@ -104,7 +111,8 @@ func (s *Store) FindByRefreshTokenHash(ctx context.Context, hash string) (*sessi
 // FindSessionByID loads a session by identifier.
 func (s *Store) FindSessionByID(ctx context.Context, id string) (*session.Session, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, family_id, user_id, refresh_token_hash, client_type, user_agent, ip_address,
+		select id, family_id, user_id, refresh_token_hash, client_type,
+			coalesce(user_agent, ''), coalesce(ip_address, ''),
 			expires_at, rotated_at, revoked_at, created_at, last_used_at
 		from auth_sessions
 		where id = $1

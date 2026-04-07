@@ -255,6 +255,8 @@
 @media (prefers-reduced-motion: reduce) {
   .page-swap-enter-active,
   .page-swap-leave-active,
+  .dialog-fade-enter-active,
+  .dialog-fade-leave-active,
   .ui-list-row,
   .ui-timeline-item,
   .ui-toggle,
@@ -265,5 +267,11 @@
   .ui-btn-secondary {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+
+  .dialog-fade-enter-from,
+  .dialog-fade-leave-to {
+    opacity: 1;
+    transform: none;
   }
 }

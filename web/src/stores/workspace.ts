@@ -33,6 +33,7 @@ import {
 } from "@/utils/workspace";
 
 const STORAGE_KEY = "ink.workspace.v1";
+const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
 
 function getNow() {
   return new Date().toISOString();
@@ -231,7 +232,6 @@ function createSeedState(): PersistedWorkspaceState {
 
   return {
     authUser: null,
-    authSession: null,
     devices,
     conversations: conversationList,
     activeConversationId: "conv-today",
@@ -264,6 +264,50 @@ function readPersistedWorkspaceState() {
   }
 }
 
+function isPersistedAuthSession(value: unknown): value is AuthSession {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.accessToken === "string" &&
+    typeof candidate.refreshToken === "string" &&
+    typeof candidate.accessTokenExpiresAt === "string"
+  );
+}
+
+function readPersistedAuthSession() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return isPersistedAuthSession(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedAuthSession(session: AuthSession | null, persist: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!persist || !session) {
+    window.sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
 function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
   return printJobs.reduce<PrintJob[]>((sorted, job) => {
     const insertIndex = sorted.findIndex(
@@ -280,9 +324,10 @@ function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
 
 export const useWorkspaceStore = defineStore("workspace", () => {
   const persisted = readPersistedWorkspaceState();
+  const persistedAuthSession = readPersistedAuthSession();
 
-  const authUser = ref<User | null>(persisted.authUser);
-  const authSession = ref<AuthSession | null>(persisted.authSession);
+  const authUser = ref<User | null>(persistedAuthSession ? persisted.authUser : null);
+  const authSession = ref<AuthSession | null>(persistedAuthSession);
   const authLoading = ref(false);
   const authError = ref("");
   const authBootstrapping = ref(false);
@@ -395,8 +440,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   ]);
 
   const persistableState = computed<PersistedWorkspaceState>(() => ({
-    authUser: loginProtectionEnabled.value ? null : authUser.value,
-    authSession: loginProtectionEnabled.value ? null : authSession.value,
+    authUser: loginProtectionEnabled.value || !authSession.value ? null : authUser.value,
     devices: devices.value,
     conversations: conversations.value,
     activeConversationId: activeConversationId.value,
@@ -420,6 +464,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       }
 
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    },
+    { deep: true, immediate: true },
+  );
+
+  watch(
+    [authSession, loginProtectionEnabled],
+    ([session, loginProtection]) => {
+      writePersistedAuthSession(session, !loginProtection);
     },
     { deep: true, immediate: true },
   );
