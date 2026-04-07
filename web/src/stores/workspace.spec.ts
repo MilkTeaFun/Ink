@@ -1,15 +1,22 @@
 import { createPinia, setActivePinia } from "pinia";
 import { vi } from "vitest";
 
+import type {
+  changePasswordWithApi,
+  fetchCurrentUser,
+  loginWithApi,
+  logoutWithApi,
+  refreshAuthSession,
+} from "@/services/auth";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PrintJob } from "@/types/workspace";
 
 vi.mock("@/services/auth", () => ({
-  changePasswordWithApi: vi.fn(async () => undefined),
-  fetchCurrentUser: vi.fn(),
-  loginWithApi: vi.fn(),
-  logoutWithApi: vi.fn(async () => undefined),
-  refreshAuthSession: vi.fn(),
+  changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
+  fetchCurrentUser: vi.fn<typeof fetchCurrentUser>(),
+  loginWithApi: vi.fn<typeof loginWithApi>(),
+  logoutWithApi: vi.fn<typeof logoutWithApi>(async () => undefined),
+  refreshAuthSession: vi.fn<typeof refreshAuthSession>(),
   AuthApiError: class AuthApiError extends Error {},
 }));
 

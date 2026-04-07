@@ -3,6 +3,13 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, vi } from "vitest";
 
 import { createTestRouter } from "@/router";
+import type {
+  changePasswordWithApi,
+  fetchCurrentUser,
+  loginWithApi,
+  logoutWithApi,
+  refreshAuthSession,
+} from "@/services/auth";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PrintJob } from "@/types/workspace";
 import ConversationsView from "@/views/ConversationsView.vue";
@@ -12,9 +19,9 @@ import SettingsView from "@/views/SettingsView.vue";
 import StatusView from "@/views/StatusView.vue";
 
 vi.mock("@/services/auth", () => ({
-  changePasswordWithApi: vi.fn(async () => undefined),
-  fetchCurrentUser: vi.fn(),
-  loginWithApi: vi.fn(async ({ email }: { email: string }) => ({
+  changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
+  fetchCurrentUser: vi.fn<typeof fetchCurrentUser>(),
+  loginWithApi: vi.fn<typeof loginWithApi>(async ({ email }: { email: string }) => ({
     user: {
       id: "user-1",
       email,
@@ -26,8 +33,8 @@ vi.mock("@/services/auth", () => ({
       accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
     },
   })),
-  logoutWithApi: vi.fn(async () => undefined),
-  refreshAuthSession: vi.fn(),
+  logoutWithApi: vi.fn<typeof logoutWithApi>(async () => undefined),
+  refreshAuthSession: vi.fn<typeof refreshAuthSession>(),
   AuthApiError: class AuthApiError extends Error {},
 }));
 
