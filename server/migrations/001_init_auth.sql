@@ -1,6 +1,6 @@
 create table if not exists users (
   id text primary key,
-  email text not null,
+  email text not null check (email = lower(email)),
   password_hash text not null,
   display_name text not null,
   status text not null check (status in ('active', 'disabled')),
@@ -9,7 +9,7 @@ create table if not exists users (
   last_login_at timestamptz null
 );
 
-create unique index if not exists users_email_unique on users (email);
+create unique index if not exists users_email_unique on users (lower(email));
 
 create table if not exists auth_sessions (
   id text primary key,

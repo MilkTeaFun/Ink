@@ -3,6 +3,7 @@ package token
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,12 +25,21 @@ type claims struct {
 }
 
 // NewJWTAccessManager builds an access-token manager for a single issuer.
-func NewJWTAccessManager(secret string, issuer string, ttl time.Duration) *JWTAccessManager {
+func NewJWTAccessManager(secret string, issuer string, ttl time.Duration) (*JWTAccessManager, error) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return nil, errors.New("jwt access secret must not be empty")
+	}
+
+	if ttl <= 0 {
+		return nil, errors.New("jwt access ttl must be positive")
+	}
+
 	return &JWTAccessManager{
 		secret: []byte(secret),
 		ttl:    ttl,
 		issuer: issuer,
-	}
+	}, nil
 }
 
 // Issue creates a signed access token for the given account and session.

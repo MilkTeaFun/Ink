@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/platform/config"
@@ -28,16 +29,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
-	db, err := pgxpool.New(ctx, databaseURL)
+	connectCtx, cancelConnect := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelConnect()
+
+	db, err := pgxpool.New(connectCtx, databaseURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "connect database: %v\n", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
+	if err := db.Ping(connectCtx); err != nil {
+		fmt.Fprintf(os.Stderr, "ping database: %v\n", err)
+		os.Exit(1)
+	}
+
 	serverDir := filepath.Dir(config.ResolveProjectPath(".env.example"))
-	result, err := seed.EnsureDevAdmin(ctx, db, seed.DevAdminOptions{
+	seedCtx, cancelSeed := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelSeed()
+
+	result, err := seed.EnsureDevAdmin(seedCtx, db, seed.DevAdminOptions{
 		CredentialsPath: filepath.Join(serverDir, ".dev-admin-password"),
 	})
 	if err != nil {

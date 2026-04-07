@@ -45,12 +45,17 @@ func main() {
 	}
 
 	store := postgres.New(db)
+	tokenManager, err := token.NewJWTAccessManager(cfg.JWTSecret, cfg.AppName, cfg.AccessTokenTTL)
+	if err != nil {
+		panic(err)
+	}
+
 	service := auth.NewService(
 		store,
 		store,
 		store,
 		password.BcryptHasher{},
-		token.NewJWTAccessManager(cfg.JWTSecret, cfg.AppName, cfg.AccessTokenTTL),
+		tokenManager,
 		clock.SystemClock{},
 		idgen.Generator{},
 		cfg.RefreshTokenTTL,

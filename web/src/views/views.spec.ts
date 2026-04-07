@@ -33,6 +33,8 @@ vi.mock("@/services/auth", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.stubGlobal(
     "confirm",
     vi.fn(() => true),

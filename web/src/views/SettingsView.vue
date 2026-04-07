@@ -34,25 +34,25 @@ async function handleLogout() {
 
 async function handlePasswordSubmit() {
   passwordFormError.value = "";
-  const trimmedNewPassword = newPassword.value.trim();
-  const trimmedConfirmPassword = confirmPassword.value.trim();
+  const nextPassword = newPassword.value;
+  const confirmNextPassword = confirmPassword.value;
 
   if (!currentPassword.value.trim()) {
     passwordFormError.value = "请输入当前密码。";
     return;
   }
 
-  if (trimmedNewPassword.length < 8) {
+  if (nextPassword.length < 8) {
     passwordFormError.value = "新密码至少需要 8 位。";
     return;
   }
 
-  if (trimmedNewPassword !== trimmedConfirmPassword) {
+  if (nextPassword !== confirmNextPassword) {
     passwordFormError.value = "两次输入的新密码不一致。";
     return;
   }
 
-  const success = await workspaceStore.changePassword(currentPassword.value, trimmedNewPassword);
+  const success = await workspaceStore.changePassword(currentPassword.value, nextPassword);
   if (!success) {
     passwordFormError.value = workspaceStore.authError;
     return;

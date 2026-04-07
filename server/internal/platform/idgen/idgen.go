@@ -3,6 +3,7 @@ package idgen
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strings"
 )
 
@@ -10,10 +11,10 @@ import (
 type Generator struct{}
 
 // New returns a prefix-scoped identifier suitable for database records.
-func (Generator) New(prefix string) string {
+func (Generator) New(prefix string) (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
-		return prefix + "_fallback"
+		return "", fmt.Errorf("generate id entropy: %w", err)
 	}
 
 	var builder strings.Builder
@@ -21,5 +22,5 @@ func (Generator) New(prefix string) string {
 	builder.WriteString(prefix)
 	builder.WriteByte('_')
 	builder.WriteString(hex.EncodeToString(buf))
-	return builder.String()
+	return builder.String(), nil
 }

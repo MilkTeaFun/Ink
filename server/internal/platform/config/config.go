@@ -24,15 +24,40 @@ type Config struct {
 
 // Load reads application configuration from the current environment.
 func Load() (Config, error) {
+	port, err := envInt("PORT", 8080)
+	if err != nil {
+		return Config{}, err
+	}
+
+	accessTokenTTL, err := envDuration("ACCESS_TOKEN_TTL", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
+	refreshTokenTTL, err := envDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
+	rateLimitWindow, err := envDuration("LOGIN_RATE_LIMIT_WINDOW", 5*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
+	rateLimitMax, err := envInt("LOGIN_RATE_LIMIT_MAX", 10)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		AppName:         envString("APP_NAME", "ink-auth"),
-		Port:            envInt("PORT", 8080),
+		Port:            port,
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		JWTSecret:       os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:  envDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL: envDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
-		RateLimitWindow: envDuration("LOGIN_RATE_LIMIT_WINDOW", 5*time.Minute),
-		RateLimitMax:    envInt("LOGIN_RATE_LIMIT_MAX", 10),
+		AccessTokenTTL:  accessTokenTTL,
+		RefreshTokenTTL: refreshTokenTTL,
+		RateLimitWindow: rateLimitWindow,
+		RateLimitMax:    rateLimitMax,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -41,6 +66,26 @@ func Load() (Config, error) {
 
 	if cfg.JWTSecret == "" {
 		return Config{}, fmt.Errorf("JWT_SECRET is required")
+	}
+
+	if cfg.Port <= 0 {
+		return Config{}, fmt.Errorf("PORT must be positive")
+	}
+
+	if cfg.AccessTokenTTL <= 0 {
+		return Config{}, fmt.Errorf("ACCESS_TOKEN_TTL must be positive")
+	}
+
+	if cfg.RefreshTokenTTL <= 0 {
+		return Config{}, fmt.Errorf("REFRESH_TOKEN_TTL must be positive")
+	}
+
+	if cfg.RateLimitWindow <= 0 {
+		return Config{}, fmt.Errorf("LOGIN_RATE_LIMIT_WINDOW must be positive")
+	}
+
+	if cfg.RateLimitMax <= 0 {
+		return Config{}, fmt.Errorf("LOGIN_RATE_LIMIT_MAX must be positive")
 	}
 
 	return cfg, nil
@@ -86,30 +131,30 @@ func envString(key string, fallback string) string {
 	return fallback
 }
 
-func envInt(key string, fallback int) int {
+func envInt(key string, fallback int) (int, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		return fallback
+		return fallback, nil
 	}
 
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
-		return fallback
+		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
 	}
 
-	return parsed
+	return parsed, nil
 }
 
-func envDuration(key string, fallback time.Duration) time.Duration {
+func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		return fallback
+		return fallback, nil
 	}
 
 	parsed, err := time.ParseDuration(value)
 	if err != nil {
-		return fallback
+		return 0, fmt.Errorf("%s must be a valid duration: %w", key, err)
 	}
 
-	return parsed
+	return parsed, nil
 }
