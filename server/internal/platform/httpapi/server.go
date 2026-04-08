@@ -14,19 +14,28 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/session"
+	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 // Server exposes the HTTP handlers for authentication endpoints.
 type Server struct {
 	auth        auth.AuthService
+	workspace   workspace.WorkspaceService
 	logger      *slog.Logger
 	rateLimiter *LoginRateLimiter
 }
 
 // NewServer wires the auth service, logger, and login rate limiter into an HTTP server.
-func NewServer(authService auth.AuthService, logger *slog.Logger, rateWindow time.Duration, rateMax int) *Server {
+func NewServer(
+	authService auth.AuthService,
+	workspaceService workspace.WorkspaceService,
+	logger *slog.Logger,
+	rateWindow time.Duration,
+	rateMax int,
+) *Server {
 	return &Server{
 		auth:        authService,
+		workspace:   workspaceService,
 		logger:      logger,
 		rateLimiter: NewLoginRateLimiter(rateWindow, rateMax),
 	}
@@ -41,6 +50,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.wrap(s.handleLogout))
 	mux.HandleFunc("POST /api/v1/auth/change-password", s.wrap(s.handleChangePassword))
 	mux.HandleFunc("GET /api/v1/auth/me", s.wrap(s.handleMe))
+	mux.HandleFunc("POST /api/v1/admin/users", s.wrap(s.handleCreateUser))
+	mux.HandleFunc("GET /api/v1/workspace", s.wrap(s.handleGetWorkspace))
+	mux.HandleFunc("PUT /api/v1/workspace", s.wrap(s.handleSaveWorkspace))
 	return mux
 }
 
@@ -67,6 +79,12 @@ type logoutRequest struct {
 type changePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
+}
+
+type createUserRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
 }
 
 type errorEnvelope struct {
@@ -197,6 +215,70 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request, re
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	created, err := s.auth.CreateUser(r.Context(), accessToken, auth.CreateUserInput{
+		Email:    payload.Email,
+		Name:     payload.Name,
+		Password: payload.Password,
+	})
+	if err != nil {
+		s.writeAuthError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]auth.UserDTO{"user": created})
+}
+
+func (s *Server) handleGetWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	state, err := s.workspace.GetState(r.Context(), accessToken)
+	if err != nil {
+		s.writeAuthError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var state workspace.State
+	if err := json.NewDecoder(r.Body).Decode(&state); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	saved, err := s.workspace.SaveState(r.Context(), accessToken, state)
+	if err != nil {
+		s.writeAuthError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, saved)
+}
+
 func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
@@ -211,8 +293,14 @@ func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err err
 			requestID,
 			http.StatusBadRequest,
 			"invalid_password",
-			"新密码至少 8 位，且不能与当前密码相同。",
+			"密码至少 8 位。",
 		)
+	case errors.Is(err, auth.ErrInvalidProfile):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_profile", "请输入有效的账号信息。")
+	case errors.Is(err, auth.ErrEmailTaken):
+		writeError(w, requestID, http.StatusConflict, "email_taken", "该账号已存在。")
+	case errors.Is(err, auth.ErrForbidden):
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
 	case errors.Is(err, auth.ErrUserDisabled):
 		writeError(w, requestID, http.StatusLocked, "user_disabled", "账号已被禁用。")
 	default:

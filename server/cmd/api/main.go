@@ -19,6 +19,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/platform/password"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
 	"github.com/ruhuang/ink/server/internal/platform/token"
+	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 func main() {
@@ -60,10 +61,11 @@ func main() {
 		idgen.Generator{},
 		cfg.RefreshTokenTTL,
 	)
+	workspaceService := workspace.NewService(store, service, clock.SystemClock{})
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           httpapi.NewServer(service, logger, cfg.RateLimitWindow, cfg.RateLimitMax).Handler(),
+		Handler:           httpapi.NewServer(service, workspaceService, logger, cfg.RateLimitWindow, cfg.RateLimitMax).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

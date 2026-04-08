@@ -23,6 +23,9 @@ var (
 	ErrUserDisabled        = errors.New("user disabled")
 	ErrCurrentPassword     = errors.New("current password mismatch")
 	ErrWeakPassword        = errors.New("weak password")
+	ErrForbidden           = errors.New("forbidden")
+	ErrEmailTaken          = errors.New("email already exists")
+	ErrInvalidProfile      = errors.New("invalid profile")
 )
 
 // LoginInput contains the credentials and client metadata for a login attempt.
@@ -30,6 +33,13 @@ type LoginInput struct {
 	Email    string
 	Password string
 	Meta     ClientMeta
+}
+
+// CreateUserInput contains the account profile to create.
+type CreateUserInput struct {
+	Email    string
+	Password string
+	Name     string
 }
 
 // ClientMeta describes the client that initiated an auth action.
@@ -58,6 +68,7 @@ type UserDTO struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
+	Role  string `json:"role"`
 }
 
 // AccessClaims represents the validated claims extracted from an access token.
@@ -79,12 +90,14 @@ type AuthService interface {
 		newPassword string,
 		meta ClientMeta,
 	) error
+	CreateUser(ctx context.Context, accessToken string, input CreateUserInput) (UserDTO, error)
 }
 
 // UserRepository provides user persistence required by the auth service.
 type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*user.User, error)
 	FindUserByID(ctx context.Context, id string) (*user.User, error)
+	CreateUser(ctx context.Context, current user.User) error
 	UpdateLastLoginAt(ctx context.Context, userID string, at time.Time) error
 	UpdatePasswordHash(ctx context.Context, userID string, passwordHash string, at time.Time) error
 }
@@ -180,10 +193,16 @@ func NormalizeEmail(email string) string {
 
 // MapUser converts a stored user record into the public DTO.
 func MapUser(entity user.User) UserDTO {
+	role := entity.Role
+	if role == "" {
+		role = user.RoleMember
+	}
+
 	return UserDTO{
 		ID:    entity.ID,
 		Email: entity.Email,
 		Name:  entity.DisplayName,
+		Role:  string(role),
 	}
 }
 
@@ -426,6 +445,70 @@ func (s *Service) ChangePassword(
 	return nil
 }
 
+// CreateUser creates a new regular account when the current user is an administrator.
+func (s *Service) CreateUser(ctx context.Context, accessToken string, input CreateUserInput) (UserDTO, error) {
+	claims, err := s.tokens.Parse(accessToken)
+	if err != nil {
+		return UserDTO{}, ErrInvalidAccessToken
+	}
+
+	currentSession, err := s.sessions.FindSessionByID(ctx, claims.SessionID)
+	if err != nil || currentSession == nil || currentSession.RevokedAt != nil {
+		return UserDTO{}, ErrInvalidAccessToken
+	}
+
+	account, err := s.users.FindUserByID(ctx, claims.UserID)
+	if err != nil || account == nil || account.Status != user.StatusActive {
+		return UserDTO{}, ErrInvalidAccessToken
+	}
+	if account.Role != user.RoleAdmin {
+		return UserDTO{}, ErrForbidden
+	}
+
+	email := NormalizeEmail(input.Email)
+	if email == "" {
+		return UserDTO{}, ErrInvalidProfile
+	}
+	if !isStrongEnoughNewPassword(input.Password) {
+		return UserDTO{}, ErrWeakPassword
+	}
+
+	existing, err := s.users.FindByEmail(ctx, email)
+	if err != nil {
+		return UserDTO{}, err
+	}
+	if existing != nil {
+		return UserDTO{}, ErrEmailTaken
+	}
+
+	passwordHash, err := s.hasher.Hash(input.Password)
+	if err != nil {
+		return UserDTO{}, err
+	}
+
+	userID, err := s.ids.New("user")
+	if err != nil {
+		return UserDTO{}, err
+	}
+
+	now := s.clock.Now()
+	created := user.User{
+		ID:           userID,
+		Email:        email,
+		DisplayName:  chooseString(strings.TrimSpace(input.Name), email),
+		Role:         user.RoleMember,
+		Status:       user.StatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		PasswordHash: passwordHash,
+	}
+	if err := s.users.CreateUser(ctx, created); err != nil {
+		return UserDTO{}, err
+	}
+
+	return MapUser(created), nil
+}
+
 func (s *Service) newSessionTokens(
 	ctx context.Context,
 	account user.User,
@@ -549,6 +632,10 @@ func isStrongEnoughPassword(currentPassword string, nextPassword string) bool {
 	trimmedNext := strings.TrimSpace(nextPassword)
 
 	return len(trimmedNext) >= 8 && trimmedNext != trimmedCurrent
+}
+
+func isStrongEnoughNewPassword(password string) bool {
+	return len(strings.TrimSpace(password)) >= 8
 }
 
 func (s *Service) logEvent(ctx context.Context, event AuditEvent) {
