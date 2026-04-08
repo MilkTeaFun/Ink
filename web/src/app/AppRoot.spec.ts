@@ -15,6 +15,7 @@ async function mountAt(path: string, authenticated = true) {
       id: "user-1",
       email: "name@example.com",
       name: "Ink User",
+      role: "member",
     };
     store.authSession = {
       accessToken: "access-token",
@@ -51,10 +52,20 @@ describe("AppRoot", () => {
     expect(wrapper.text()).toContain(heading);
   });
 
-  it("renders the login view outside the workspace shell for anonymous visitors", async () => {
+  it("renders the workspace shell for anonymous visitors on the public status page", async () => {
     const { wrapper, router } = await mountAt("/status", false);
 
-    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(wrapper.find("header nav").exists()).toBe(true);
+    expect(wrapper.find("nav.fixed").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("登录账号");
+    expect(wrapper.text()).not.toContain("退出");
+  });
+
+  it("renders the login view outside the workspace shell for anonymous settings access", async () => {
+    const { wrapper, router } = await mountAt("/settings", false);
+
+    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/settings");
     expect(wrapper.text()).toContain("登录账号");
     expect(wrapper.find("header nav").exists()).toBe(false);
     expect(wrapper.find("nav.fixed").exists()).toBe(false);
