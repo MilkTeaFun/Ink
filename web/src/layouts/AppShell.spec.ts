@@ -5,20 +5,24 @@ import AppShell from "@/layouts/AppShell.vue";
 import { createTestRouter, navigationItems } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
 
-async function mountShellAt(path: string) {
+async function mountShellAt(path: string, authenticated = true) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useWorkspaceStore();
-  store.authUser = {
-    id: "user-1",
-    email: "name@example.com",
-    name: "Ink User",
-  };
-  store.authSession = {
-    accessToken: "access-token",
-    refreshToken: "refresh-token",
-    accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-  };
+
+  if (authenticated) {
+    store.authUser = {
+      id: "user-1",
+      email: "name@example.com",
+      name: "Ink User",
+      role: "member",
+    };
+    store.authSession = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+  }
 
   const router = createTestRouter(pinia);
   router.push(path);
@@ -58,7 +62,14 @@ describe("AppShell", () => {
     expect(wrapper.text()).toContain("退出");
   });
 
-  it("logs out and returns to login when the header logout action is used", async () => {
+  it("hides account controls for anonymous visitors", async () => {
+    const { wrapper } = await mountShellAt("/status", false);
+
+    expect(wrapper.text()).not.toContain("name@example.com");
+    expect(wrapper.text()).not.toContain("退出");
+  });
+
+  it("logs out and returns to status when the header logout action is used", async () => {
     const { wrapper, router, store } = await mountShellAt("/prints");
     const logoutButton = wrapper.findAll("button").find((button) => button.text() === "退出");
 
@@ -68,6 +79,6 @@ describe("AppShell", () => {
     await flushPromises();
 
     expect(store.isAuthenticated).toBe(false);
-    expect(router.currentRoute.value.fullPath).toBe("/login");
+    expect(router.currentRoute.value.fullPath).toBe("/status");
   });
 });

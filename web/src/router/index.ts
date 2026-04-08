@@ -7,6 +7,7 @@ import {
 import type { RouterHistory } from "vue-router";
 
 import AppShell from "@/layouts/AppShell.vue";
+import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
 import { pinia } from "@/stores/pinia";
 import { useWorkspaceStore } from "@/stores/workspace";
 import ConversationsView from "@/views/ConversationsView.vue";
@@ -35,7 +36,6 @@ const shellChildren: RouteRecordRaw[] = [
       title: "状态",
       description: "查看设备绑定情况、定时任务和最近的打印记录。",
       navHint: "设备与任务",
-      requiresAuth: true,
     },
   },
   {
@@ -47,7 +47,6 @@ const shellChildren: RouteRecordRaw[] = [
       title: "内容对话",
       description: "像聊天一样整理内容，确认满意后，再把它发去打印。",
       navHint: "整理内容",
-      requiresAuth: true,
     },
   },
   {
@@ -59,7 +58,6 @@ const shellChildren: RouteRecordRaw[] = [
       title: "打印",
       description: "管理待确认内容、定时任务和打印记录，把打印流程集中在一起。",
       navHint: "打印流程",
-      requiresAuth: true,
     },
   },
   {
@@ -137,8 +135,7 @@ export function createAppRouter(
     }
 
     if (to.path === "/login" && isAuthenticated) {
-      const nextPath = typeof to.query.redirect === "string" ? to.query.redirect : "/status";
-      return nextPath === "/login" ? "/status" : nextPath;
+      return resolveLoginRedirect(router, to.query.redirect ?? DEFAULT_LOGIN_REDIRECT);
     }
 
     return true;

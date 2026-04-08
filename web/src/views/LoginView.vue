@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { resolveLoginRedirect } from "@/router/authRedirect";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const router = useRouter();
@@ -35,8 +36,7 @@ async function handleSubmit() {
     return;
   }
 
-  const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/status";
-  await router.replace(redirect === "/login" ? "/status" : redirect);
+  await router.replace(resolveLoginRedirect(router, route.query.redirect));
 }
 </script>
 
@@ -46,11 +46,11 @@ async function handleSubmit() {
       class="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]"
     >
       <section class="p-8 lg:p-10">
-        <p class="text-[0.7rem] font-medium tracking-[0.28em] text-stone-500 uppercase">欢迎回来</p>
         <h1
-          class="mt-5 text-[clamp(2rem,5vw,3.5rem)] leading-[1.1] font-semibold tracking-tight text-stone-900"
+          class="text-[clamp(2rem,5vw,3.5rem)] leading-[1.1] font-semibold tracking-tight text-stone-900"
         >
-          打开 Ink，继续你的纸条灵感。
+          <span class="block">打开 Ink</span>
+          <span class="mt-2 block">继续你的纸条灵感</span>
         </h1>
       </section>
 

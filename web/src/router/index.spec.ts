@@ -17,6 +17,7 @@ function createAuthenticatedRouter() {
     id: "user-1",
     email: "name@example.com",
     name: "Ink User",
+    role: "member",
   };
   store.authSession = {
     accessToken: "access-token",
@@ -41,23 +42,37 @@ describe("router configuration", () => {
     ]);
   });
 
-  it("redirects anonymous visitors from protected routes to login", async () => {
+  it("redirects anonymous visitors from the root route to the public status page", async () => {
     const pinia = createPinia();
     const router = createAppRouter(createMemoryHistory(), pinia);
 
     router.push("/");
     await router.isReady();
 
-    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
+    expect(router.currentRoute.value.fullPath).toBe("/status");
   });
 
-  it("allows authenticated visitors to reach protected routes", async () => {
-    const router = createAuthenticatedRouter();
+  it.each(["/status", "/conversations", "/prints"])(
+    "allows anonymous visitors to reach %s",
+    async (path) => {
+      const pinia = createPinia();
+      const router = createAppRouter(createMemoryHistory(), pinia);
 
-    router.push("/");
+      router.push(path);
+      await router.isReady();
+
+      expect(router.currentRoute.value.fullPath).toBe(path);
+    },
+  );
+
+  it("redirects anonymous visitors from settings to login", async () => {
+    const pinia = createPinia();
+    const router = createAppRouter(createMemoryHistory(), pinia);
+
+    router.push("/settings");
     await router.isReady();
 
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/settings");
   });
 
   it("redirects the retired connections route to /prints for authenticated visitors", async () => {
@@ -69,19 +84,45 @@ describe("router configuration", () => {
     expect(router.currentRoute.value.fullPath).toBe("/prints");
   });
 
-  it("restores a persisted session before redirecting protected routes", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          user: {
-            id: "user-1",
-            email: "name@example.com",
-            name: "Ink User",
-          },
-        }),
-        { status: 200 },
-      ),
-    );
+  it("restores a persisted session before entering settings", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: {
+              id: "user-1",
+              email: "name@example.com",
+              name: "Ink User",
+              role: "member",
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            devices: [],
+            conversations: [],
+            activeConversationId: "",
+            printJobs: [],
+            schedules: [],
+            sources: [],
+            preferences: {
+              loginProtectionEnabled: false,
+              sendConfirmationEnabled: true,
+              theme: "light",
+              defaultDeviceId: "",
+            },
+            serviceBinding: {
+              providerName: null,
+              modelName: "Ink AI",
+              bound: false,
+            },
+          }),
+          { status: 200 },
+        ),
+      );
 
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -93,11 +134,25 @@ describe("router configuration", () => {
     };
 
     const router = createAppRouter(createMemoryHistory(), pinia);
-    router.push("/status");
+    router.push("/settings");
     await router.isReady();
 
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/settings");
     expect(store.authUser?.email).toBe("name@example.com");
+  });
+
+  it.each([
+    ["/login", "/status"],
+    ["/login?redirect=/settings", "/settings"],
+    ["/login?redirect=/missing", "/status"],
+    ["/login?redirect=/login", "/status"],
+  ])("redirects authenticated visitors from %s to %s", async (source, destination) => {
+    const router = createAuthenticatedRouter();
+
+    router.push(source);
+    await router.isReady();
+
+    expect(router.currentRoute.value.fullPath).toBe(destination);
   });
 
   it("updates the document title from route metadata", async () => {

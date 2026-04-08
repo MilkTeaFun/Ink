@@ -10,6 +10,11 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type {
+  createUserWithApi,
+  fetchWorkspaceStateWithApi,
+  saveWorkspaceStateWithApi,
+} from "@/services/workspace";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PrintJob } from "@/types/workspace";
 import ConversationsView from "@/views/ConversationsView.vue";
@@ -26,6 +31,7 @@ vi.mock("@/services/auth", () => ({
       id: "user-1",
       email,
       name: "Ink User",
+      role: "member",
     },
     session: {
       accessToken: "access-token",
@@ -36,6 +42,37 @@ vi.mock("@/services/auth", () => ({
   logoutWithApi: vi.fn<typeof logoutWithApi>(async () => undefined),
   refreshAuthSession: vi.fn<typeof refreshAuthSession>(),
   AuthApiError: class AuthApiError extends Error {},
+}));
+
+vi.mock("@/services/workspace", () => ({
+  createUserWithApi: vi.fn<typeof createUserWithApi>(async () => ({
+    id: "user-2",
+    email: "new-user",
+    name: "New User",
+    role: "member",
+  })),
+  fetchWorkspaceStateWithApi: vi.fn<typeof fetchWorkspaceStateWithApi>(async () => ({
+    devices: [],
+    conversations: [],
+    activeConversationId: "",
+    printJobs: [],
+    schedules: [],
+    sources: [],
+    preferences: {
+      loginProtectionEnabled: false,
+      sendConfirmationEnabled: true,
+      theme: "light",
+      defaultDeviceId: "",
+    },
+    serviceBinding: {
+      providerName: null,
+      modelName: "Ink AI",
+      bound: false,
+    },
+  })),
+  saveWorkspaceStateWithApi: vi.fn<typeof saveWorkspaceStateWithApi>(
+    async (_accessToken, state) => state,
+  ),
 }));
 
 beforeEach(() => {
@@ -58,6 +95,7 @@ async function createWorkspaceContext(path = "/status", authenticated = true) {
       id: "user-1",
       email: "name@example.com",
       name: "Ink User",
+      role: "member",
     };
     store.authSession = {
       accessToken: "access-token",
@@ -220,6 +258,22 @@ describe("workspace views", () => {
     expect(router.currentRoute.value.fullPath).toBe("/status");
   });
 
+  it("renders the login title as two lines without welcome-back copy", async () => {
+    const { pinia, router } = await createWorkspaceContext("/login", false);
+    const wrapper = mount(LoginView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    const titleLines = wrapper.findAll("h1 span");
+
+    expect(titleLines).toHaveLength(2);
+    expect(titleLines.map((line) => line.text())).toEqual(["打开 Ink", "继续你的纸条灵感"]);
+    expect(wrapper.text()).not.toContain("欢迎回来");
+    expect(wrapper.text()).not.toContain("打开 Ink，继续你的纸条灵感。");
+  });
+
   it("shows the password-updated notice and supports password visibility toggle on login", async () => {
     const { pinia, router } = await createWorkspaceContext("/login?notice=password-updated", false);
     const wrapper = mount(LoginView, {
@@ -236,6 +290,22 @@ describe("workspace views", () => {
     await toggleButton?.trigger("click");
 
     expect(wrapper.find("input[type='text']").exists()).toBe(true);
+  });
+
+  it("returns to settings after login when the redirect is valid", async () => {
+    const { pinia, router } = await createWorkspaceContext("/login?redirect=/settings", false);
+    const wrapper = mount(LoginView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    await wrapper.find("input[type='text']").setValue("admin");
+    await wrapper.find("input[type='password']").setValue("demo-password");
+    await wrapper.find("form").trigger("submit");
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+    expect(router.currentRoute.value.fullPath).toBe("/settings");
   });
 
   it("confirms pending prints and reflects shared defaults", async () => {
@@ -312,5 +382,24 @@ describe("workspace views", () => {
 
     expect(store.isAuthenticated).toBe(false);
     expect(router.currentRoute.value.fullPath).toBe("/login?notice=password-updated");
+  });
+
+  it("shows admin account creation controls in settings for administrators", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/settings");
+    store.authUser = {
+      id: "user-1",
+      email: "admin",
+      name: "Administrator",
+      role: "admin",
+    };
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).toContain("创建新账号");
+    expect(wrapper.text()).toContain("管理员");
   });
 });

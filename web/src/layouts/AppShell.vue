@@ -15,7 +15,7 @@ const pendingBadge = computed(() =>
 
 async function handleLogout() {
   await workspaceStore.logout();
-  await router.replace("/login");
+  await router.replace("/status");
 }
 </script>
 
@@ -29,6 +29,7 @@ async function handleLogout() {
         </div>
 
         <button
+          v-if="workspaceStore.isAuthenticated"
           type="button"
           class="text-sm font-medium text-stone-600 hover:text-stone-900"
           @click="handleLogout"
@@ -67,7 +68,7 @@ async function handleLogout() {
           </nav>
         </div>
 
-        <div class="flex items-center gap-4">
+        <div v-if="workspaceStore.isAuthenticated" class="flex items-center gap-4">
           <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
           <button
             type="button"
