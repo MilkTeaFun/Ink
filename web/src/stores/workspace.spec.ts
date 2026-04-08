@@ -8,16 +8,64 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type {
+  createUserWithApi,
+  fetchWorkspaceStateWithApi,
+  saveWorkspaceStateWithApi,
+} from "@/services/workspace";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PrintJob } from "@/types/workspace";
 
 vi.mock("@/services/auth", () => ({
   changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
   fetchCurrentUser: vi.fn<typeof fetchCurrentUser>(),
-  loginWithApi: vi.fn<typeof loginWithApi>(),
+  loginWithApi: vi.fn<typeof loginWithApi>(async ({ email }: { email: string }) => ({
+    user: {
+      id: "user-1",
+      email,
+      name: "Ink User",
+      role: "member",
+    },
+    session: {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+    },
+  })),
   logoutWithApi: vi.fn<typeof logoutWithApi>(async () => undefined),
   refreshAuthSession: vi.fn<typeof refreshAuthSession>(),
   AuthApiError: class AuthApiError extends Error {},
+}));
+
+vi.mock("@/services/workspace", () => ({
+  createUserWithApi: vi.fn<typeof createUserWithApi>(async () => ({
+    id: "user-2",
+    email: "new-user",
+    name: "New User",
+    role: "member",
+  })),
+  fetchWorkspaceStateWithApi: vi.fn<typeof fetchWorkspaceStateWithApi>(async () => ({
+    devices: [],
+    conversations: [],
+    activeConversationId: "",
+    printJobs: [],
+    schedules: [],
+    sources: [],
+    preferences: {
+      loginProtectionEnabled: false,
+      sendConfirmationEnabled: true,
+      theme: "light",
+      defaultDeviceId: "",
+    },
+    serviceBinding: {
+      providerName: null,
+      modelName: "Ink AI",
+      bound: false,
+    },
+  })),
+  saveWorkspaceStateWithApi: vi.fn<typeof saveWorkspaceStateWithApi>(
+    async (_accessToken, state) => state,
+  ),
 }));
 
 describe("workspace store", () => {
@@ -203,6 +251,7 @@ describe("workspace store", () => {
       id: "user-1",
       email: "name@example.com",
       name: "Ink User",
+      role: "member",
     };
     store.authSession = {
       accessToken: "access-token",
@@ -215,6 +264,34 @@ describe("workspace store", () => {
     expect(store.flashMessage).toBe("密码已更新，请重新登录。");
   });
 
+  it("loads remote workspace data after login", async () => {
+    const store = useWorkspaceStore();
+
+    await expect(store.login("admin", "demo-password")).resolves.toBe(true);
+
+    expect(store.isAuthenticated).toBe(true);
+    expect(store.devices).toEqual([]);
+    expect(store.conversations).toEqual([]);
+  });
+
+  it("allows admins to create member accounts", async () => {
+    const store = useWorkspaceStore();
+    store.authUser = {
+      id: "user-1",
+      email: "admin",
+      name: "Administrator",
+      role: "admin",
+    };
+    store.authSession = {
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+
+    await expect(store.createAccount("new-user", "New User", "demo-password")).resolves.toBe(true);
+    expect(store.flashMessage).toBe("新账号已创建。");
+  });
+
   it("keeps auth tokens out of the workspace snapshot and stores them only for the tab session", async () => {
     const store = useWorkspaceStore();
 
@@ -222,6 +299,7 @@ describe("workspace store", () => {
       id: "user-1",
       email: "name@example.com",
       name: "Ink User",
+      role: "member",
     };
     store.authSession = {
       accessToken: "access-token",

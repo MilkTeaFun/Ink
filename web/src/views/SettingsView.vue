@@ -21,6 +21,11 @@ const passwordFormError = ref("");
 const currentPasswordVisible = ref(false);
 const newPasswordVisible = ref(false);
 const confirmPasswordVisible = ref(false);
+const newAccountEmail = ref("");
+const newAccountName = ref("");
+const newAccountPassword = ref("");
+const newAccountFormError = ref("");
+const newAccountPasswordVisible = ref(false);
 
 function handleDefaultDeviceChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
@@ -29,7 +34,7 @@ function handleDefaultDeviceChange(event: Event) {
 
 async function handleLogout() {
   await workspaceStore.logout();
-  await router.replace("/login");
+  await router.replace("/status");
 }
 
 async function handlePasswordSubmit() {
@@ -68,6 +73,35 @@ async function handlePasswordSubmit() {
     },
   });
 }
+
+async function handleCreateAccountSubmit() {
+  newAccountFormError.value = "";
+
+  if (!newAccountEmail.value.trim()) {
+    newAccountFormError.value = "请输入新账号。";
+    return;
+  }
+
+  if (newAccountPassword.value.trim().length < 8) {
+    newAccountFormError.value = "新账号密码至少需要 8 位。";
+    return;
+  }
+
+  const success = await workspaceStore.createAccount(
+    newAccountEmail.value.trim(),
+    newAccountName.value.trim(),
+    newAccountPassword.value,
+  );
+
+  if (!success) {
+    newAccountFormError.value = workspaceStore.accountCreationError;
+    return;
+  }
+
+  newAccountEmail.value = "";
+  newAccountName.value = "";
+  newAccountPassword.value = "";
+}
 </script>
 
 <template>
@@ -92,13 +126,20 @@ async function handlePasswordSubmit() {
                   {{ workspaceStore.authUser?.email ?? "当前未登录" }}
                 </p>
               </div>
-              <button
-                type="button"
-                class="ui-btn-secondary px-3 py-1.5 text-sm"
-                @click="handleLogout"
-              >
-                退出
-              </button>
+              <div class="flex items-center gap-3">
+                <span
+                  class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+                >
+                  {{ workspaceStore.isAdmin ? "管理员" : "成员" }}
+                </span>
+                <button
+                  type="button"
+                  class="ui-btn-secondary px-3 py-1.5 text-sm"
+                  @click="handleLogout"
+                >
+                  退出
+                </button>
+              </div>
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
@@ -203,6 +244,81 @@ async function handlePasswordSubmit() {
                 </button>
               </form>
             </div>
+            <div
+              v-if="workspaceStore.isAdmin"
+              class="rounded-xl border border-stone-200 bg-stone-50 p-4"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-medium text-stone-900">创建新账号</p>
+                  <p class="mt-1 text-sm text-stone-500">
+                    新账号默认作为独立成员使用，登录后会加载各自的真实工作区数据。
+                  </p>
+                </div>
+                <span
+                  class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                >
+                  管理员
+                </span>
+              </div>
+
+              <form class="mt-4 space-y-4" @submit.prevent="handleCreateAccountSubmit">
+                <div class="grid gap-4 md:grid-cols-3">
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">账号</span>
+                    <input
+                      v-model="newAccountEmail"
+                      type="text"
+                      autocomplete="username"
+                      placeholder="例如：alice"
+                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">显示名称</span>
+                    <input
+                      v-model="newAccountName"
+                      type="text"
+                      placeholder="例如：Alice"
+                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                    />
+                  </label>
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">初始密码</span>
+                    <div
+                      class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
+                    >
+                      <input
+                        v-model="newAccountPassword"
+                        :type="newAccountPasswordVisible ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        class="min-w-0 flex-1 bg-transparent py-2 text-sm text-stone-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
+                        @click="newAccountPasswordVisible = !newAccountPasswordVisible"
+                      >
+                        {{ newAccountPasswordVisible ? "隐藏" : "显示" }}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+                <p
+                  v-if="newAccountFormError"
+                  class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                >
+                  {{ newAccountFormError }}
+                </p>
+                <button
+                  type="submit"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  :disabled="workspaceStore.accountCreationLoading"
+                >
+                  {{ workspaceStore.accountCreationLoading ? "创建中..." : "创建账号" }}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </article>
@@ -215,6 +331,12 @@ async function handlePasswordSubmit() {
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
+            <div v-if="workspaceStore.workspaceSyncError" class="rounded-xl bg-amber-50 p-4">
+              <p class="text-sm font-medium text-amber-900">账号数据同步异常</p>
+              <p class="mt-1 text-sm text-amber-700">
+                {{ workspaceStore.workspaceSyncError }}
+              </p>
+            </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">默认设备</p>

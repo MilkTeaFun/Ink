@@ -10,6 +10,11 @@ import {
   refreshAuthSession,
 } from "@/services/auth";
 import { generateReplyWithMockService } from "@/services/mockInk";
+import {
+  createUserWithApi,
+  fetchWorkspaceStateWithApi,
+  saveWorkspaceStateWithApi,
+} from "@/services/workspace";
 import type {
   AuthSession,
   Conversation,
@@ -23,6 +28,7 @@ import type {
   SourceConnection,
   ThemeMode,
   User,
+  WorkspaceState,
 } from "@/types/workspace";
 import {
   createId,
@@ -34,6 +40,7 @@ import {
 
 const STORAGE_KEY = "ink.workspace.v1";
 const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
+const REMOTE_SAVE_DEBOUNCE_MS = 180;
 
 function getNow() {
   return new Date().toISOString();
@@ -243,6 +250,33 @@ function createSeedState(): PersistedWorkspaceState {
   };
 }
 
+function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState {
+  const seed = createSeedState();
+
+  return {
+    devices: state.devices ?? seed.devices,
+    conversations: state.conversations ?? seed.conversations,
+    activeConversationId:
+      state.activeConversationId ?? state.conversations?.[0]?.id ?? seed.activeConversationId,
+    printJobs: state.printJobs ?? seed.printJobs,
+    schedules: state.schedules ?? seed.schedules,
+    sources: state.sources ?? seed.sources,
+    preferences: {
+      loginProtectionEnabled:
+        state.preferences?.loginProtectionEnabled ?? seed.preferences.loginProtectionEnabled,
+      sendConfirmationEnabled:
+        state.preferences?.sendConfirmationEnabled ?? seed.preferences.sendConfirmationEnabled,
+      theme: state.preferences?.theme ?? seed.preferences.theme,
+      defaultDeviceId: state.preferences?.defaultDeviceId ?? seed.preferences.defaultDeviceId,
+    },
+    serviceBinding: {
+      providerName: state.serviceBinding?.providerName ?? seed.serviceBinding.providerName,
+      modelName: state.serviceBinding?.modelName ?? seed.serviceBinding.modelName,
+      bound: state.serviceBinding?.bound ?? seed.serviceBinding.bound,
+    },
+  };
+}
+
 function readPersistedWorkspaceState() {
   if (typeof window === "undefined") {
     return createSeedState();
@@ -255,10 +289,12 @@ function readPersistedWorkspaceState() {
   }
 
   try {
+    const parsed = JSON.parse(raw) as Partial<PersistedWorkspaceState>;
+
     return {
-      ...createSeedState(),
-      ...JSON.parse(raw),
-    } as PersistedWorkspaceState;
+      authUser: parsed.authUser ?? null,
+      ...normalizeWorkspaceState(parsed),
+    };
   } catch {
     return createSeedState();
   }
@@ -332,6 +368,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const authError = ref("");
   const authBootstrapping = ref(false);
   const passwordChangeLoading = ref(false);
+  const workspaceLoading = ref(false);
+  const workspaceSyncing = ref(false);
+  const workspaceSyncError = ref("");
+  const accountCreationLoading = ref(false);
+  const accountCreationError = ref("");
+  const workspaceOwnerId = ref<string | null>(null);
+  const workspaceHydrating = ref(false);
 
   const devices = ref<Device[]>(persisted.devices);
   const conversations = ref<Conversation[]>(persisted.conversations);
@@ -354,6 +397,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const flashMessage = ref("");
   const flashTone = ref<"success" | "error" | "info">("info");
   let flashTimer = 0;
+  let remoteSaveTimer = 0;
+  let remoteSavePromise: Promise<boolean> | null = null;
 
   const deviceMap = computed(() =>
     devices.value.reduce<Record<string, Device>>((accumulator, device) => {
@@ -407,6 +452,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const welcomeLabel = computed(() => "整理内容，准备打印");
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
   const isAuthenticated = computed(() => authUser.value !== null && authSession.value !== null);
+  const isAdmin = computed(() => authUser.value?.role === "admin");
 
   const summaryCards = computed(() => [
     {
@@ -439,8 +485,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     },
   ]);
 
-  const persistableState = computed<PersistedWorkspaceState>(() => ({
-    authUser: loginProtectionEnabled.value || !authSession.value ? null : authUser.value,
+  const workspaceState = computed<WorkspaceState>(() => ({
     devices: devices.value,
     conversations: conversations.value,
     activeConversationId: activeConversationId.value,
@@ -456,10 +501,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     serviceBinding: serviceBinding.value,
   }));
 
+  const persistableState = computed<PersistedWorkspaceState>(() => ({
+    authUser: loginProtectionEnabled.value || !authSession.value ? null : authUser.value,
+    ...workspaceState.value,
+  }));
+
   watch(
     persistableState,
     (value) => {
-      if (typeof window === "undefined") {
+      if (typeof window === "undefined" || authSession.value) {
         return;
       }
 
@@ -469,12 +519,133 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   );
 
   watch(
+    workspaceState,
+    () => {
+      if (
+        !authSession.value ||
+        !authUser.value ||
+        workspaceOwnerId.value !== authUser.value.id ||
+        workspaceHydrating.value
+      ) {
+        return;
+      }
+
+      if (remoteSaveTimer) {
+        window.clearTimeout(remoteSaveTimer);
+      }
+
+      remoteSaveTimer = window.setTimeout(() => {
+        remoteSaveTimer = 0;
+        void persistRemoteWorkspace();
+      }, REMOTE_SAVE_DEBOUNCE_MS);
+    },
+    { deep: true },
+  );
+
+  watch(
     [authSession, loginProtectionEnabled],
     ([session, loginProtection]) => {
       writePersistedAuthSession(session, !loginProtection);
     },
     { deep: true, immediate: true },
   );
+
+  function applyWorkspaceState(nextState: WorkspaceState) {
+    const normalized = normalizeWorkspaceState(nextState);
+    devices.value = normalized.devices;
+    conversations.value = normalized.conversations;
+    activeConversationId.value = normalized.conversations.some(
+      (conversation) => conversation.id === normalized.activeConversationId,
+    )
+      ? normalized.activeConversationId
+      : (normalized.conversations[0]?.id ?? "");
+    printJobs.value = normalized.printJobs;
+    schedules.value = normalized.schedules;
+    sources.value = normalized.sources;
+    loginProtectionEnabled.value = normalized.preferences.loginProtectionEnabled;
+    sendConfirmationEnabled.value = normalized.preferences.sendConfirmationEnabled;
+    selectedTheme.value = normalized.preferences.theme;
+    defaultDeviceId.value = normalized.preferences.defaultDeviceId;
+    serviceBinding.value = normalized.serviceBinding;
+    selectedConversationMessageIds.value = [];
+    generationError.value = "";
+  }
+
+  function restoreAnonymousWorkspace() {
+    workspaceOwnerId.value = null;
+    workspaceHydrating.value = true;
+    applyWorkspaceState(readPersistedWorkspaceState());
+    workspaceHydrating.value = false;
+    workspaceSyncError.value = "";
+  }
+
+  async function persistRemoteWorkspace() {
+    if (remoteSavePromise) {
+      return remoteSavePromise;
+    }
+
+    const currentSession = authSession.value;
+    const currentUser = authUser.value;
+
+    if (!currentSession || !currentUser || workspaceOwnerId.value !== currentUser.id) {
+      return true;
+    }
+
+    workspaceSyncing.value = true;
+    workspaceSyncError.value = "";
+    remoteSavePromise = (async () => {
+      try {
+        await saveWorkspaceStateWithApi(currentSession.accessToken, workspaceState.value);
+        return true;
+      } catch (error) {
+        workspaceSyncError.value =
+          error instanceof Error ? error.message : "同步数据失败，请稍后重试。";
+        return false;
+      } finally {
+        workspaceSyncing.value = false;
+        remoteSavePromise = null;
+      }
+    })();
+
+    return remoteSavePromise;
+  }
+
+  async function flushRemoteWorkspaceSave() {
+    if (remoteSaveTimer) {
+      window.clearTimeout(remoteSaveTimer);
+      remoteSaveTimer = 0;
+      return persistRemoteWorkspace();
+    }
+
+    return remoteSavePromise ?? true;
+  }
+
+  async function loadRemoteWorkspace() {
+    const currentSession = authSession.value;
+    const currentUser = authUser.value;
+
+    if (!currentSession || !currentUser) {
+      return false;
+    }
+
+    workspaceLoading.value = true;
+    workspaceSyncError.value = "";
+    workspaceHydrating.value = true;
+
+    try {
+      const state = await fetchWorkspaceStateWithApi(currentSession.accessToken);
+      applyWorkspaceState(state);
+      workspaceOwnerId.value = currentUser.id;
+      return true;
+    } catch (error) {
+      workspaceSyncError.value =
+        error instanceof Error ? error.message : "加载账号数据失败，请稍后重试。";
+      return false;
+    } finally {
+      workspaceHydrating.value = false;
+      workspaceLoading.value = false;
+    }
+  }
 
   function showFlash(message: string, tone: "success" | "error" | "info" = "info") {
     flashMessage.value = message;
@@ -996,12 +1167,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authUser.value = user;
     authSession.value = session;
     authError.value = "";
+    accountCreationError.value = "";
   }
 
   function clearAuthState() {
+    if (remoteSaveTimer) {
+      window.clearTimeout(remoteSaveTimer);
+      remoteSaveTimer = 0;
+    }
+
     authUser.value = null;
     authSession.value = null;
     authError.value = "";
+    accountCreationError.value = "";
+    workspaceOwnerId.value = null;
   }
 
   async function refreshSessionIfNeeded() {
@@ -1052,17 +1231,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         return false;
       }
 
-      if (authUser.value) {
-        authError.value = "";
-        return true;
+      if (!authUser.value) {
+        const user = await fetchCurrentUser(authSession.value.accessToken);
+        authUser.value = user;
       }
 
-      const user = await fetchCurrentUser(authSession.value.accessToken);
-      authUser.value = user;
+      const loaded = await loadRemoteWorkspace();
+      if (!loaded) {
+        clearAuthState();
+        authError.value = workspaceSyncError.value || "加载账号数据失败，请重新登录。";
+        restoreAnonymousWorkspace();
+        return false;
+      }
+
       authError.value = "";
       return true;
     } catch (error) {
       clearAuthState();
+      restoreAnonymousWorkspace();
       authError.value = error instanceof Error ? error.message : "登录状态已失效，请重新登录。";
       return false;
     } finally {
@@ -1077,6 +1263,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     try {
       const result = await loginWithApi({ email, password });
       setAuthState(result.user, result.session);
+      const loaded = await loadRemoteWorkspace();
+
+      if (!loaded) {
+        const workspaceError = workspaceSyncError.value || "加载账号数据失败，请稍后重试。";
+        clearAuthState();
+        restoreAnonymousWorkspace();
+        authError.value = workspaceError;
+        showFlash(workspaceError, "error");
+        return false;
+      }
+
       showFlash("登录成功。", "success");
       return true;
     } catch (error) {
@@ -1106,6 +1303,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         newPassword,
       });
       clearAuthState();
+      restoreAnonymousWorkspace();
       showFlash("密码已更新，请重新登录。", "success");
       return true;
     } catch (error) {
@@ -1120,6 +1318,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   async function logout() {
     const current = authSession.value;
 
+    await flushRemoteWorkspaceSave();
+
     if (current) {
       try {
         await logoutWithApi({
@@ -1132,7 +1332,37 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     clearAuthState();
+    restoreAnonymousWorkspace();
     showFlash("已退出当前账号。");
+  }
+
+  async function createAccount(email: string, name: string, password: string) {
+    const current = authSession.value;
+
+    if (!current) {
+      accountCreationError.value = "登录状态已失效，请重新登录。";
+      return false;
+    }
+
+    accountCreationLoading.value = true;
+    accountCreationError.value = "";
+
+    try {
+      await createUserWithApi(current.accessToken, {
+        email,
+        name,
+        password,
+      });
+      showFlash("新账号已创建。", "success");
+      return true;
+    } catch (error) {
+      accountCreationError.value =
+        error instanceof Error ? error.message : "创建账号失败，请稍后重试。";
+      showFlash(accountCreationError.value, "error");
+      return false;
+    } finally {
+      accountCreationLoading.value = false;
+    }
   }
 
   function formatPrintTime(iso: string) {
@@ -1156,6 +1386,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authError,
     authBootstrapping,
     passwordChangeLoading,
+    workspaceLoading,
+    workspaceSyncing,
+    workspaceSyncError,
+    accountCreationLoading,
+    accountCreationError,
     devices,
     conversations,
     activeConversationId,
@@ -1189,6 +1424,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     welcomeLabel,
     isConfigured,
     isAuthenticated,
+    isAdmin,
     selectConversation,
     createConversation,
     deleteConversation,
@@ -1216,6 +1452,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     initializeAuth,
     refreshSessionIfNeeded,
     changePassword,
+    createAccount,
     login,
     logout,
     formatPrintTime,

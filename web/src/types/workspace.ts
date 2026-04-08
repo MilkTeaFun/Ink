@@ -3,11 +3,13 @@ export type PrintStatus = "pending" | "queued" | "completed" | "failed" | "cance
 export type ConversationMessageRole = "user" | "assistant";
 export type ThemeMode = "soft" | "light" | "system";
 export type SourceConnectionStatus = "connected" | "disconnected" | "error";
+export type UserRole = "admin" | "member";
 
 export interface User {
   id: string;
   email: string;
   name: string;
+  role: UserRole;
 }
 
 export interface AuthSession {
@@ -80,8 +82,7 @@ export interface ServiceBinding {
   bound: boolean;
 }
 
-export interface PersistedWorkspaceState {
-  authUser: User | null;
+export interface WorkspaceState {
   devices: Device[];
   conversations: Conversation[];
   activeConversationId: string;
@@ -90,4 +91,8 @@ export interface PersistedWorkspaceState {
   sources: SourceConnection[];
   preferences: Preferences;
   serviceBinding: ServiceBinding;
+}
+
+export interface PersistedWorkspaceState extends WorkspaceState {
+  authUser: User | null;
 }
