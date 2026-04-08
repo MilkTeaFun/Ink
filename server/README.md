@@ -9,6 +9,9 @@ This service provides the first Go backend for Ink account authentication.
 - `GET /api/v1/auth/me`
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/change-password`
+- `POST /api/v1/admin/users`
+- `GET /api/v1/workspace`
+- `PUT /api/v1/workspace`
 - `GET /healthz`
 
 ## Local development
@@ -47,5 +50,7 @@ The development seed creates this account on first bootstrap:
 
 - login: `admin`
 - password: randomly generated once, printed to the terminal, and saved to `server/.dev-admin-password`
+
+After signing in as the development admin, you can create additional member accounts from Ink settings or the `POST /api/v1/admin/users` endpoint. Each account gets its own isolated workspace snapshot on first load.
 
 If you keep the existing PostgreSQL volume, rerunning `make dev-api` will not reset the admin password. Run `make reset-db` to rebuild the database and generate a new initial password.

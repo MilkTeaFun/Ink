@@ -70,8 +70,8 @@ func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptio
 
 	if _, err := tx.Exec(
 		ctx,
-		`insert into users (id, email, password_hash, display_name, status, created_at, updated_at)
-		 values ($1, $2, $3, $4, 'active', $5, $5)`,
+		`insert into users (id, email, password_hash, display_name, role, status, created_at, updated_at)
+		 values ($1, $2, $3, $4, 'admin', 'active', $5, $5)`,
 		devAdminID,
 		devAdminLogin,
 		passwordHash,

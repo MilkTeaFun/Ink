@@ -12,6 +12,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/user"
+	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
 // Store implements the auth repositories on top of PostgreSQL.
@@ -23,6 +24,7 @@ var (
 	_ auth.UserRepository    = (*Store)(nil)
 	_ auth.SessionRepository = (*Store)(nil)
 	_ auth.AuditLogger       = (*Store)(nil)
+	_ workspace.Repository   = (*Store)(nil)
 )
 
 // New creates a PostgreSQL-backed auth store.
@@ -33,7 +35,7 @@ func New(db *pgxpool.Pool) *Store {
 // FindByEmail loads a user by email address.
 func (s *Store) FindByEmail(ctx context.Context, email string) (*user.User, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, email, password_hash, display_name, status, created_at, updated_at, last_login_at
+		select id, email, password_hash, display_name, role, status, created_at, updated_at, last_login_at
 		from users
 		where email = $1
 	`, email)
@@ -44,12 +46,31 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (*user.User, erro
 // FindUserByID loads a user by identifier.
 func (s *Store) FindUserByID(ctx context.Context, id string) (*user.User, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, email, password_hash, display_name, status, created_at, updated_at, last_login_at
+		select id, email, password_hash, display_name, role, status, created_at, updated_at, last_login_at
 		from users
 		where id = $1
 	`, id)
 
 	return scanUser(row)
+}
+
+// CreateUser inserts a new user record.
+func (s *Store) CreateUser(ctx context.Context, current user.User) error {
+	_, err := s.db.Exec(ctx, `
+		insert into users (
+			id, email, password_hash, display_name, role, status, created_at, updated_at, last_login_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, null)
+	`,
+		current.ID,
+		current.Email,
+		current.PasswordHash,
+		current.DisplayName,
+		current.Role,
+		current.Status,
+		current.CreatedAt,
+		current.UpdatedAt,
+	)
+	return err
 }
 
 // UpdateLastLoginAt stores the latest successful login time for a user.
@@ -229,6 +250,51 @@ func (s *Store) Log(ctx context.Context, event auth.AuditEvent) error {
 	return err
 }
 
+// FindByUserID loads a persisted workspace snapshot for a user.
+func (s *Store) FindByUserID(ctx context.Context, userID string) (*workspace.State, error) {
+	row := s.db.QueryRow(ctx, `
+		select state
+		from workspace_snapshots
+		where user_id = $1
+	`, userID)
+
+	var payload []byte
+	if err := row.Scan(&payload); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var current workspace.State
+	if err := json.Unmarshal(payload, &current); err != nil {
+		return nil, err
+	}
+
+	return &current, nil
+}
+
+// SaveByUserID upserts the current workspace snapshot for a user.
+func (s *Store) SaveByUserID(
+	ctx context.Context,
+	userID string,
+	state workspace.State,
+	updatedAt time.Time,
+) error {
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(ctx, `
+		insert into workspace_snapshots (user_id, state, created_at, updated_at)
+		values ($1, $2, $3, $3)
+		on conflict (user_id)
+		do update set state = excluded.state, updated_at = excluded.updated_at
+	`, userID, payload, updatedAt)
+	return err
+}
+
 func scanUser(row pgx.Row) (*user.User, error) {
 	var account user.User
 	var lastLoginAt *time.Time
@@ -237,6 +303,7 @@ func scanUser(row pgx.Row) (*user.User, error) {
 		&account.Email,
 		&account.PasswordHash,
 		&account.DisplayName,
+		&account.Role,
 		&account.Status,
 		&account.CreatedAt,
 		&account.UpdatedAt,
