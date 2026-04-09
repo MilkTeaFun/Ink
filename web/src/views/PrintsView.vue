@@ -201,6 +201,7 @@ function submitScheduleDialog() {
                     确认打印
                   </button>
                   <button
+                    v-if="!workspaceStore.isAuthenticated || item.status === 'pending'"
                     class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
                     @click="workspaceStore.cancelPrint(item.id)"
                   >
@@ -213,17 +214,26 @@ function submitScheduleDialog() {
                 <label class="text-sm font-medium text-stone-700">目标设备</label>
                 <select
                   :value="item.deviceId"
+                  :disabled="workspaceStore.isAuthenticated && item.status === 'queued'"
                   class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
                   @change="handlePrintDeviceChange(item.id, $event)"
                 >
                   <option
-                    v-for="device in workspaceStore.devices"
+                    v-for="device in workspaceStore.devices.filter(
+                      (device) => device.status !== 'offline',
+                    )"
                     :key="device.id"
                     :value="device.id"
                   >
                     {{ device.name }}
                   </option>
                 </select>
+                <p
+                  v-if="workspaceStore.isAuthenticated && item.status === 'queued'"
+                  class="text-sm text-stone-500"
+                >
+                  已提交到咕咕机后不能再取消或改绑设备。
+                </p>
               </div>
             </article>
           </div>
@@ -276,7 +286,9 @@ function submitScheduleDialog() {
                   @change="handleScheduleDeviceChange(task.id, $event)"
                 >
                   <option
-                    v-for="device in workspaceStore.devices"
+                    v-for="device in workspaceStore.devices.filter(
+                      (device) => device.status !== 'offline',
+                    )"
                     :key="device.id"
                     :value="device.id"
                   >
@@ -474,7 +486,13 @@ function submitScheduleDialog() {
             v-model="scheduleDeviceId"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           >
-            <option v-for="device in workspaceStore.devices" :key="device.id" :value="device.id">
+            <option
+              v-for="device in workspaceStore.devices.filter(
+                (device) => device.status !== 'offline',
+              )"
+              :key="device.id"
+              :value="device.id"
+            >
               {{ device.name }}
             </option>
           </select>

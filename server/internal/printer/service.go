@@ -181,12 +181,28 @@ func (s *Service) BindDevice(ctx context.Context, accessToken string, input Bind
 		return workspace.Device{}, fmt.Errorf("%w: %s", ErrUnavailable, err.Error())
 	}
 
-	bindingID, err := s.ids.New("device")
+	now := s.clock.Now()
+	existingBindings, err := s.repo.ListBindingsByUserID(ctx, currentUser.ID)
 	if err != nil {
 		return workspace.Device{}, err
 	}
 
-	now := s.clock.Now()
+	bindingID := ""
+	createdAt := now
+	for _, candidate := range existingBindings {
+		if candidate.DeviceIdentifier == deviceID {
+			bindingID = candidate.ID
+			createdAt = candidate.CreatedAt
+			break
+		}
+	}
+	if bindingID == "" {
+		bindingID, err = s.ids.New("device")
+		if err != nil {
+			return workspace.Device{}, err
+		}
+	}
+
 	binding := Binding{
 		ID:               bindingID,
 		UserID:           currentUser.ID,
@@ -195,7 +211,7 @@ func (s *Service) BindDevice(ctx context.Context, accessToken string, input Bind
 		DeviceIdentifier: deviceID,
 		ProviderUserID:   resp.UserID,
 		Status:           workspace.DeviceStatusConnected,
-		CreatedAt:        now,
+		CreatedAt:        createdAt,
 		UpdatedAt:        now,
 	}
 	if err := s.repo.SaveBinding(ctx, binding); err != nil {
@@ -219,7 +235,21 @@ func (s *Service) DeleteDevice(ctx context.Context, accessToken string, bindingI
 		return ErrInvalidInput
 	}
 
-	return s.repo.DeleteBinding(ctx, currentUser.ID, bindingID)
+	binding, err := s.repo.FindBindingByID(ctx, currentUser.ID, bindingID)
+	if err != nil {
+		return err
+	}
+	if binding == nil {
+		return ErrNotFound
+	}
+	if binding.Status == workspace.DeviceStatusOffline {
+		return nil
+	}
+
+	binding.Status = workspace.DeviceStatusOffline
+	binding.Note = archivedBindingNote(binding.Note)
+	binding.UpdatedAt = s.clock.Now()
+	return s.repo.SaveBinding(ctx, *binding)
 }
 
 func (s *Service) ListPrintJobs(ctx context.Context, accessToken string) ([]workspace.PrintJob, error) {
@@ -282,6 +312,9 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 	if binding == nil {
 		return workspace.PrintJob{}, ErrNotFound
 	}
+	if binding.Status != workspace.DeviceStatusConnected {
+		return workspace.PrintJob{}, ErrInvalidInput
+	}
 
 	jobID, err := s.ids.New("print")
 	if err != nil {
@@ -340,6 +373,9 @@ func (s *Service) SubmitPrintJob(ctx context.Context, accessToken string, jobID 
 	if binding == nil {
 		return workspace.PrintJob{}, ErrNotFound
 	}
+	if binding.Status != workspace.DeviceStatusConnected {
+		return workspace.PrintJob{}, ErrInvalidInput
+	}
 
 	submitted, err := s.submitJob(ctx, *binding, *job)
 	if err != nil {
@@ -362,7 +398,7 @@ func (s *Service) CancelPrintJob(ctx context.Context, accessToken string, jobID 
 		return workspace.PrintJob{}, ErrNotFound
 	}
 
-	if job.Status != workspace.PrintStatusPending && job.Status != workspace.PrintStatusQueued {
+	if job.Status != workspace.PrintStatusPending {
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
@@ -389,7 +425,7 @@ func (s *Service) UpdatePrintJobDevice(ctx context.Context, accessToken string, 
 	if job == nil {
 		return workspace.PrintJob{}, ErrNotFound
 	}
-	if job.Status != workspace.PrintStatusPending && job.Status != workspace.PrintStatusQueued {
+	if job.Status != workspace.PrintStatusPending {
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
@@ -400,6 +436,9 @@ func (s *Service) UpdatePrintJobDevice(ctx context.Context, accessToken string, 
 	}
 	if binding == nil {
 		return workspace.PrintJob{}, ErrNotFound
+	}
+	if binding.Status != workspace.DeviceStatusConnected {
+		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
 	job.PrinterBindingID = bindingID
@@ -490,6 +529,17 @@ func chooseString(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func archivedBindingNote(note string) string {
+	trimmed := strings.TrimSpace(note)
+	if trimmed == "" {
+		return "已解绑，仅保留历史记录"
+	}
+	if strings.Contains(trimmed, "已解绑") {
+		return trimmed
+	}
+	return trimmed + " · 已解绑，仅保留历史记录"
 }
 
 var _ PrinterService = (*Service)(nil)

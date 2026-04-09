@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/user"
 )
@@ -472,10 +473,62 @@ func TestCreateUserRejectsNonAdmin(t *testing.T) {
 	}
 }
 
+func TestCreateUserMapsDuplicateEmailRace(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+	users := &fakeUserRepo{
+		byID: map[string]*user.User{
+			"user-1": {
+				ID:          "user-1",
+				Email:       "admin",
+				DisplayName: "Administrator",
+				Role:        user.RoleAdmin,
+				Status:      user.StatusActive,
+			},
+		},
+		byEmail: map[string]*user.User{},
+		createUserErr: &pgconn.PgError{
+			Code:           "23505",
+			ConstraintName: "users_email_unique",
+		},
+	}
+	sessions := newFakeSessionRepo()
+	sessions.create(session.Session{
+		ID:               "ss_old",
+		FamilyID:         "sf_1",
+		UserID:           "user-1",
+		RefreshTokenHash: HashRefreshToken("refresh-1"),
+		ClientType:       session.ClientTypeWeb,
+		ExpiresAt:        now.Add(time.Hour),
+		CreatedAt:        now,
+		LastUsedAt:       now,
+	})
+
+	service := NewService(
+		users,
+		sessions,
+		&fakeAuditLogger{},
+		fakeHasher{nextHash: "new-user-hash"},
+		fakeAccessTokenManager{},
+		fakeClock{now: now},
+		fakeIDGenerator{},
+		24*time.Hour,
+	)
+
+	_, err := service.CreateUser(context.Background(), "access-token", CreateUserInput{
+		Email:    "new-user",
+		Name:     "New User",
+		Password: "demo-password",
+	})
+	if !errors.Is(err, ErrEmailTaken) {
+		t.Fatalf("expected duplicate email race to map to ErrEmailTaken, got %v", err)
+	}
+}
+
 type fakeUserRepo struct {
 	byEmail             map[string]*user.User
 	byID                map[string]*user.User
 	createdUser         *user.User
+	createUserErr       error
 	updatedLastLoginAt  *time.Time
 	updatedPasswordHash string
 }
@@ -500,6 +553,10 @@ func (f *fakeUserRepo) FindUserByID(_ context.Context, id string) (*user.User, e
 }
 
 func (f *fakeUserRepo) CreateUser(_ context.Context, current user.User) error {
+	if f.createUserErr != nil {
+		return f.createUserErr
+	}
+
 	copy := current
 	f.createdUser = &copy
 	if f.byEmail == nil {

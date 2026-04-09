@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/user"
 )
@@ -503,10 +504,26 @@ func (s *Service) CreateUser(ctx context.Context, accessToken string, input Crea
 		PasswordHash: passwordHash,
 	}
 	if err := s.users.CreateUser(ctx, created); err != nil {
+		if isDuplicateEmailError(err) {
+			return UserDTO{}, ErrEmailTaken
+		}
 		return UserDTO{}, err
 	}
 
 	return MapUser(created), nil
+}
+
+func isDuplicateEmailError(err error) bool {
+	if errors.Is(err, ErrEmailTaken) {
+		return true
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505" && pgErr.ConstraintName == "users_email_unique"
+	}
+
+	return false
 }
 
 func (s *Service) newSessionTokens(
