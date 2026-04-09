@@ -113,7 +113,7 @@ function submitScheduleDialog() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-6 px-4 pt-4 pb-24 sm:space-y-8 sm:px-0 lg:pb-12">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-stone-900">打印</h2>
@@ -192,7 +192,9 @@ function submitScheduleDialog() {
                   </p>
                 </div>
 
-                <div class="flex shrink-0 items-start gap-2 self-start">
+                <div
+                  class="flex w-full flex-wrap items-start gap-2 self-stretch sm:w-auto sm:self-start"
+                >
                   <button
                     v-if="item.status === 'pending'"
                     class="ui-btn-primary px-3 py-1.5 text-sm whitespace-nowrap"
@@ -215,7 +217,7 @@ function submitScheduleDialog() {
                 <select
                   :value="item.deviceId"
                   :disabled="workspaceStore.isAuthenticated && item.status === 'queued'"
-                  class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
                   @change="handlePrintDeviceChange(item.id, $event)"
                 >
                   <option
@@ -240,7 +242,7 @@ function submitScheduleDialog() {
         </section>
 
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
           </div>
 
@@ -282,7 +284,7 @@ function submitScheduleDialog() {
                 <label class="text-sm font-medium text-stone-700">发送设备</label>
                 <select
                   :value="task.deviceId"
-                  class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
+                  class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
                   @change="handleScheduleDeviceChange(task.id, $event)"
                 >
                   <option
@@ -312,7 +314,9 @@ function submitScheduleDialog() {
                 :key="item.id"
                 class="ui-timeline-item"
               >
-                <div class="flex items-start justify-between gap-3">
+                <div
+                  class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+                >
                   <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
                     <p class="mt-0.5 text-sm text-stone-500">
@@ -345,7 +349,7 @@ function submitScheduleDialog() {
 
       <aside class="space-y-8">
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">默认打印设置</h3>
             </div>
@@ -366,7 +370,7 @@ function submitScheduleDialog() {
         </section>
 
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 class="text-base leading-6 font-semibold text-stone-900">已连接插件</h3>
             <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm"
               >更多设置</RouterLink
@@ -430,7 +434,7 @@ function submitScheduleDialog() {
           {{ printError }}
         </p>
 
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             class="ui-btn-secondary px-4 py-2 text-sm"
@@ -502,7 +506,7 @@ function submitScheduleDialog() {
           {{ scheduleError }}
         </p>
 
-        <div class="flex justify-end gap-3">
+        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             class="ui-btn-secondary px-4 py-2 text-sm"

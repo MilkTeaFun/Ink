@@ -111,12 +111,12 @@ onBeforeUnmount(() => {
   <Transition name="dialog-fade">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/35 px-4 py-6 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex items-end justify-center bg-stone-950/35 px-0 py-0 backdrop-blur-sm sm:px-4 sm:py-6"
       @click.self="emit('close')"
     >
       <section
         ref="dialogRef"
-        class="w-full max-w-md rounded-3xl border border-stone-200 bg-[var(--app-surface)] p-6 shadow-2xl shadow-stone-900/10"
+        class="max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full overflow-y-auto rounded-t-[1.75rem] border border-stone-200 bg-[var(--app-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl shadow-stone-900/10 sm:max-h-[min(42rem,calc(100dvh-3rem))] sm:max-w-md sm:rounded-3xl sm:p-6"
         role="dialog"
         aria-modal="true"
         tabindex="-1"

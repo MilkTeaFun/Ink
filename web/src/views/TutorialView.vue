@@ -3,7 +3,7 @@ import { RouterLink } from "vue-router";
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-6 px-4 pt-4 pb-24 sm:space-y-8 sm:px-0 lg:pb-12">
     <div class="max-w-3xl space-y-4">
       <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">教程</p>
       <div class="space-y-3">
@@ -16,6 +16,15 @@ import { RouterLink } from "vue-router";
         </p>
       </div>
     </div>
+
+    <article class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+      <p class="text-sm font-medium text-stone-500">作为手机应用使用</p>
+      <h3 class="mt-2 text-lg font-semibold text-stone-900">把 Ink 添加到 iPhone 主屏幕</h3>
+      <p class="mt-3 text-sm leading-7 text-stone-600">
+        用 Safari 打开 Ink 后，点击底部分享按钮，选择“添加到主屏幕”。之后你可以像普通 App
+        一样从桌面进入 Ink，顶部和底部导航都会按手机安全区适配。
+      </p>
+    </article>
 
     <div class="grid gap-6 lg:grid-cols-3">
       <article class="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">

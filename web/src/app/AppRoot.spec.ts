@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
+import { nextTick } from "vue";
 
 import AppRoot from "@/app/AppRoot.vue";
 import { createTestRouter } from "@/router";
@@ -35,7 +36,7 @@ async function mountAt(path: string, authenticated = true) {
     },
   });
 
-  return { wrapper, router };
+  return { wrapper, router, store };
 }
 
 describe("AppRoot", () => {
@@ -69,5 +70,22 @@ describe("AppRoot", () => {
     expect(wrapper.text()).toContain("登录账号");
     expect(wrapper.find("header nav").exists()).toBe(false);
     expect(wrapper.find("nav.fixed").exists()).toBe(false);
+  });
+
+  it("syncs the selected theme to the document and theme-color meta", async () => {
+    let themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (!themeMeta) {
+      themeMeta = document.createElement("meta");
+      themeMeta.setAttribute("name", "theme-color");
+      document.head.appendChild(themeMeta);
+    }
+    themeMeta.setAttribute("content", "#000000");
+
+    const { store } = await mountAt("/status");
+    store.selectedTheme = "soft";
+    await nextTick();
+
+    expect(document.documentElement.dataset.theme).toBe("soft");
+    expect(themeMeta.getAttribute("content")).toBe("#f7f1ea");
   });
 });
