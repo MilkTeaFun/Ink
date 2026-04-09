@@ -732,7 +732,7 @@ func (s *Service) decryptSecrets(binding Binding) (map[string]string, error) {
 
 	plaintext, err := s.encryptor.Decrypt(binding.Ciphertext, binding.Nonce)
 	if err != nil {
-		return nil, ErrMissingSecret
+		return nil, fmt.Errorf("decrypt binding secrets: %w", err)
 	}
 
 	var secrets map[string]string
@@ -785,14 +785,19 @@ func sanitizedUploadName(filename string) string {
 }
 
 func unzipSecure(zipPath string, destination string) error {
+	const maxUncompressedBytes int64 = 64 << 20
+	return unzipSecureWithLimit(zipPath, destination, maxUncompressedBytes)
+}
+
+func unzipSecureWithLimit(zipPath string, destination string, maxUncompressedBytes int64) error {
 	reader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer reader.Close()
 
-	const maxUncompressedBytes int64 = 64 << 20
 	var totalUncompressed int64
+	destination = filepath.Clean(destination)
 
 	for _, file := range reader.File {
 		cleanName := filepath.Clean(file.Name)
@@ -804,7 +809,8 @@ func unzipSecure(zipPath string, destination string) error {
 		}
 
 		targetPath := filepath.Join(destination, cleanName)
-		if !strings.HasPrefix(targetPath, destination) {
+		relativePath, err := filepath.Rel(destination, targetPath)
+		if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) {
 			return fmt.Errorf("%w: invalid zip entry path", ErrInvalidPlugin)
 		}
 
@@ -818,11 +824,6 @@ func unzipSecure(zipPath string, destination string) error {
 			return err
 		}
 
-		totalUncompressed += int64(file.UncompressedSize64)
-		if totalUncompressed > maxUncompressedBytes {
-			return fmt.Errorf("%w: plugin archive is too large", ErrInvalidPlugin)
-		}
-
 		src, err := file.Open()
 		if err != nil {
 			return err
@@ -833,10 +834,22 @@ func unzipSecure(zipPath string, destination string) error {
 			return err
 		}
 
-		if _, err := io.Copy(dst, src); err != nil {
+		remaining := maxUncompressedBytes - totalUncompressed
+		if remaining < 0 {
+			remaining = 0
+		}
+
+		written, err := io.Copy(dst, &io.LimitedReader{R: src, N: remaining + 1})
+		totalUncompressed += written
+		if err != nil {
 			_ = dst.Close()
 			_ = src.Close()
 			return err
+		}
+		if totalUncompressed > maxUncompressedBytes {
+			_ = dst.Close()
+			_ = src.Close()
+			return fmt.Errorf("%w: plugin archive is too large", ErrInvalidPlugin)
 		}
 		if err := dst.Close(); err != nil {
 			_ = src.Close()

@@ -40,6 +40,8 @@ type ScheduleService interface {
 	Delete(ctx context.Context, accessToken string, scheduleID string) error
 }
 
+const pluginUploadMultipartMemory int64 = 32 << 10
+
 // Server exposes the HTTP handlers for authentication endpoints.
 type Server struct {
 	auth                 auth.AuthService
@@ -479,9 +481,12 @@ func (s *Server) handleUploadPlugin(w http.ResponseWriter, r *http.Request, requ
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, s.pluginUploadMaxBytes)
-	if err := r.ParseMultipartForm(s.pluginUploadMaxBytes); err != nil {
+	if err := r.ParseMultipartForm(pluginUploadMultipartMemory); err != nil {
 		writeError(w, requestID, http.StatusBadRequest, "invalid_upload", "插件上传包无效或体积过大。")
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 
 	file, header, err := r.FormFile("file")

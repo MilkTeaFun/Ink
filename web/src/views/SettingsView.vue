@@ -72,6 +72,33 @@ function defaultValueForField(field: PluginFieldSpec) {
   }
 }
 
+function createPluginDraftState(plugin: PluginDetails) {
+  const config: Record<string, unknown> = {};
+  const secrets: Record<string, string> = {};
+
+  for (const field of plugin.manifest.workspaceConfigSchema) {
+    if (field.type === "secret") {
+      secrets[field.key] = "";
+      continue;
+    }
+
+    config[field.key] = plugin.binding?.config?.[field.key] ?? defaultValueForField(field);
+  }
+
+  return {
+    enabled: plugin.binding?.enabled ?? false,
+    config,
+    secrets,
+  };
+}
+
+function resetPluginDraft(plugin: PluginDetails) {
+  const nextState = createPluginDraftState(plugin);
+  pluginEnabledDrafts.value[plugin.installation.id] = nextState.enabled;
+  pluginDrafts.value[plugin.installation.id] = nextState.config;
+  pluginSecretDrafts.value[plugin.installation.id] = nextState.secrets;
+}
+
 function ensurePluginDraft(plugin: PluginDetails) {
   pluginEnabledDrafts.value[plugin.installation.id] =
     pluginEnabledDrafts.value[plugin.installation.id] ?? plugin.binding?.enabled ?? false;
@@ -98,8 +125,20 @@ function ensurePluginDraft(plugin: PluginDetails) {
 watch(
   () => workspaceStore.availablePlugins,
   (plugins) => {
+    const activeIDs = new Set(plugins.map((plugin) => plugin.installation.id));
+    for (const drafts of [
+      pluginEnabledDrafts.value,
+      pluginDrafts.value,
+      pluginSecretDrafts.value,
+    ]) {
+      for (const installationID of Object.keys(drafts)) {
+        if (!activeIDs.has(installationID)) {
+          delete drafts[installationID];
+        }
+      }
+    }
     for (const plugin of plugins) {
-      ensurePluginDraft(plugin);
+      resetPluginDraft(plugin);
     }
   },
   { deep: true, immediate: true },
@@ -205,6 +244,7 @@ async function handlePluginSave(plugin: PluginDetails) {
   );
 
   if (saved) {
+    pluginSecretDrafts.value[plugin.installation.id] = createPluginDraftState(plugin).secrets;
     pluginTestMessages.value[plugin.installation.id] = "配置已保存。";
   }
 }

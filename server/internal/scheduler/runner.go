@@ -18,6 +18,10 @@ type Runner struct {
 }
 
 func NewRunner(processor Processor, logger *slog.Logger, interval time.Duration, limit int) *Runner {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Runner{
 		processor: processor,
 		logger:    logger,

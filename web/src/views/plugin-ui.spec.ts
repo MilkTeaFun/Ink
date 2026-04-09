@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 
 import { createTestRouter } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -84,6 +85,36 @@ function createPluginDetails() {
       status: "connected" as const,
       config: {
         feedUrl: "https://example.com/feed",
+      },
+    },
+  };
+}
+
+function createUpdatedPluginDetails() {
+  return {
+    ...createPluginDetails(),
+    manifest: {
+      ...createPluginDetails().manifest,
+      workspaceConfigSchema: [
+        {
+          key: "endpoint",
+          label: "Endpoint",
+          type: "url" as const,
+          required: true,
+          description: "https://example.com/api",
+        },
+        {
+          key: "apiKey",
+          label: "API Key",
+          type: "secret" as const,
+          required: false,
+        },
+      ],
+    },
+    binding: {
+      ...createPluginDetails().binding,
+      config: {
+        endpoint: "https://example.com/api",
       },
     },
   };
@@ -208,6 +239,37 @@ describe("plugin ui flows", () => {
       },
       true,
     );
+  });
+
+  it("refreshes plugin drafts after plugin updates and clears secret inputs after save", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/settings", "admin");
+    const plugin = createPluginDetails();
+    const updatedPlugin = createUpdatedPluginDetails();
+    store.availablePlugins = [plugin];
+    store.adminPlugins = [plugin];
+
+    vi.spyOn(store, "savePluginConfiguration").mockImplementation(async () => {
+      store.availablePlugins = [updatedPlugin];
+      store.adminPlugins = [updatedPlugin];
+      return updatedPlugin;
+    });
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    const secretInput = wrapper.find("input[placeholder='留空则保持当前密钥']");
+    await secretInput.setValue("draft-secret");
+    await wrapper.findAll("form").at(-1)?.trigger("submit");
+    await nextTick();
+
+    expect(wrapper.find("input[placeholder='https://example.com/feed']").exists()).toBe(false);
+    expect(wrapper.find("input[placeholder='https://example.com/api']").exists()).toBe(true);
+    expect(
+      (wrapper.find("input[placeholder='留空则保持当前密钥']").element as HTMLInputElement).value,
+    ).toBe("");
   });
 
   it("creates and deletes authenticated plugin schedules from the prints view", async () => {
