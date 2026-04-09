@@ -160,14 +160,14 @@ async function handleAIConfigSubmit() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 pt-4 pb-24 lg:pb-12">
-    <div class="max-w-2xl px-4 sm:px-0">
+  <section class="mx-auto max-w-5xl space-y-8 pt-4">
+    <div class="max-w-2xl">
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设置</h2>
     </div>
 
     <div class="space-y-12">
       <article
-        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">账号管理</h3>
@@ -379,7 +379,7 @@ async function handleAIConfigSubmit() {
       </article>
 
       <article
-        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">打印设置</h3>
@@ -446,7 +446,7 @@ async function handleAIConfigSubmit() {
       </article>
 
       <article
-        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">页面主题</h3>
@@ -476,7 +476,7 @@ async function handleAIConfigSubmit() {
       </article>
 
       <article
-        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">AI 服务</h3>
@@ -643,7 +643,7 @@ async function handleAIConfigSubmit() {
       </article>
 
       <article
-        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 px-4 sm:px-0 md:grid-cols-[minmax(0,13rem)_1fr]"
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">插件</h3>

@@ -22,7 +22,7 @@ async function handleLogout() {
 <template>
   <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
     <header
-      class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur lg:bg-white lg:px-8 lg:py-3"
+      class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:bg-white lg:px-8 lg:py-3"
     >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
@@ -105,7 +105,7 @@ async function handleLogout() {
     </div>
 
     <main
-      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pt-6 lg:px-8 lg:py-8"
+      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-8 lg:py-8"
     >
       <RouterView v-slot="{ Component, route: currentRoute }">
         <Transition name="page-swap" mode="out-in">
@@ -115,7 +115,7 @@ async function handleLogout() {
     </main>
 
     <nav
-      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
+      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
     >
       <div class="mx-auto grid max-w-lg grid-cols-4 gap-1">
         <RouterLink

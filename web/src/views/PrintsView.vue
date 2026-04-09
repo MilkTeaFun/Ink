@@ -113,7 +113,7 @@ function submitScheduleDialog() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-6 px-4 pt-4 pb-24 sm:space-y-8 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h2 class="text-2xl font-semibold tracking-tight text-stone-900">打印</h2>

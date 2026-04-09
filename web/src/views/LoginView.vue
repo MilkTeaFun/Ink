@@ -21,6 +21,15 @@ const noticeMessage = computed(() =>
   route.query.notice === "password-updated" ? "密码已更新，请使用新密码重新登录。" : "",
 );
 
+function handleBack() {
+  if (typeof window !== "undefined" && window.history.length > 1) {
+    router.back();
+    return;
+  }
+
+  void router.replace("/status");
+}
+
 async function handleSubmit() {
   formError.value = "";
 
@@ -44,19 +53,30 @@ async function handleSubmit() {
   <div
     class="min-h-[100dvh] bg-white px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:py-6"
   >
+    <div class="mx-auto max-w-6xl">
+      <button
+        type="button"
+        class="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 shadow-sm transition-colors hover:border-stone-300 hover:text-stone-900"
+        @click="handleBack"
+      >
+        <span aria-hidden="true">←</span>
+        <span>返回</span>
+      </button>
+    </div>
+
     <div
-      class="mx-auto grid min-h-[calc(100dvh-8rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12"
+      class="mx-auto mt-6 grid max-w-6xl content-start gap-6 sm:mt-8 sm:gap-8 lg:mt-10 lg:min-h-[calc(100dvh-10rem)] lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-12"
     >
-      <section class="px-2 py-4 sm:p-8 lg:p-10">
+      <section class="px-1 py-2 sm:px-2 sm:py-4 lg:p-10">
         <h1
-          class="text-[clamp(2rem,5vw,3.5rem)] leading-[1.1] font-semibold tracking-tight text-stone-900"
+          class="text-[clamp(2.25rem,7vw,3.5rem)] leading-[1.05] font-semibold tracking-tight text-stone-900"
         >
           <span class="block">打开 Ink</span>
           <span class="mt-2 block">继续你的纸条灵感</span>
         </h1>
       </section>
 
-      <section class="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10">
+      <section class="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
         <h2 class="text-xl font-semibold text-stone-900">登录账号</h2>
 
         <p
@@ -66,7 +86,7 @@ async function handleSubmit() {
           {{ noticeMessage }}
         </p>
 
-        <form class="mt-8 space-y-5" @submit.prevent="handleSubmit">
+        <form class="mt-6 space-y-4 sm:mt-8 sm:space-y-5" @submit.prevent="handleSubmit">
           <div>
             <label for="email" class="mb-2 block text-sm font-medium text-stone-900">账号</label>
             <input
