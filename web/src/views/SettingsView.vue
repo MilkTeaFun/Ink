@@ -181,9 +181,9 @@ async function handleAIConfigSubmit() {
                   {{ workspaceStore.authUser?.email ?? "当前未登录" }}
                 </p>
               </div>
-              <div class="flex items-center gap-3">
+              <div class="flex flex-wrap items-center gap-3">
                 <span
-                  class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+                  class="inline-flex shrink-0 items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-stone-800"
                 >
                   {{ workspaceStore.isAdmin ? "管理员" : "成员" }}
                 </span>
@@ -303,15 +303,15 @@ async function handleAIConfigSubmit() {
               v-if="workspaceStore.isAdmin"
               class="rounded-xl border border-stone-200 bg-stone-50 p-4"
             >
-              <div class="flex items-start justify-between gap-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p class="text-sm font-medium text-stone-900">创建新账号</p>
                   <p class="mt-1 text-sm text-stone-500">
-                    新账号默认作为独立成员使用，登录后会加载各自的真实工作区数据。
+                    为成员创建独立账号，登录后会加载各自的工作区。
                   </p>
                 </div>
                 <span
-                  class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                  class="inline-flex shrink-0 self-start rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800"
                 >
                   管理员
                 </span>
@@ -552,15 +552,15 @@ async function handleAIConfigSubmit() {
               class="rounded-xl border border-stone-200 bg-white p-4"
               @submit.prevent="handleAIConfigSubmit"
             >
-              <div class="flex items-start justify-between gap-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p class="text-sm font-medium text-stone-900">管理员配置</p>
                   <p class="mt-1 text-sm text-stone-500">
-                    这里只保存供应商、API URL、模型与服务端密钥。浏览器不会回显已保存的 Key。
+                    保存供应商、API URL、模型和服务端密钥。已保存的 Key 不会回显。
                   </p>
                 </div>
                 <span
-                  class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                  class="inline-flex shrink-0 self-start rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800"
                 >
                   管理员
                 </span>
