@@ -13,6 +13,19 @@ import {
 } from "@/services/auth";
 import { generateReplyWithMockService } from "@/services/mockInk";
 import {
+  createPrintSchedule,
+  deletePrintSchedule,
+  disablePlugin,
+  fetchAdminPlugins,
+  fetchPlugins,
+  fetchPrintSchedules,
+  savePluginBinding,
+  testPluginBinding,
+  togglePrintSchedule,
+  updatePrintSchedule,
+  uploadPluginZip,
+} from "@/services/plugins";
+import {
   bindPrinter,
   cancelPrintJob,
   createPrintJob,
@@ -27,6 +40,7 @@ import {
   fetchWorkspaceStateWithApi,
   saveWorkspaceStateWithApi,
 } from "@/services/workspace";
+import type { PluginDetails, PrintScheduleView } from "@/types/plugins";
 import type {
   AuthSession,
   Conversation,
@@ -411,6 +425,31 @@ function buildAIReplyMessages(messages: ConversationMessage[]) {
   })) as { role: "user" | "assistant"; content: string }[];
 }
 
+function cloneRecord(input?: Record<string, unknown>) {
+  return { ...input };
+}
+
+function mapPluginToSource(plugin: PluginDetails): SourceConnection {
+  const note =
+    plugin.binding?.lastError ||
+    plugin.installation.lastError ||
+    plugin.installation.description ||
+    "可作为定时打印内容来源";
+
+  return {
+    id: plugin.installation.id,
+    name: plugin.installation.displayName,
+    type: plugin.installation.runtimeType === "node" ? "Node 插件" : "Python 插件",
+    note,
+    status:
+      plugin.installation.status === "disabled" || !plugin.binding?.enabled
+        ? "disconnected"
+        : plugin.binding.status === "error"
+          ? "error"
+          : "connected",
+  };
+}
+
 export const useWorkspaceStore = defineStore("workspace", () => {
   const persisted = readPersistedWorkspaceState();
   const persistedAuthSession = readPersistedAuthSession();
@@ -430,6 +469,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const aiConfigSaving = ref(false);
   const aiConfigError = ref("");
   const printerSyncError = ref("");
+  const pluginLoading = ref(false);
+  const pluginSaving = ref(false);
+  const pluginUploadLoading = ref(false);
+  const pluginError = ref("");
+  const pluginActionError = ref("");
+  const pluginTestingId = ref("");
+  const pluginSavingId = ref("");
+  const pluginUploadingName = ref("");
   const workspaceOwnerId = ref<string | null>(null);
   const workspaceHydrating = ref(false);
 
@@ -439,6 +486,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const printJobs = ref<PrintJob[]>(persisted.printJobs);
   const schedules = ref<Schedule[]>(persisted.schedules);
   const sources = ref<SourceConnection[]>(persisted.sources);
+  const availablePlugins = ref<PluginDetails[]>([]);
+  const adminPlugins = ref<PluginDetails[]>([]);
+  const remoteSchedules = ref<PrintScheduleView[]>([]);
 
   const loginProtectionEnabled = ref(persisted.preferences.loginProtectionEnabled);
   const sendConfirmationEnabled = ref(persisted.preferences.sendConfirmationEnabled);
@@ -494,11 +544,50 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sortedPrintJobs.value.filter((job) => job.status === "pending" || job.status === "queued"),
   );
   const recentPrintJobs = computed(() => sortedPrintJobs.value.slice(0, 5));
+  const activeSchedules = computed(() =>
+    isAuthenticated.value
+      ? remoteSchedules.value.map((schedule) => ({
+          id: schedule.id,
+          title: schedule.title,
+          source: schedule.sourceLabel,
+          timeLabel: schedule.timeLabel,
+          deviceId: schedule.deviceId,
+          enabled: schedule.enabled,
+          pluginInstallationId: schedule.pluginInstallationId,
+          frequencyType: schedule.frequencyType,
+          timezone: schedule.timezone,
+          hour: schedule.hour,
+          minute: schedule.minute,
+          weekdays: schedule.weekdays,
+          scheduleConfig: cloneRecord(schedule.scheduleConfig),
+          pluginDisplayName: schedule.pluginDisplayName,
+          nextRunAt: schedule.nextRunAt,
+          lastRunAt: schedule.lastRunAt,
+          lastError: schedule.lastError || "",
+        }))
+      : schedules.value.map((schedule) => ({
+          ...schedule,
+          pluginInstallationId: "",
+          frequencyType: "daily",
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+          hour: 19,
+          minute: 30,
+          weekdays: [] as number[],
+          scheduleConfig: {},
+          pluginDisplayName: schedule.source,
+          nextRunAt: undefined,
+          lastRunAt: undefined,
+          lastError: "",
+        })),
+  );
+  const activeSources = computed(() =>
+    isAuthenticated.value ? availablePlugins.value.map(mapPluginToSource) : sources.value,
+  );
   const connectedDevicesCount = computed(
     () => devices.value.filter((device) => device.status === "connected").length,
   );
   const enabledSchedulesCount = computed(
-    () => schedules.value.filter((schedule) => schedule.enabled).length,
+    () => activeSchedules.value.filter((schedule) => schedule.enabled).length,
   );
   const pendingConfirmationCount = computed(
     () => printJobs.value.filter((job) => job.status === "pending").length,
@@ -537,8 +626,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       label: "已启用任务",
       value: `${enabledSchedulesCount.value} 条`,
       tone: "amber",
-      progress: schedules.value.length
-        ? Math.round((enabledSchedulesCount.value / schedules.value.length) * 100)
+      progress: activeSchedules.value.length
+        ? Math.round((enabledSchedulesCount.value / activeSchedules.value.length) * 100)
         : 0,
     },
     {
@@ -740,6 +829,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     clearRemotePrintStatusSync();
     workspaceHydrating.value = true;
     applyWorkspaceState(readPersistedWorkspaceState());
+    availablePlugins.value = [];
+    adminPlugins.value = [];
+    remoteSchedules.value = [];
+    pluginError.value = "";
+    pluginActionError.value = "";
     applyAIConfig({
       bound: false,
       providerName: "OpenAI Compatible",
@@ -824,25 +918,41 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   async function loadLiveIntegrations(accessToken: string) {
     aiConfigLoading.value = true;
+    pluginLoading.value = true;
     printerSyncError.value = "";
+    pluginError.value = "";
 
     try {
-      const [aiSummary, printerResponse, printJobResponse] = await Promise.all([
-        fetchAIConfigSummary(accessToken),
-        fetchPrinters(accessToken),
-        fetchPrintJobs(accessToken),
-      ]);
+      const [aiSummary, printerResponse, printJobResponse, pluginResponse, scheduleResponse] =
+        await Promise.all([
+          fetchAIConfigSummary(accessToken),
+          fetchPrinters(accessToken),
+          fetchPrintJobs(accessToken),
+          fetchPlugins(accessToken),
+          fetchPrintSchedules(accessToken),
+        ]);
 
       applyAIConfig(aiSummary);
       devices.value = printerResponse.devices;
       printJobs.value = printJobResponse.printJobs;
+      availablePlugins.value = pluginResponse.plugins;
+      remoteSchedules.value = scheduleResponse.schedules;
+
+      if (authUser.value?.role === "admin") {
+        const adminResponse = await fetchAdminPlugins(accessToken);
+        adminPlugins.value = adminResponse.plugins;
+      } else {
+        adminPlugins.value = [];
+      }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "加载设备与 AI 配置失败，请稍后重试。";
+        error instanceof Error ? error.message : "加载插件、设备与 AI 配置失败，请稍后重试。";
       aiConfigError.value = message;
       printerSyncError.value = message;
+      pluginError.value = message;
     } finally {
       aiConfigLoading.value = false;
+      pluginLoading.value = false;
     }
   }
 
@@ -1425,41 +1535,120 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return true;
   }
 
-  function toggleSchedule(scheduleId: string) {
+  function upsertRemoteSchedule(nextSchedule: PrintScheduleView) {
+    remoteSchedules.value = [
+      nextSchedule,
+      ...remoteSchedules.value.filter((schedule) => schedule.id !== nextSchedule.id),
+    ];
+  }
+
+  function upsertPlugin(nextPlugin: PluginDetails) {
+    availablePlugins.value = [
+      nextPlugin,
+      ...availablePlugins.value.filter(
+        (plugin) => plugin.installation.id !== nextPlugin.installation.id,
+      ),
+    ];
+    if (isAdmin.value) {
+      adminPlugins.value = [
+        nextPlugin,
+        ...adminPlugins.value.filter(
+          (plugin) => plugin.installation.id !== nextPlugin.installation.id,
+        ),
+      ];
+    }
+  }
+
+  async function toggleSchedule(scheduleId: string) {
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        const updated = await togglePrintSchedule(authSession.value.accessToken, scheduleId);
+        upsertRemoteSchedule(updated);
+        showFlash("定时任务状态已更新。", "success");
+        return true;
+      } catch (error) {
+        showFlash(
+          error instanceof Error ? error.message : "更新定时任务失败，请稍后重试。",
+          "error",
+        );
+        return false;
+      }
+    }
+
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, enabled: !schedule.enabled } : schedule,
     );
     showFlash("定时任务状态已更新。", "success");
+    return true;
   }
 
-  function createSchedule(options?: {
+  async function createSchedule(options?: {
     title?: string;
     source?: string;
-    timeLabel?: string;
     deviceId?: string;
+    pluginInstallationId?: string;
+    frequencyType?: "daily" | "weekly";
+    timezone?: string;
+    hour?: number;
+    minute?: number;
+    weekdays?: number[];
+    scheduleConfig?: Record<string, unknown>;
   }) {
     const nextDeviceId = options?.deviceId || defaultDeviceId.value;
     const targetDevice = devices.value.find((device) => device.id === nextDeviceId);
 
     if (!targetDevice || targetDevice.status === "offline") {
       showFlash("请先选择可用设备。", "error");
-      return;
+      return null;
+    }
+
+    if (isAuthenticated.value && authSession.value) {
+      const pluginInstallationId = options?.pluginInstallationId?.trim() ?? "";
+      if (!pluginInstallationId) {
+        showFlash("请选择插件来源。", "error");
+        return null;
+      }
+
+      try {
+        const schedule = await createPrintSchedule(authSession.value.accessToken, {
+          title: options?.title?.trim() || "新的定时任务",
+          pluginInstallationId,
+          frequencyType: options?.frequencyType || "daily",
+          timezone: options?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          hour: options?.hour ?? 19,
+          minute: options?.minute ?? 30,
+          weekdays: options?.weekdays ?? [],
+          scheduleConfig: cloneRecord(options?.scheduleConfig),
+          deviceId: nextDeviceId,
+          enabled: true,
+        });
+        upsertRemoteSchedule(schedule);
+        showFlash("已创建新的定时任务。", "success");
+        return schedule;
+      } catch (error) {
+        showFlash(
+          error instanceof Error ? error.message : "创建定时任务失败，请稍后重试。",
+          "error",
+        );
+        return null;
+      }
     }
 
     const schedule: Schedule = {
       id: createId("schedule"),
       title: options?.title?.trim() || "新的定时任务",
       source: options?.source?.trim() || "手动创建",
-      timeLabel: options?.timeLabel?.trim() || "每天 19:30",
+      timeLabel: "每天 19:30",
       deviceId: nextDeviceId,
       enabled: true,
     };
 
     schedules.value = [schedule, ...schedules.value];
     showFlash("已创建新的定时任务。", "success");
+    return schedule;
   }
 
-  function updateScheduleDevice(scheduleId: string, deviceId: string) {
+  async function updateScheduleDevice(scheduleId: string, deviceId: string) {
     const targetDevice = devices.value.find((device) => device.id === deviceId);
 
     if (!targetDevice || targetDevice.status === "offline") {
@@ -1467,10 +1656,64 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return;
     }
 
+    if (isAuthenticated.value && authSession.value) {
+      const current = remoteSchedules.value.find((schedule) => schedule.id === scheduleId);
+      if (!current) {
+        return;
+      }
+
+      try {
+        const updated = await updatePrintSchedule(authSession.value.accessToken, scheduleId, {
+          title: current.title,
+          pluginInstallationId: current.pluginInstallationId,
+          frequencyType: current.frequencyType,
+          timezone: current.timezone,
+          hour: current.hour,
+          minute: current.minute,
+          weekdays: current.weekdays,
+          scheduleConfig: cloneRecord(current.scheduleConfig),
+          deviceId,
+          enabled: current.enabled,
+        });
+        upsertRemoteSchedule(updated);
+        showFlash("定时任务设备已更新。", "success");
+        return;
+      } catch (error) {
+        showFlash(
+          error instanceof Error ? error.message : "更新定时任务失败，请稍后重试。",
+          "error",
+        );
+        return;
+      }
+    }
+
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, deviceId } : schedule,
     );
     showFlash("定时任务设备已更新。", "success");
+  }
+
+  async function deleteSchedule(scheduleId: string) {
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        await deletePrintSchedule(authSession.value.accessToken, scheduleId);
+        remoteSchedules.value = remoteSchedules.value.filter(
+          (schedule) => schedule.id !== scheduleId,
+        );
+        showFlash("定时任务已删除。", "success");
+        return true;
+      } catch (error) {
+        showFlash(
+          error instanceof Error ? error.message : "删除定时任务失败，请稍后重试。",
+          "error",
+        );
+        return false;
+      }
+    }
+
+    schedules.value = schedules.value.filter((schedule) => schedule.id !== scheduleId);
+    showFlash("定时任务已删除。", "success");
+    return true;
   }
 
   function toggleSourceConnection(sourceId: string) {
@@ -1492,6 +1735,151 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     );
     showFlash(nextStatus === "connected" ? "插件已连接。" : "插件已解绑。", "success");
     return true;
+  }
+
+  async function uploadPlugin(file: File) {
+    const current = authSession.value;
+
+    if (!current) {
+      pluginActionError.value = "登录状态已失效，请重新登录。";
+      return null;
+    }
+
+    pluginUploadLoading.value = true;
+    pluginActionError.value = "";
+    pluginUploadingName.value = file.name;
+
+    try {
+      const uploaded = await uploadPluginZip(current.accessToken, file);
+      upsertPlugin(uploaded);
+      if (isAdmin.value) {
+        const adminResponse = await fetchAdminPlugins(current.accessToken);
+        adminPlugins.value = adminResponse.plugins;
+      }
+      showFlash("插件已上传并完成安装。", "success");
+      return uploaded;
+    } catch (error) {
+      pluginActionError.value =
+        error instanceof Error ? error.message : "上传插件失败，请稍后重试。";
+      showFlash(pluginActionError.value, "error");
+      return null;
+    } finally {
+      pluginUploadLoading.value = false;
+      pluginUploadingName.value = "";
+    }
+  }
+
+  async function disablePluginInstallation(installationId: string) {
+    const current = authSession.value;
+
+    if (!current) {
+      pluginActionError.value = "登录状态已失效，请重新登录。";
+      return null;
+    }
+
+    pluginSaving.value = true;
+    pluginSavingId.value = installationId;
+    pluginActionError.value = "";
+
+    try {
+      const updated = await disablePlugin(current.accessToken, installationId);
+      upsertPlugin(updated);
+      adminPlugins.value = adminPlugins.value.map((plugin) =>
+        plugin.installation.id === installationId ? updated : plugin,
+      );
+      availablePlugins.value = availablePlugins.value.map((plugin) =>
+        plugin.installation.id === installationId
+          ? {
+              ...plugin,
+              installation: updated.installation,
+            }
+          : plugin,
+      );
+      showFlash("插件已停用。", "success");
+      return updated;
+    } catch (error) {
+      pluginActionError.value =
+        error instanceof Error ? error.message : "停用插件失败，请稍后重试。";
+      showFlash(pluginActionError.value, "error");
+      return null;
+    } finally {
+      pluginSaving.value = false;
+      pluginSavingId.value = "";
+    }
+  }
+
+  async function testPluginConfiguration(
+    installationId: string,
+    config: Record<string, unknown>,
+    secrets: Record<string, string>,
+    enabled = true,
+  ) {
+    const current = authSession.value;
+
+    if (!current) {
+      pluginActionError.value = "登录状态已失效，请重新登录。";
+      return null;
+    }
+
+    pluginTestingId.value = installationId;
+    pluginActionError.value = "";
+
+    try {
+      const result = await testPluginBinding(current.accessToken, installationId, {
+        enabled,
+        config,
+        secrets,
+      });
+      showFlash(
+        result.valid ? "插件连接测试通过。" : "插件连接测试未通过。",
+        result.valid ? "success" : "error",
+      );
+      return result;
+    } catch (error) {
+      pluginActionError.value =
+        error instanceof Error ? error.message : "测试插件连接失败，请稍后重试。";
+      showFlash(pluginActionError.value, "error");
+      return null;
+    } finally {
+      pluginTestingId.value = "";
+    }
+  }
+
+  async function savePluginConfiguration(
+    installationId: string,
+    config: Record<string, unknown>,
+    secrets: Record<string, string>,
+    enabled = true,
+  ) {
+    const current = authSession.value;
+
+    if (!current) {
+      pluginActionError.value = "登录状态已失效，请重新登录。";
+      return null;
+    }
+
+    pluginSaving.value = true;
+    pluginSavingId.value = installationId;
+    pluginActionError.value = "";
+
+    try {
+      const updated = await savePluginBinding(current.accessToken, installationId, {
+        enabled,
+        config,
+        secrets,
+      });
+      upsertPlugin(updated);
+      showFlash(enabled ? "插件配置已保存并启用。" : "插件配置已保存。", "success");
+      return updated;
+    } catch (error) {
+      pluginActionError.value =
+        error instanceof Error ? error.message : "保存插件配置失败，请稍后重试。";
+      showFlash(pluginActionError.value, "error");
+      return null;
+    } finally {
+      pluginSaving.value = false;
+      pluginSavingId.value = "";
+    }
   }
 
   function setDefaultDevice(deviceId: string) {
@@ -1572,6 +1960,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authError.value = "";
     accountCreationError.value = "";
     aiConfigError.value = "";
+    pluginError.value = "";
+    pluginActionError.value = "";
     workspaceOwnerId.value = null;
   }
 
@@ -1788,12 +2178,23 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     aiConfigSaving,
     aiConfigError,
     printerSyncError,
+    pluginLoading,
+    pluginSaving,
+    pluginUploadLoading,
+    pluginError,
+    pluginActionError,
+    pluginTestingId,
+    pluginSavingId,
+    pluginUploadingName,
     devices,
     conversations,
     activeConversationId,
     printJobs,
     schedules,
     sources,
+    availablePlugins,
+    adminPlugins,
+    remoteSchedules,
     loginProtectionEnabled,
     sendConfirmationEnabled,
     selectedTheme,
@@ -1811,6 +2212,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     defaultDevice,
     pendingPrintJobs,
     recentPrintJobs,
+    activeSchedules,
+    activeSources,
     connectedDevicesCount,
     enabledSchedulesCount,
     pendingConfirmationCount,
@@ -1840,7 +2243,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     toggleSchedule,
     createSchedule,
     updateScheduleDevice,
+    deleteSchedule,
     toggleSourceConnection,
+    uploadPlugin,
+    disablePluginInstallation,
+    testPluginConfiguration,
+    savePluginConfiguration,
     setDefaultDevice,
     setTheme,
     setSendConfirmation,

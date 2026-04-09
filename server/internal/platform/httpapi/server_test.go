@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,7 +14,9 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
+	"github.com/ruhuang/ink/server/internal/schedule"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -32,7 +35,7 @@ func TestLoginHandlerReturnsTokens(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5, 32<<20)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -55,7 +58,7 @@ func TestLoginHandlerReturnsTokens(t *testing.T) {
 }
 
 func TestMeRequiresBearerToken(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5, 32<<20)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	response := httptest.NewRecorder()
 
@@ -81,7 +84,7 @@ func TestLoginRateLimit(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1)
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1, 32<<20)
 
 	first := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	first.RemoteAddr = "127.0.0.1:1234"
@@ -102,7 +105,7 @@ func TestLoginRateLimit(t *testing.T) {
 }
 
 func TestChangePasswordReturnsNoContent(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5, 32<<20)
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/change-password",
@@ -131,9 +134,12 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 		fakeWorkspaceService{},
 		fakeAIService{},
 		fakePrinterService{},
+		fakePluginService{},
+		fakeScheduleService{},
 		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
 		time.Minute,
 		5,
+		32<<20,
 	)
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -151,7 +157,7 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 }
 
 func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5, 32<<20)
 
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/workspace", nil)
 	getResponse := httptest.NewRecorder()
@@ -171,7 +177,7 @@ func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
 }
 
 func TestAIConfigRequiresAuthorization(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, fakePluginService{}, fakeScheduleService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5, 32<<20)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/ai/config", nil)
 	response := httptest.NewRecorder()
 
@@ -192,9 +198,12 @@ func TestListPrintersReturnsDevices(t *testing.T) {
 				{ID: "device-1", Name: "书桌咕咕机", Status: "connected", Note: "默认设备"},
 			},
 		},
+		fakePluginService{},
+		fakeScheduleService{},
 		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
 		time.Minute,
 		5,
+		32<<20,
 	)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/printers", nil)
 	request.Header.Set("Authorization", "Bearer access-token")
@@ -371,3 +380,67 @@ func (f fakePrinterService) UpdatePrintJobDevice(_ context.Context, _ string, _ 
 
 var _ ai.AIService = fakeAIService{}
 var _ printer.PrinterService = fakePrinterService{}
+
+type fakePluginService struct {
+	items  []plugins.PluginDetails
+	result plugins.PluginDetails
+	test   plugins.ValidationResult
+	err    error
+}
+
+func (f fakePluginService) ListAdminInstallations(_ context.Context, _ string) ([]plugins.PluginDetails, error) {
+	return f.items, f.err
+}
+
+func (f fakePluginService) UploadPlugin(_ context.Context, _ string, _ string, _ io.Reader) (plugins.PluginDetails, error) {
+	return f.result, f.err
+}
+
+func (f fakePluginService) DisableInstallation(_ context.Context, _ string, _ string) (plugins.PluginDetails, error) {
+	return f.result, f.err
+}
+
+func (f fakePluginService) ListUserPlugins(_ context.Context, _ string) ([]plugins.PluginDetails, error) {
+	return f.items, f.err
+}
+
+func (f fakePluginService) GetUserPlugin(_ context.Context, _ string, _ string) (plugins.PluginDetails, error) {
+	return f.result, f.err
+}
+
+func (f fakePluginService) SaveBinding(_ context.Context, _ string, _ string, _ plugins.BindingInput) (plugins.PluginDetails, error) {
+	return f.result, f.err
+}
+
+func (f fakePluginService) TestBinding(_ context.Context, _ string, _ string, _ plugins.BindingInput) (plugins.ValidationResult, error) {
+	return f.test, f.err
+}
+
+type fakeScheduleService struct {
+	items []schedule.ScheduleView
+	item  schedule.ScheduleView
+	err   error
+}
+
+func (f fakeScheduleService) List(_ context.Context, _ string) ([]schedule.ScheduleView, error) {
+	return f.items, f.err
+}
+
+func (f fakeScheduleService) Create(_ context.Context, _ string, _ schedule.UpsertInput) (schedule.ScheduleView, error) {
+	return f.item, f.err
+}
+
+func (f fakeScheduleService) Update(_ context.Context, _ string, _ string, _ schedule.UpsertInput) (schedule.ScheduleView, error) {
+	return f.item, f.err
+}
+
+func (f fakeScheduleService) Toggle(_ context.Context, _ string, _ string) (schedule.ScheduleView, error) {
+	return f.item, f.err
+}
+
+func (f fakeScheduleService) Delete(_ context.Context, _ string, _ string) error {
+	return f.err
+}
+
+var _ PluginService = fakePluginService{}
+var _ ScheduleService = fakeScheduleService{}

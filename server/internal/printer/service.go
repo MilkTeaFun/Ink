@@ -91,6 +91,10 @@ type PrinterService interface {
 	UpdatePrintJobDevice(ctx context.Context, accessToken string, jobID string, input UpdateJobDeviceInput) (workspace.PrintJob, error)
 }
 
+type SystemPrinterService interface {
+	CreatePrintJobForUser(ctx context.Context, userID string, input CreateJobInput) (workspace.PrintJob, error)
+}
+
 type BindInput struct {
 	Name     string `json:"name"`
 	Note     string `json:"note"`
@@ -304,6 +308,14 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 		return workspace.PrintJob{}, err
 	}
 
+	return s.createPrintJobForUser(ctx, currentUser.ID, input)
+}
+
+func (s *Service) CreatePrintJobForUser(ctx context.Context, userID string, input CreateJobInput) (workspace.PrintJob, error) {
+	return s.createPrintJobForUser(ctx, userID, input)
+}
+
+func (s *Service) createPrintJobForUser(ctx context.Context, userID string, input CreateJobInput) (workspace.PrintJob, error) {
 	title := strings.TrimSpace(input.Title)
 	content := strings.TrimSpace(input.Content)
 	source := strings.TrimSpace(input.Source)
@@ -312,7 +324,7 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
-	binding, err := s.repo.FindBindingByID(ctx, currentUser.ID, bindingID)
+	binding, err := s.repo.FindBindingByID(ctx, userID, bindingID)
 	if err != nil {
 		return workspace.PrintJob{}, err
 	}
@@ -331,7 +343,7 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 	now := s.clock.Now()
 	job := Job{
 		ID:               jobID,
-		UserID:           currentUser.ID,
+		UserID:           userID,
 		PrinterBindingID: bindingID,
 		Title:            title,
 		Source:           chooseString(source, "手动打印"),
