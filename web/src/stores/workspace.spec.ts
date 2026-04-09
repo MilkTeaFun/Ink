@@ -14,11 +14,11 @@ import type {
   cancelPrintJob,
   createPrintJob,
   deletePrinter,
-  fetchPrintJobs,
   fetchPrinters,
   submitPrintJob,
   updatePrintJobDevice,
 } from "@/services/printers";
+import { fetchPrintJobs } from "@/services/printers";
 import type {
   createUserWithApi,
   fetchWorkspaceStateWithApi,
@@ -368,8 +368,23 @@ describe("workspace store", () => {
 
     expect(store.isAuthenticated).toBe(true);
     expect(store.devices).toEqual([]);
-    expect(store.conversations).toEqual([]);
+    expect(store.conversations).toHaveLength(1);
+    expect(store.activeConversation?.title).toBe("新对话");
+    expect(store.activeConversation?.messages).toEqual([]);
     expect(store.aiConfigSummary.bound).toBe(false);
+  });
+
+  it("can send the first message after loading an empty remote workspace", async () => {
+    const store = useWorkspaceStore();
+
+    await expect(store.login("admin", "demo-password")).resolves.toBe(true);
+    store.updateCurrentDraft("帮我整理一句登录后的第一条消息");
+
+    await expect(store.sendCurrentDraft()).resolves.toBe(true);
+
+    expect(store.activeConversation?.messages[0]?.role).toBe("user");
+    expect(store.activeConversation?.messages[0]?.text).toBe("帮我整理一句登录后的第一条消息");
+    expect(store.activeConversation?.messages.at(-1)?.role).toBe("assistant");
   });
 
   it("uses the real AI reply endpoint when the user is authenticated", async () => {
@@ -419,6 +434,42 @@ describe("workspace store", () => {
 
     await expect(store.confirmPrint(job!.id)).resolves.toBe(true);
     expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
+  });
+
+  it("refreshes queued authenticated print jobs until they complete", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const store = useWorkspaceStore();
+      store.printJobs = store.printJobs.filter((job) => job.status !== "queued");
+      authenticateStore();
+
+      const job = await store.createManualPrint({
+        title: "真实打印",
+        content: "这是一条真实打印任务。",
+      });
+
+      vi.mocked(fetchPrintJobs).mockResolvedValueOnce({
+        printJobs: store.printJobs.map((item) =>
+          item.id === job!.id
+            ? {
+                ...item,
+                status: "completed",
+                updatedAt: new Date(Date.now() + 1000).toISOString(),
+              }
+            : item,
+        ),
+      });
+
+      await expect(store.confirmPrint(job!.id)).resolves.toBe(true);
+      expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
+
+      await vi.advanceTimersByTimeAsync(1500);
+
+      expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("completed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("allows admins to create member accounts", async () => {

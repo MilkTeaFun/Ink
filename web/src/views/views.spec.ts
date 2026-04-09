@@ -287,6 +287,49 @@ describe("workspace views", () => {
     expect(store.pendingPrintJobs.at(0)?.source).toBe("对话选中问答");
   });
 
+  it("guides and supports the first message when there is no conversation history", async () => {
+    window.localStorage.setItem(
+      "ink.workspace.v1",
+      JSON.stringify({
+        authUser: null,
+        devices: [],
+        conversations: [],
+        activeConversationId: "",
+        printJobs: [],
+        schedules: [],
+        sources: [],
+        preferences: {
+          loginProtectionEnabled: false,
+          sendConfirmationEnabled: true,
+          theme: "light",
+          defaultDeviceId: "",
+        },
+        serviceBinding: {
+          providerName: null,
+          modelName: "Ink AI",
+          bound: false,
+        },
+      }),
+    );
+
+    const { pinia, router, store } = await createWorkspaceContext("/conversations", false);
+    const wrapper = mount(ConversationsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).toContain("还没有历史对话，直接输入第一条消息即可开始。");
+    expect(store.conversations).toHaveLength(1);
+
+    await wrapper.find("textarea").setValue("这是第一条消息");
+    await wrapper.find("button.ui-btn-primary").trigger("click");
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+    expect(store.activeConversation?.messages[0]?.text).toBe("这是第一条消息");
+    expect(store.activeConversation?.messages.at(-1)?.role).toBe("assistant");
+  });
+
   it("allows selecting and printing a user message", async () => {
     const { pinia, router, store } = await createWorkspaceContext("/conversations");
     const wrapper = mount(ConversationsView, {

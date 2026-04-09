@@ -53,9 +53,40 @@ import {
 const STORAGE_KEY = "ink.workspace.v1";
 const AUTH_SESSION_STORAGE_KEY = "ink.auth.session.v1";
 const REMOTE_SAVE_DEBOUNCE_MS = 180;
+const REMOTE_PRINT_STATUS_POLL_MS = 5000;
+const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
 
 function getNow() {
   return new Date().toISOString();
+}
+
+function createEmptyConversation(): Conversation {
+  return {
+    id: createId("conversation"),
+    title: "新对话",
+    preview: "从这里开始整理新的内容",
+    updatedAt: getNow(),
+    draft: "",
+    messages: [],
+  };
+}
+
+function normalizeConversations(conversations: Conversation[]): Conversation[] {
+  return conversations.length > 0 ? conversations : [createEmptyConversation()];
+}
+
+function resolveActiveConversationId(
+  activeConversationId: string | undefined,
+  conversations: Conversation[],
+) {
+  if (
+    activeConversationId &&
+    conversations.some((conversation) => conversation.id === activeConversationId)
+  ) {
+    return activeConversationId;
+  }
+
+  return conversations[0]?.id ?? "";
 }
 
 function createInitialMessages(): ConversationMessage[] {
@@ -264,12 +295,15 @@ function createSeedState(): PersistedWorkspaceState {
 
 function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState {
   const seed = createSeedState();
+  const conversations =
+    state.conversations === undefined
+      ? seed.conversations
+      : normalizeConversations(state.conversations);
 
   return {
     devices: state.devices ?? seed.devices,
-    conversations: state.conversations ?? seed.conversations,
-    activeConversationId:
-      state.activeConversationId ?? state.conversations?.[0]?.id ?? seed.activeConversationId,
+    conversations,
+    activeConversationId: resolveActiveConversationId(state.activeConversationId, conversations),
     printJobs: state.printJobs ?? seed.printJobs,
     schedules: state.schedules ?? seed.schedules,
     sources: state.sources ?? seed.sources,
@@ -430,6 +464,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   let flashTimer = 0;
   let remoteSaveTimer = 0;
   let remoteSavePromise: Promise<boolean> | null = null;
+  let remotePrintStatusTimer = 0;
+  let remotePrintStatusPromise: Promise<void> | null = null;
 
   const deviceMap = computed(() =>
     devices.value.reduce<Record<string, Device>>((accumulator, device) => {
@@ -486,6 +522,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
   const isAuthenticated = computed(() => authUser.value !== null && authSession.value !== null);
   const isAdmin = computed(() => authUser.value?.role === "admin");
+  const hasQueuedRemotePrintJobs = computed(
+    () => isAuthenticated.value && printJobs.value.some((job) => job.status === "queued"),
+  );
 
   const summaryCards = computed(() => [
     {
@@ -583,15 +622,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     { deep: true, immediate: true },
   );
 
+  watch(
+    hasQueuedRemotePrintJobs,
+    (hasQueuedJobs) => {
+      if (!hasQueuedJobs) {
+        clearRemotePrintStatusSync();
+        return;
+      }
+
+      scheduleRemotePrintStatusSync(true);
+    },
+    { immediate: true },
+  );
+
   function applyWorkspaceState(nextState: WorkspaceState) {
     const normalized = normalizeWorkspaceState(nextState);
     devices.value = normalized.devices;
     conversations.value = normalized.conversations;
-    activeConversationId.value = normalized.conversations.some(
-      (conversation) => conversation.id === normalized.activeConversationId,
-    )
-      ? normalized.activeConversationId
-      : (normalized.conversations[0]?.id ?? "");
+    activeConversationId.value = normalized.activeConversationId;
     printJobs.value = normalized.printJobs;
     schedules.value = normalized.schedules;
     sources.value = normalized.sources;
@@ -622,8 +670,74 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     devices.value = [nextDevice, ...devices.value.filter((device) => device.id !== nextDevice.id)];
   }
 
+  function clearRemotePrintStatusSync() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (remotePrintStatusTimer) {
+      window.clearTimeout(remotePrintStatusTimer);
+      remotePrintStatusTimer = 0;
+    }
+  }
+
+  function scheduleRemotePrintStatusSync(immediate = false) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    clearRemotePrintStatusSync();
+
+    if (!hasQueuedRemotePrintJobs.value) {
+      return;
+    }
+
+    remotePrintStatusTimer = window.setTimeout(() => {
+      remotePrintStatusTimer = 0;
+      void syncRemotePrintStatus();
+    }, immediate ? REMOTE_PRINT_STATUS_INITIAL_POLL_MS : REMOTE_PRINT_STATUS_POLL_MS);
+  }
+
+  async function syncRemotePrintStatus() {
+    if (remotePrintStatusPromise) {
+      return remotePrintStatusPromise;
+    }
+
+    const currentSession = authSession.value;
+    if (!currentSession || !hasQueuedRemotePrintJobs.value) {
+      clearRemotePrintStatusSync();
+      return;
+    }
+
+    remotePrintStatusPromise = (async () => {
+      try {
+        const accessToken = currentSession.accessToken;
+        const { printJobs: latestPrintJobs } = await fetchPrintJobs(accessToken);
+
+        if (authSession.value?.accessToken !== accessToken) {
+          return;
+        }
+
+        printJobs.value = latestPrintJobs;
+        printerSyncError.value = "";
+      } catch (error) {
+        printerSyncError.value =
+          error instanceof Error ? error.message : "同步打印状态失败，请稍后重试。";
+      } finally {
+        remotePrintStatusPromise = null;
+
+        if (hasQueuedRemotePrintJobs.value) {
+          scheduleRemotePrintStatusSync();
+        }
+      }
+    })();
+
+    return remotePrintStatusPromise;
+  }
+
   function restoreAnonymousWorkspace() {
     workspaceOwnerId.value = null;
+    clearRemotePrintStatusSync();
     workspaceHydrating.value = true;
     applyWorkspaceState(readPersistedWorkspaceState());
     applyAIConfig({
@@ -778,15 +892,25 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     selectedConversationMessageIds.value = [];
   }
 
+  function ensureActiveConversation() {
+    if (activeConversation.value) {
+      return activeConversation.value;
+    }
+
+    const existingConversation = conversations.value[0];
+    if (existingConversation) {
+      selectConversation(existingConversation.id);
+      return existingConversation;
+    }
+
+    const conversation = createEmptyConversation();
+    conversations.value = [conversation];
+    selectConversation(conversation.id);
+    return conversation;
+  }
+
   function createConversation() {
-    const conversation: Conversation = {
-      id: createId("conversation"),
-      title: "新对话",
-      preview: "从这里开始整理新的内容",
-      updatedAt: getNow(),
-      draft: "",
-      messages: [],
-    };
+    const conversation = createEmptyConversation();
 
     conversations.value = [conversation, ...conversations.value];
     selectConversation(conversation.id);
@@ -803,14 +927,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     if (remaining.length === 0) {
-      const replacement: Conversation = {
-        id: createId("conversation"),
-        title: "新对话",
-        preview: "从这里开始整理新的内容",
-        updatedAt: getNow(),
-        draft: "",
-        messages: [],
-      };
+      const replacement = createEmptyConversation();
 
       conversations.value = [replacement];
       selectConversation(replacement.id);
@@ -831,11 +948,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function updateCurrentDraft(value: string) {
-    if (!activeConversation.value) {
-      return;
-    }
+    const currentConversation = ensureActiveConversation();
 
-    updateConversation(activeConversation.value.id, (conversation) => ({
+    updateConversation(currentConversation.id, (conversation) => ({
       ...conversation,
       draft: value,
       updatedAt: getNow(),
@@ -843,17 +958,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function saveCurrentDraft() {
-    if (!activeConversation.value) {
-      return;
-    }
+    ensureActiveConversation();
 
     showFlash("草稿已保存。", "success");
   }
 
   async function sendCurrentDraft() {
-    const conversation = activeConversation.value;
+    const conversation = ensureActiveConversation();
 
-    if (!conversation || isGenerating.value) {
+    if (isGenerating.value) {
       return false;
     }
 

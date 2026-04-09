@@ -7,6 +7,14 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const workspaceStore = useWorkspaceStore();
 
 const hasMessages = computed(() => (workspaceStore.activeConversation?.messages.length ?? 0) > 0);
+const hasConversationHistory = computed(() =>
+  workspaceStore.conversations.some((conversation) => conversation.messages.length > 0),
+);
+const emptyStateHint = computed(() =>
+  hasConversationHistory.value
+    ? "输入内容后即可开始新的对话。"
+    : "还没有历史对话，直接输入第一条消息即可开始。",
+);
 
 function handleDraftInput(event: Event) {
   const target = event.target as HTMLTextAreaElement | null;
@@ -175,7 +183,12 @@ function handleDeleteCurrentConversation() {
           v-if="!hasMessages"
           class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 text-center"
         >
-          <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
+          <div class="space-y-2">
+            <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
+            <p class="text-sm leading-6 text-stone-500">
+              {{ emptyStateHint }}
+            </p>
+          </div>
         </div>
 
         <div v-else class="space-y-4 lg:flex-1 lg:overflow-y-auto lg:pr-2">
