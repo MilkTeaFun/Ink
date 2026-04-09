@@ -33,7 +33,7 @@ function handleDeleteCurrentConversation() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-6 px-4 pt-4 pb-24 sm:space-y-8 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">对话</h2>
     </div>
@@ -51,7 +51,7 @@ function handleDeleteCurrentConversation() {
         </button>
       </div>
 
-      <div class="flex snap-x gap-4 overflow-x-auto pb-4">
+      <div class="flex snap-x gap-4 overflow-x-auto pb-2">
         <button
           v-for="chat in workspaceStore.conversations"
           :key="chat.id"
@@ -96,7 +96,7 @@ function handleDeleteCurrentConversation() {
       </div>
     </section>
 
-    <div class="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
       <aside class="hidden min-w-0 space-y-4 lg:block">
         <div class="flex items-center justify-between">
           <div>
@@ -148,7 +148,9 @@ function handleDeleteCurrentConversation() {
         </div>
       </aside>
 
-      <div class="flex h-[calc(100vh-16rem)] min-h-[500px] min-w-0 flex-col">
+      <div
+        class="flex h-[calc(100dvh-15rem)] min-h-[26rem] min-w-0 flex-col rounded-[1.5rem] border border-stone-200 bg-white/90 p-4 shadow-sm sm:min-h-[32rem] lg:h-[calc(100dvh-16rem)] lg:min-h-[500px] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none"
+      >
         <div
           class="mb-4 flex shrink-0 flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -162,7 +164,7 @@ function handleDeleteCurrentConversation() {
           </div>
           <button
             type="button"
-            class="ui-btn-secondary px-3 py-1.5 text-sm"
+            class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
             @click="handleDeleteCurrentConversation"
           >
             删除对话
@@ -176,7 +178,7 @@ function handleDeleteCurrentConversation() {
           <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
         </div>
 
-        <div v-else class="flex-1 space-y-4 overflow-y-auto pr-2">
+        <div v-else class="flex-1 space-y-4 overflow-y-auto pr-1 sm:pr-2">
           <article
             v-for="message in workspaceStore.activeConversation?.messages"
             :key="message.id"
@@ -239,7 +241,7 @@ function handleDeleteCurrentConversation() {
         </div>
 
         <div class="mt-6 shrink-0 space-y-4 border-t border-stone-200 pt-4">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-wrap gap-2">
               <button
                 class="ui-btn-secondary whitespace-nowrap"

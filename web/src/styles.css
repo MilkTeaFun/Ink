@@ -12,6 +12,7 @@
   --app-surface: #ffffff;
   --app-text: #1c1917;
   --app-muted: #57534e;
+  --theme-color: #fafaf9;
 }
 
 :root[data-theme="soft"] {
@@ -19,6 +20,7 @@
   --app-surface: #fffaf5;
   --app-text: #2f241c;
   --app-muted: #6f6256;
+  --theme-color: #f7f1ea;
 }
 
 :root[data-theme="system"] {
@@ -35,11 +37,14 @@
     scroll-behavior: smooth;
     background: var(--app-bg);
     overflow-y: scroll;
+    overscroll-behavior-y: none;
   }
 
   body {
     margin: 0;
     min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
     font-family:
       "Noto Sans SC",
       "PingFang SC",
@@ -56,6 +61,8 @@
 
   #app {
     min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
   }
 
   a {
@@ -73,6 +80,11 @@
 
   ::selection {
     background: rgba(188, 108, 37, 0.24);
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
   }
 }
 
@@ -213,6 +225,29 @@
   .ui-btn-primary:disabled,
   .ui-btn-secondary:disabled {
     @apply cursor-not-allowed opacity-60 shadow-none;
+  }
+}
+
+@layer utilities {
+  .pt-safe {
+    padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+  }
+
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
+  }
+
+  .px-safe {
+    padding-right: calc(env(safe-area-inset-right) + 1rem);
+    padding-left: calc(env(safe-area-inset-left) + 1rem);
+  }
+}
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }
 

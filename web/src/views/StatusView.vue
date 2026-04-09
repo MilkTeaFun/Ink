@@ -55,7 +55,7 @@ async function submitAddDevice() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-5xl space-y-8 px-4 pt-4 pb-24 sm:px-0 lg:pb-12">
+  <section class="mx-auto max-w-5xl space-y-6 px-4 pt-4 pb-24 sm:space-y-8 sm:px-0 lg:pb-12">
     <div>
       <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
     </div>
@@ -101,8 +101,8 @@ async function submitAddDevice() {
             <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
           </div>
 
-          <div class="mb-4 flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-3">
               <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
               <RouterLink to="/tutorial" class="text-sm text-stone-500 hover:text-stone-900">
                 查看教程
@@ -143,7 +143,7 @@ async function submitAddDevice() {
             <article
               v-for="device in workspaceStore.devices"
               :key="device.id"
-              class="ui-list-row flex items-center justify-between gap-4"
+              class="ui-list-row flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="flex min-w-0 items-center gap-3">
                 <div
@@ -164,7 +164,7 @@ async function submitAddDevice() {
                 </div>
               </div>
 
-              <div class="flex shrink-0 items-center gap-2">
+              <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                 <span
                   class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                   :class="
@@ -199,7 +199,7 @@ async function submitAddDevice() {
         </section>
 
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
+          <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">自动打印</h3>
             </div>
@@ -219,7 +219,7 @@ async function submitAddDevice() {
             <article
               v-for="task in workspaceStore.schedules"
               :key="task.id"
-              class="ui-list-row flex items-center justify-between gap-4"
+              class="ui-list-row flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="min-w-0">
                 <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>

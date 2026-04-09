@@ -20,12 +20,19 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-white text-stone-900">
-    <header class="sticky top-0 z-40 border-b border-stone-200 bg-white px-4 py-3 lg:px-8">
+  <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
+    <header
+      class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur lg:bg-white lg:px-8 lg:py-3"
+    >
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
           <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-          <p class="text-sm font-semibold text-stone-950">Ink</p>
+          <div>
+            <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <p class="text-xs text-stone-500">
+              {{ route.meta.navHint ?? route.meta.title ?? "纸条工作区" }}
+            </p>
+          </div>
         </div>
 
         <button
@@ -97,7 +104,9 @@ async function handleLogout() {
       </div>
     </div>
 
-    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8">
+    <main
+      class="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:pt-6 lg:px-8 lg:py-8"
+    >
       <RouterView v-slot="{ Component, route: currentRoute }">
         <Transition name="page-swap" mode="out-in">
           <component :is="Component" :key="currentRoute.fullPath" />
@@ -106,21 +115,21 @@ async function handleLogout() {
     </main>
 
     <nav
-      class="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/80 p-2 backdrop-blur lg:hidden"
+      class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
     >
-      <div class="mx-auto grid max-w-md grid-cols-4 gap-1">
+      <div class="mx-auto grid max-w-lg grid-cols-4 gap-1">
         <RouterLink
           v-for="item in navigationItems"
           :key="item.name"
           :to="item.path"
-          class="flex flex-col items-center justify-center rounded-lg px-2 py-2 transition-colors"
+          class="flex min-h-12 flex-col items-center justify-center rounded-xl px-2 py-2.5 text-center transition-colors"
           :class="
             route.name === item.name
-              ? 'text-stone-900'
+              ? 'bg-stone-900 text-white shadow-sm'
               : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
           "
         >
-          <span class="mt-1 block text-xs font-medium">
+          <span class="block text-[11px] leading-tight font-medium">
             {{ item.label }}
             <span v-if="item.name === 'prints' && pendingBadge">· {{ pendingBadge }}</span>
           </span>

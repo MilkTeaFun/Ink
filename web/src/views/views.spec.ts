@@ -411,6 +411,7 @@ describe("workspace views", () => {
     expect(router.currentRoute.value.fullPath).toBe("/tutorial");
     expect(wrapper.text()).toContain("绑定咕咕机并打印第一张纸条");
     expect(wrapper.text()).toContain("步骤 1");
+    expect(wrapper.text()).toContain("添加到 iPhone 主屏幕");
     expect(wrapper.text()).toContain("去设置 AI");
   });
 

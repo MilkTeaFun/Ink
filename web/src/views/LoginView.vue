@@ -41,11 +41,13 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-white px-4 py-6 text-stone-900">
+  <div
+    class="min-h-[100dvh] bg-white px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] text-stone-900 sm:py-6"
+  >
     <div
-      class="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]"
+      class="mx-auto grid min-h-[calc(100dvh-8rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12"
     >
-      <section class="p-8 lg:p-10">
+      <section class="px-2 py-4 sm:p-8 lg:p-10">
         <h1
           class="text-[clamp(2rem,5vw,3.5rem)] leading-[1.1] font-semibold tracking-tight text-stone-900"
         >
@@ -54,7 +56,7 @@ async function handleSubmit() {
         </h1>
       </section>
 
-      <section class="rounded-2xl border border-stone-200 bg-white p-8 shadow-sm lg:p-10">
+      <section class="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10">
         <h2 class="text-xl font-semibold text-stone-900">登录账号</h2>
 
         <p
