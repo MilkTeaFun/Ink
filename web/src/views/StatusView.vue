@@ -209,7 +209,7 @@ async function submitAddDevice() {
           </div>
 
           <div
-            v-if="workspaceStore.schedules.length === 0"
+            v-if="workspaceStore.activeSchedules.length === 0"
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">还没有自动打印计划</h4>
@@ -217,7 +217,7 @@ async function submitAddDevice() {
 
           <div v-else class="ui-list-card">
             <article
-              v-for="task in workspaceStore.schedules"
+              v-for="task in workspaceStore.activeSchedules"
               :key="task.id"
               class="ui-list-row flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
             >

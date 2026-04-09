@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 import { useWorkspaceStore } from "@/stores/workspace";
+import type { PluginDetails, PluginFieldSpec } from "@/types/plugins";
 import { getThemeDescription } from "@/utils/workspace";
 
 const router = useRouter();
@@ -31,6 +32,11 @@ const aiBaseUrl = ref("");
 const aiModel = ref("gpt-4.1-mini");
 const aiApiKey = ref("");
 const aiFormError = ref("");
+const pluginUploadError = ref("");
+const pluginEnabledDrafts = ref<Record<string, boolean>>({});
+const pluginDrafts = ref<Record<string, Record<string, unknown>>>({});
+const pluginSecretDrafts = ref<Record<string, Record<string, string>>>({});
+const pluginTestMessages = ref<Record<string, string>>({});
 
 const AI_PROVIDER_TYPE = "openai-compatible";
 const AI_PROVIDER_NAME_FALLBACK = "OpenAI Compatible";
@@ -51,6 +57,206 @@ watch(
 function handleDefaultDeviceChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
   workspaceStore.setDefaultDevice(target?.value ?? workspaceStore.defaultDeviceId);
+}
+
+function defaultValueForField(field: PluginFieldSpec) {
+  if (field.defaultValue !== undefined) {
+    return field.defaultValue;
+  }
+
+  switch (field.type) {
+    case "checkbox":
+      return false;
+    default:
+      return "";
+  }
+}
+
+function ensurePluginDraft(plugin: PluginDetails) {
+  pluginEnabledDrafts.value[plugin.installation.id] =
+    pluginEnabledDrafts.value[plugin.installation.id] ?? plugin.binding?.enabled ?? false;
+
+  const nextDraft = { ...pluginDrafts.value[plugin.installation.id] };
+  for (const field of plugin.manifest.workspaceConfigSchema) {
+    if (field.type === "secret" || field.key in nextDraft) {
+      continue;
+    }
+    nextDraft[field.key] = plugin.binding?.config?.[field.key] ?? defaultValueForField(field);
+  }
+  pluginDrafts.value[plugin.installation.id] = nextDraft;
+
+  const nextSecrets = { ...pluginSecretDrafts.value[plugin.installation.id] };
+  for (const field of plugin.manifest.workspaceConfigSchema) {
+    if (field.type !== "secret" || field.key in nextSecrets) {
+      continue;
+    }
+    nextSecrets[field.key] = "";
+  }
+  pluginSecretDrafts.value[plugin.installation.id] = nextSecrets;
+}
+
+watch(
+  () => workspaceStore.availablePlugins,
+  (plugins) => {
+    for (const plugin of plugins) {
+      ensurePluginDraft(plugin);
+    }
+  },
+  { deep: true, immediate: true },
+);
+
+function pluginDraftValue(plugin: PluginDetails, field: PluginFieldSpec) {
+  return field.type === "secret"
+    ? (pluginSecretDrafts.value[plugin.installation.id]?.[field.key] ?? "")
+    : (pluginDrafts.value[plugin.installation.id]?.[field.key] ?? defaultValueForField(field));
+}
+
+function updatePluginDraft(plugin: PluginDetails, field: PluginFieldSpec, value: unknown) {
+  ensurePluginDraft(plugin);
+
+  if (field.type === "secret") {
+    pluginSecretDrafts.value[plugin.installation.id] = {
+      ...pluginSecretDrafts.value[plugin.installation.id],
+      [field.key]: String(value ?? ""),
+    };
+    return;
+  }
+
+  pluginDrafts.value[plugin.installation.id] = {
+    ...pluginDrafts.value[plugin.installation.id],
+    [field.key]:
+      field.type === "number" && value !== ""
+        ? Number(value)
+        : field.type === "checkbox"
+          ? Boolean(value)
+          : value,
+  };
+}
+
+function setPluginEnabled(plugin: PluginDetails, enabled: boolean) {
+  ensurePluginDraft(plugin);
+  pluginEnabledDrafts.value[plugin.installation.id] = enabled;
+}
+
+function handlePluginEnabledChange(plugin: PluginDetails, event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  setPluginEnabled(plugin, target?.checked ?? false);
+}
+
+function handlePluginInput(plugin: PluginDetails, field: PluginFieldSpec, event: Event) {
+  const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
+  updatePluginDraft(plugin, field, target?.value ?? "");
+}
+
+function handlePluginSelect(plugin: PluginDetails, field: PluginFieldSpec, event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  updatePluginDraft(plugin, field, target?.value ?? "");
+}
+
+function handlePluginCheckbox(plugin: PluginDetails, field: PluginFieldSpec, event: Event) {
+  const target = event.target as HTMLInputElement | null;
+  updatePluginDraft(plugin, field, target?.checked ?? false);
+}
+
+async function handlePluginUpload(event: Event) {
+  pluginUploadError.value = "";
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  const uploaded = await workspaceStore.uploadPlugin(file);
+  if (!uploaded) {
+    pluginUploadError.value = workspaceStore.pluginActionError;
+  }
+
+  if (target) {
+    target.value = "";
+  }
+}
+
+async function handlePluginDisable(installationId: string) {
+  await workspaceStore.disablePluginInstallation(installationId);
+}
+
+async function handlePluginTest(plugin: PluginDetails) {
+  ensurePluginDraft(plugin);
+  const result = await workspaceStore.testPluginConfiguration(
+    plugin.installation.id,
+    pluginDrafts.value[plugin.installation.id] ?? {},
+    pluginSecretDrafts.value[plugin.installation.id] ?? {},
+    pluginEnabledDrafts.value[plugin.installation.id] ?? false,
+  );
+
+  pluginTestMessages.value[plugin.installation.id] = result?.valid
+    ? "连接测试通过。"
+    : result?.errors?.map((error) => error.message).join("；") || workspaceStore.pluginActionError;
+}
+
+async function handlePluginSave(plugin: PluginDetails) {
+  ensurePluginDraft(plugin);
+  const saved = await workspaceStore.savePluginConfiguration(
+    plugin.installation.id,
+    pluginDrafts.value[plugin.installation.id] ?? {},
+    pluginSecretDrafts.value[plugin.installation.id] ?? {},
+    pluginEnabledDrafts.value[plugin.installation.id] ?? false,
+  );
+
+  if (saved) {
+    pluginTestMessages.value[plugin.installation.id] = "配置已保存。";
+  }
+}
+
+function pluginInstallationStatusLabel(status: PluginDetails["installation"]["status"]) {
+  switch (status) {
+    case "installing":
+      return "安装中";
+    case "ready":
+      return "可用";
+    case "failed":
+      return "异常";
+    case "disabled":
+      return "已停用";
+    default:
+      return status;
+  }
+}
+
+function pluginInstallationStatusClass(status: PluginDetails["installation"]["status"]) {
+  switch (status) {
+    case "ready":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
+    case "failed":
+      return "bg-rose-50 text-rose-700 ring-rose-600/20";
+    case "disabled":
+      return "bg-stone-100 text-stone-700 ring-stone-500/10";
+    default:
+      return "bg-amber-50 text-amber-700 ring-amber-600/20";
+  }
+}
+
+function pluginBindingStatusLabel(plugin: PluginDetails) {
+  if (plugin.installation.status === "disabled") {
+    return "已停用";
+  }
+
+  if (!plugin.binding?.enabled) {
+    return "未连接";
+  }
+
+  return workspaceStore.getSourceStatusLabel(plugin.binding.status);
+}
+
+function pluginBindingStatusClass(plugin: PluginDetails) {
+  if (plugin.installation.status === "disabled" || !plugin.binding?.enabled) {
+    return "bg-stone-100 text-stone-700 ring-stone-500/10";
+  }
+
+  return plugin.binding.status === "error"
+    ? "bg-rose-50 text-rose-700 ring-rose-600/20"
+    : "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
 }
 
 async function handleLogout() {
@@ -648,9 +854,338 @@ async function handleAIConfigSubmit() {
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">插件</h3>
         </div>
-        <div class="min-w-0">
-          <div class="ui-settings-group">
-            <div v-for="source in workspaceStore.sources" :key="source.id" class="ui-settings-row">
+        <div class="min-w-0 space-y-4">
+          <template v-if="workspaceStore.isAuthenticated">
+            <section
+              v-if="workspaceStore.isAdmin"
+              class="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
+            >
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="text-sm font-medium text-stone-900">本地上传插件 ZIP</p>
+                  <p class="mt-1 text-sm text-stone-500">
+                    上传后会自动校验 manifest、安装依赖，并把成功版本切换为当前可用版本。
+                  </p>
+                </div>
+                <label class="ui-btn-secondary inline-flex cursor-pointer px-4 py-2 text-sm">
+                  <input
+                    type="file"
+                    accept=".zip,application/zip"
+                    class="hidden"
+                    :disabled="workspaceStore.pluginUploadLoading"
+                    @change="handlePluginUpload"
+                  />
+                  {{ workspaceStore.pluginUploadLoading ? "上传中..." : "选择本地 ZIP" }}
+                </label>
+              </div>
+
+              <p
+                v-if="workspaceStore.pluginUploadLoading && workspaceStore.pluginUploadingName"
+                class="mt-3 text-sm text-stone-500"
+              >
+                正在处理 {{ workspaceStore.pluginUploadingName }}
+              </p>
+
+              <p
+                v-if="pluginUploadError"
+                class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+              >
+                {{ pluginUploadError }}
+              </p>
+            </section>
+
+            <section v-if="workspaceStore.isAdmin" class="ui-settings-group">
+              <div class="ui-settings-row !items-start">
+                <div class="ui-settings-copy">
+                  <p class="text-sm font-medium text-stone-900">已安装插件</p>
+                  <p class="mt-0.5 text-sm text-stone-500">
+                    这里展示实例内所有已安装版本，方便管理员确认可用状态与停用异常插件。
+                  </p>
+                </div>
+              </div>
+
+              <div
+                v-if="workspaceStore.adminPlugins.length === 0"
+                class="ui-settings-row !items-start"
+              >
+                <div class="ui-settings-copy">
+                  <p class="text-sm font-medium text-stone-900">还没有已安装插件</p>
+                  <p class="mt-0.5 text-sm text-stone-500">
+                    先上传一个符合 `ink-plugin.json` 协议的 ZIP 包。
+                  </p>
+                </div>
+              </div>
+
+              <div
+                v-for="plugin in workspaceStore.adminPlugins"
+                :key="plugin.installation.id"
+                class="ui-settings-row !items-start"
+              >
+                <div class="ui-settings-copy">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="text-sm font-medium text-stone-900">
+                      {{ plugin.installation.displayName }}
+                    </p>
+                    <span
+                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
+                      :class="pluginInstallationStatusClass(plugin.installation.status)"
+                    >
+                      {{ pluginInstallationStatusLabel(plugin.installation.status) }}
+                    </span>
+                    <span class="text-xs text-stone-500">
+                      {{ plugin.installation.runtimeType === "node" ? "Node" : "Python" }}
+                      · v{{ plugin.installation.version }}
+                    </span>
+                  </div>
+                  <p class="mt-1 text-sm text-stone-500">
+                    {{ plugin.manifest.description || plugin.installation.description }}
+                  </p>
+                  <p class="mt-1 text-xs text-stone-500">
+                    {{ plugin.installation.pluginKey }}
+                    <span v-if="plugin.installation.lastError">
+                      · {{ plugin.installation.lastError }}
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  v-if="plugin.installation.status !== 'disabled'"
+                  type="button"
+                  class="ui-btn-secondary px-3 py-1.5 text-sm"
+                  :disabled="
+                    workspaceStore.pluginSaving &&
+                    workspaceStore.pluginSavingId === plugin.installation.id
+                  "
+                  @click="handlePluginDisable(plugin.installation.id)"
+                >
+                  {{
+                    workspaceStore.pluginSaving &&
+                    workspaceStore.pluginSavingId === plugin.installation.id
+                      ? "停用中..."
+                      : "停用"
+                  }}
+                </button>
+              </div>
+            </section>
+
+            <section class="space-y-4">
+              <div
+                v-if="workspaceStore.pluginLoading"
+                class="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-sm text-stone-500"
+              >
+                正在加载插件配置...
+              </div>
+
+              <div
+                v-else-if="workspaceStore.pluginError"
+                class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700"
+              >
+                {{ workspaceStore.pluginError }}
+              </div>
+
+              <div
+                v-else-if="workspaceStore.availablePlugins.length === 0"
+                class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+              >
+                <h4 class="text-base font-semibold text-stone-900">还没有可配置插件</h4>
+                <p class="mt-2 text-sm text-stone-500">
+                  {{
+                    workspaceStore.isAdmin
+                      ? "上传插件后，这里会出现当前工作区可用的配置表单。"
+                      : "管理员安装插件后，这里会出现当前工作区可用的配置表单。"
+                  }}
+                </p>
+              </div>
+
+              <article
+                v-for="plugin in workspaceStore.availablePlugins"
+                :key="plugin.installation.id"
+                class="rounded-2xl border border-stone-200 bg-white px-5 py-5 shadow-xs"
+              >
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h4 class="text-base font-semibold text-stone-900">
+                        {{ plugin.installation.displayName }}
+                      </h4>
+                      <span
+                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
+                        :class="pluginInstallationStatusClass(plugin.installation.status)"
+                      >
+                        {{ pluginInstallationStatusLabel(plugin.installation.status) }}
+                      </span>
+                      <span
+                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
+                        :class="pluginBindingStatusClass(plugin)"
+                      >
+                        {{ pluginBindingStatusLabel(plugin) }}
+                      </span>
+                    </div>
+                    <p class="mt-1 text-sm text-stone-500">
+                      {{ plugin.manifest.description }}
+                    </p>
+                    <p class="mt-2 text-xs text-stone-500">
+                      {{ plugin.installation.runtimeType === "node" ? "Node.js" : "Python" }}
+                      · v{{ plugin.installation.version }} · key:
+                      {{ plugin.installation.pluginKey }}
+                    </p>
+                    <p
+                      v-if="plugin.binding?.lastError || plugin.installation.lastError"
+                      class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                    >
+                      {{ plugin.binding?.lastError || plugin.installation.lastError }}
+                    </p>
+                  </div>
+                </div>
+
+                <form class="mt-5 space-y-4" @submit.prevent="handlePluginSave(plugin)">
+                  <label
+                    class="flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"
+                  >
+                    <div>
+                      <span class="block text-sm font-medium text-stone-900">
+                        启用当前工作区绑定
+                      </span>
+                      <span class="mt-1 block text-sm text-stone-500">
+                        启用后，这个工作区就可以测试该插件并创建相关定时任务。
+                      </span>
+                    </div>
+                    <input
+                      :checked="pluginEnabledDrafts[plugin.installation.id] ?? false"
+                      type="checkbox"
+                      class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+                      @change="handlePluginEnabledChange(plugin, $event)"
+                    />
+                  </label>
+
+                  <div v-if="plugin.manifest.workspaceConfigSchema.length === 0">
+                    <p
+                      class="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-sm text-stone-500"
+                    >
+                      这个插件没有工作区级配置项，直接测试或保存即可。
+                    </p>
+                  </div>
+
+                  <div v-else class="grid gap-4 md:grid-cols-2">
+                    <div
+                      v-for="field in plugin.manifest.workspaceConfigSchema"
+                      :key="field.key"
+                      class="block"
+                      :class="{ 'md:col-span-2': field.type === 'textarea' }"
+                    >
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ field.label }}
+                        <span v-if="field.required" class="text-rose-500">*</span>
+                      </span>
+
+                      <textarea
+                        v-if="field.type === 'textarea'"
+                        :value="String(pluginDraftValue(plugin, field) ?? '')"
+                        rows="4"
+                        :placeholder="field.description || ''"
+                        class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                        @input="handlePluginInput(plugin, field, $event)"
+                      />
+
+                      <select
+                        v-else-if="field.type === 'select'"
+                        :value="String(pluginDraftValue(plugin, field) ?? '')"
+                        class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                        @change="handlePluginSelect(plugin, field, $event)"
+                      >
+                        <option
+                          v-for="option in field.options ?? []"
+                          :key="option.value"
+                          :value="option.value"
+                        >
+                          {{ option.label }}
+                        </option>
+                      </select>
+
+                      <label
+                        v-else-if="field.type === 'checkbox'"
+                        class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3"
+                      >
+                        <input
+                          :checked="Boolean(pluginDraftValue(plugin, field))"
+                          type="checkbox"
+                          class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
+                          @change="handlePluginCheckbox(plugin, field, $event)"
+                        />
+                        <span class="text-sm text-stone-700">
+                          {{ field.description || "启用此选项" }}
+                        </span>
+                      </label>
+
+                      <input
+                        v-else
+                        :value="pluginDraftValue(plugin, field)"
+                        :type="
+                          field.type === 'secret'
+                            ? 'password'
+                            : field.type === 'number'
+                              ? 'number'
+                              : field.type === 'url'
+                                ? 'url'
+                                : 'text'
+                        "
+                        :placeholder="
+                          field.type === 'secret' ? '留空则保持当前密钥' : field.description || ''
+                        "
+                        autocomplete="off"
+                        class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                        @input="handlePluginInput(plugin, field, $event)"
+                      />
+
+                      <span v-if="field.description" class="mt-2 block text-xs text-stone-500">
+                        {{ field.description }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p
+                    v-if="pluginTestMessages[plugin.installation.id]"
+                    class="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-700"
+                  >
+                    {{ pluginTestMessages[plugin.installation.id] }}
+                  </p>
+
+                  <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      class="ui-btn-secondary px-4 py-2 text-sm"
+                      :disabled="workspaceStore.pluginTestingId === plugin.installation.id"
+                      @click="handlePluginTest(plugin)"
+                    >
+                      {{
+                        workspaceStore.pluginTestingId === plugin.installation.id
+                          ? "测试中..."
+                          : "测试插件"
+                      }}
+                    </button>
+                    <button
+                      type="submit"
+                      class="ui-btn-primary px-4 py-2 text-sm"
+                      :disabled="workspaceStore.pluginSavingId === plugin.installation.id"
+                    >
+                      {{
+                        workspaceStore.pluginSavingId === plugin.installation.id
+                          ? "保存中..."
+                          : "保存配置"
+                      }}
+                    </button>
+                  </div>
+                </form>
+              </article>
+            </section>
+          </template>
+
+          <div v-else class="ui-settings-group">
+            <div
+              v-for="source in workspaceStore.activeSources"
+              :key="source.id"
+              class="ui-settings-row"
+            >
               <div class="ui-settings-copy">
                 <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
                 <p class="mt-0.5 text-sm text-stone-500">

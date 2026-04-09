@@ -27,6 +27,11 @@ type Config struct {
 	MemobirdAccessKey         string
 	MemobirdBaseURL           string
 	MemobirdTimeout           time.Duration
+	PluginRoot                string
+	PluginExecTimeout         time.Duration
+	PluginInstallTimeout      time.Duration
+	PluginUploadMaxBytes      int64
+	SchedulerPollInterval     time.Duration
 }
 
 // Load reads application configuration from the current environment.
@@ -66,6 +71,26 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	pluginExecTimeout, err := envDuration("PLUGIN_EXEC_TIMEOUT", 20*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	pluginInstallTimeout, err := envDuration("PLUGIN_INSTALL_TIMEOUT", 2*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
+	pluginUploadMaxBytes, err := envInt64("PLUGIN_UPLOAD_MAX_BYTES", 32<<20)
+	if err != nil {
+		return Config{}, err
+	}
+
+	schedulerPollInterval, err := envDuration("SCHEDULER_POLL_INTERVAL", 30*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		AppName:                   envString("APP_NAME", "ink-auth"),
 		Port:                      port,
@@ -81,6 +106,11 @@ func Load() (Config, error) {
 		MemobirdAccessKey:         os.Getenv("MEMOBIRD_ACCESS_KEY"),
 		MemobirdBaseURL:           os.Getenv("MEMOBIRD_BASE_URL"),
 		MemobirdTimeout:           memobirdTimeout,
+		PluginRoot:                envString("PLUGIN_ROOT", ".plugins"),
+		PluginExecTimeout:         pluginExecTimeout,
+		PluginInstallTimeout:      pluginInstallTimeout,
+		PluginUploadMaxBytes:      pluginUploadMaxBytes,
+		SchedulerPollInterval:     schedulerPollInterval,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -115,6 +145,18 @@ func Load() (Config, error) {
 	}
 	if cfg.MemobirdTimeout <= 0 {
 		return Config{}, fmt.Errorf("MEMOBIRD_TIMEOUT must be positive")
+	}
+	if cfg.PluginExecTimeout <= 0 {
+		return Config{}, fmt.Errorf("PLUGIN_EXEC_TIMEOUT must be positive")
+	}
+	if cfg.PluginInstallTimeout <= 0 {
+		return Config{}, fmt.Errorf("PLUGIN_INSTALL_TIMEOUT must be positive")
+	}
+	if cfg.PluginUploadMaxBytes <= 0 {
+		return Config{}, fmt.Errorf("PLUGIN_UPLOAD_MAX_BYTES must be positive")
+	}
+	if cfg.SchedulerPollInterval <= 0 {
+		return Config{}, fmt.Errorf("SCHEDULER_POLL_INTERVAL must be positive")
 	}
 
 	return cfg, nil
@@ -167,6 +209,20 @@ func envInt(key string, fallback int) (int, error) {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
+	}
+
+	return parsed, nil
+}
+
+func envInt64(key string, fallback int64) (int64, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback, nil
+	}
+
+	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s must be a valid integer: %w", key, err)
 	}

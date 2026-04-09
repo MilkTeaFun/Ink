@@ -21,7 +21,10 @@ import (
 	"github.com/ruhuang/ink/server/internal/platform/secret"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
 	"github.com/ruhuang/ink/server/internal/platform/token"
+	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
+	"github.com/ruhuang/ink/server/internal/schedule"
+	"github.com/ruhuang/ink/server/internal/scheduler"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -89,10 +92,44 @@ func main() {
 		cfg.MemobirdBaseURL,
 		cfg.MemobirdTimeout,
 	)
+	pluginService := plugins.NewService(
+		store,
+		service,
+		encryptor,
+		idgen.Generator{},
+		clock.SystemClock{},
+		nil,
+		cfg.PluginRoot,
+		cfg.PluginExecTimeout,
+		cfg.PluginInstallTimeout,
+	)
+	scheduleService := schedule.NewService(
+		store,
+		service,
+		pluginService,
+		store,
+		printerService,
+		store,
+		idgen.Generator{},
+		clock.SystemClock{},
+	)
+	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
+	schedulerRunner.Start(ctx)
 
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           httpapi.NewServer(service, workspaceService, aiService, printerService, logger, cfg.RateLimitWindow, cfg.RateLimitMax).Handler(),
+		Addr: fmt.Sprintf(":%d", cfg.Port),
+		Handler: httpapi.NewServer(
+			service,
+			workspaceService,
+			aiService,
+			printerService,
+			pluginService,
+			scheduleService,
+			logger,
+			cfg.RateLimitWindow,
+			cfg.RateLimitMax,
+			cfg.PluginUploadMaxBytes,
+		).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
