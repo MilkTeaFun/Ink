@@ -142,6 +142,81 @@ func TestCreatePrintJobRejectsOfflineBindings(t *testing.T) {
 	}
 }
 
+func TestCreatePrintJobSubmitImmediatelyRejectsUnconfiguredService(t *testing.T) {
+	repo := newFakePrinterRepo()
+	repo.bindings["device-1"] = Binding{
+		ID:               "device-1",
+		UserID:           "user-1",
+		DeviceIdentifier: "m1-1",
+		Status:           workspace.DeviceStatusConnected,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+
+	service := NewService(
+		repo,
+		fakeAuthenticator{},
+		fakeIDGenerator{},
+		fakeClock{now: time.Now().UTC()},
+		"",
+		"",
+		time.Second,
+	)
+
+	_, err := service.CreatePrintJob(context.Background(), "access-token", CreateJobInput{
+		Title:             "测试",
+		Source:            "手动打印",
+		Content:           "内容",
+		PrinterBindingID:  "device-1",
+		SubmitImmediately: true,
+	})
+	if !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("expected unconfigured immediate submit to be rejected, got %v", err)
+	}
+	if len(repo.jobs) != 0 {
+		t.Fatalf("expected no print job to be persisted when service is unconfigured")
+	}
+}
+
+func TestSubmitPrintJobRejectsNonPendingJobs(t *testing.T) {
+	now := time.Now().UTC()
+	repo := newFakePrinterRepo()
+	repo.jobs["job-1"] = Job{
+		ID:               "job-1",
+		UserID:           "user-1",
+		PrinterBindingID: "device-1",
+		Status:           workspace.PrintStatusQueued,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	repo.bindings["device-1"] = Binding{
+		ID:               "device-1",
+		UserID:           "user-1",
+		DeviceIdentifier: "m1-1",
+		Status:           workspace.DeviceStatusConnected,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	service := NewService(
+		repo,
+		fakeAuthenticator{},
+		fakeIDGenerator{},
+		fakeClock{now: now},
+		"access-key",
+		"",
+		time.Second,
+	)
+
+	_, err := service.SubmitPrintJob(context.Background(), "access-token", "job-1")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected non-pending job submission to be rejected, got %v", err)
+	}
+	if repo.jobs["job-1"].Status != workspace.PrintStatusQueued {
+		t.Fatalf("expected rejected submission to leave job status unchanged, got %s", repo.jobs["job-1"].Status)
+	}
+}
+
 type fakePrinterRepo struct {
 	bindings map[string]Binding
 	jobs     map[string]Job

@@ -333,6 +333,9 @@ func (s *Service) CreatePrintJob(ctx context.Context, accessToken string, input 
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
+	if input.SubmitImmediately && s.accessKey == "" {
+		return workspace.PrintJob{}, ErrNotConfigured
+	}
 	if input.SubmitImmediately {
 		job.Status = workspace.PrintStatusQueued
 	}
@@ -364,6 +367,9 @@ func (s *Service) SubmitPrintJob(ctx context.Context, accessToken string, jobID 
 	}
 	if job == nil {
 		return workspace.PrintJob{}, ErrNotFound
+	}
+	if job.Status != workspace.PrintStatusPending {
+		return workspace.PrintJob{}, ErrInvalidInput
 	}
 
 	binding, err := s.repo.FindBindingByID(ctx, currentUser.ID, job.PrinterBindingID)
