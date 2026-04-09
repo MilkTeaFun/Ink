@@ -2,46 +2,41 @@ package printer
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
-	"html"
 	"strings"
-	"time"
 
 	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
-	memobirdrenderer "github.com/ruhuang2001/memobird-go/renderer"
+	memobirdtextrender "github.com/ruhuang2001/memobird-go/textrender"
 )
 
 type imagePrintPipeline interface {
 	PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error)
 }
 
-// htmlImagePrintPipeline is a temporary adapter.
-// Replace this with the future memobird-go native text/image pipeline once it exists.
-type htmlImagePrintPipeline struct {
-	timeout time.Duration
-}
+//go:embed assets/NotoSansSC-Regular.otf
+var printerFontData []byte
 
-func (p htmlImagePrintPipeline) PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error) {
-	renderer := memobirdrenderer.New(p.timeout)
-	defer renderer.Close()
+type textImagePrintPipeline struct{}
 
-	responses, err := client.PrintHTMLAsImages(ctx, renderer, renderPrintHTML(job.Title, job.Content))
+func (p textImagePrintPipeline) PrintJob(ctx context.Context, client *memobirdapi.Client, job Job) (*memobirdapi.PrintResponse, error) {
+	imageBase64, err := memobirdtextrender.RenderBase64PNG(renderPrintableText(job.Title, job.Content), memobirdtextrender.Options{
+		Width:      384,
+		Padding:    18,
+		FontSize:   22,
+		LineHeight: 1.55,
+		FontData:   printerFontData,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return primaryPrintResponse(responses)
+	return client.PrintImage(ctx, imageBase64)
 }
 
-func renderPrintHTML(title string, content string) string {
-	escapedTitle := html.EscapeString(strings.TrimSpace(title))
-	escapedContent := strings.ReplaceAll(html.EscapeString(strings.TrimSpace(content)), "\n", "<br>")
-
-	return fmt.Sprintf(
-		`<article style="width: 100%%; box-sizing: border-box; padding: 10px 8px 14px; color: #111827; font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'WenQuanYi Zen Hei', sans-serif;"><h1 style="font-size: 24px; font-weight: 700; line-height: 1.35; margin: 0 0 14px 0;">%s</h1><div style="font-size: 17px; line-height: 1.75; white-space: normal; word-break: break-word;">%s</div></article>`,
-		escapedTitle,
-		escapedContent,
-	)
+func renderPrintableText(title string, content string) string {
+	parts := []string{strings.TrimSpace(title), strings.TrimSpace(content)}
+	return strings.Join(parts, "\n\n")
 }
 
 func primaryPrintResponse(responses []*memobirdapi.PrintResponse) (*memobirdapi.PrintResponse, error) {

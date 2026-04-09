@@ -3,6 +3,7 @@ package printer
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,6 +215,23 @@ func TestSubmitPrintJobRejectsNonPendingJobs(t *testing.T) {
 	}
 	if repo.jobs["job-1"].Status != workspace.PrintStatusQueued {
 		t.Fatalf("expected rejected submission to leave job status unchanged, got %s", repo.jobs["job-1"].Status)
+	}
+}
+
+func TestRenderPrintableTextKeepsTitleAndBodyStructure(t *testing.T) {
+	rendered := renderPrintableText("  今日提醒  ", "  第一行\n第二行  ")
+
+	if rendered != "今日提醒\n\n第一行\n第二行" {
+		t.Fatalf("renderPrintableText() = %q", rendered)
+	}
+}
+
+func TestPrinterFontDataIsAvailable(t *testing.T) {
+	if len(printerFontData) == 0 {
+		t.Fatal("expected embedded printer font data")
+	}
+	if !strings.HasPrefix(string(printerFontData[:4]), "OTTO") && !strings.HasPrefix(string(printerFontData[:4]), "\x00\x01\x00\x00") {
+		t.Fatalf("unexpected font header: %q", string(printerFontData[:4]))
 	}
 }
 

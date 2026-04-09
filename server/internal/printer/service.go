@@ -126,7 +126,7 @@ func NewService(
 		accessKey:    strings.TrimSpace(accessKey),
 		baseURL:      strings.TrimSpace(baseURL),
 		timeout:      timeout,
-		imagePrinter: htmlImagePrintPipeline{timeout: timeout},
+		imagePrinter: textImagePrintPipeline{},
 	}
 }
 
