@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"strings"
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
-	"github.com/ruhuang/ink/server/internal/integrations/memobird"
 	"github.com/ruhuang/ink/server/internal/workspace"
+	memobirdapi "github.com/ruhuang2001/memobird-go/memobird"
 )
 
 var (
@@ -71,13 +70,14 @@ type Clock interface {
 }
 
 type Service struct {
-	repo      Repository
-	auth      Authenticator
-	ids       IDGenerator
-	clock     Clock
-	accessKey string
-	baseURL   string
-	timeout   time.Duration
+	repo         Repository
+	auth         Authenticator
+	ids          IDGenerator
+	clock        Clock
+	accessKey    string
+	baseURL      string
+	timeout      time.Duration
+	imagePrinter imagePrintPipeline
 }
 
 type PrinterService interface {
@@ -119,13 +119,14 @@ func NewService(
 	timeout time.Duration,
 ) *Service {
 	return &Service{
-		repo:      repo,
-		auth:      authenticator,
-		ids:       ids,
-		clock:     clock,
-		accessKey: strings.TrimSpace(accessKey),
-		baseURL:   strings.TrimSpace(baseURL),
-		timeout:   timeout,
+		repo:         repo,
+		auth:         authenticator,
+		ids:          ids,
+		clock:        clock,
+		accessKey:    strings.TrimSpace(accessKey),
+		baseURL:      strings.TrimSpace(baseURL),
+		timeout:      timeout,
+		imagePrinter: htmlImagePrintPipeline{timeout: timeout},
 	}
 }
 
@@ -168,12 +169,15 @@ func (s *Service) BindDevice(ctx context.Context, accessToken string, input Bind
 		return workspace.Device{}, ErrInvalidInput
 	}
 
-	client := memobird.NewClient(memobird.Config{
+	client, err := memobirdapi.NewClient(memobirdapi.Config{
 		AccessKey: s.accessKey,
 		DeviceID:  deviceID,
 		BaseURL:   s.baseURL,
 		Timeout:   s.timeout,
 	})
+	if err != nil {
+		return workspace.Device{}, fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
+	}
 
 	userIdentifying := fmt.Sprintf("ink:%s:%s", currentUser.ID, deviceID)
 	resp, err := client.BindAndRemember(ctx, userIdentifying)
@@ -273,7 +277,10 @@ func (s *Service) ListPrintJobs(ctx context.Context, accessToken string) ([]work
 			if findErr != nil || binding == nil {
 				continue
 			}
-			client := s.newClient(*binding)
+			client, clientErr := s.newClient(*binding)
+			if clientErr != nil {
+				continue
+			}
 			statusResp, statusErr := client.GetPrintStatus(ctx, *jobs[index].ProviderPrintContentID)
 			if statusErr == nil && statusResp.IsPrinted() {
 				jobs[index].Status = workspace.PrintStatusCompleted
@@ -461,8 +468,16 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 		return Job{}, ErrNotConfigured
 	}
 
-	client := s.newClient(binding)
-	resp, err := client.PrintHTML(ctx, renderPrintHTML(job.Title, job.Content))
+	client, err := s.newClient(binding)
+	if err != nil {
+		message := err.Error()
+		job.Status = workspace.PrintStatusFailed
+		job.ErrorMessage = &message
+		job.UpdatedAt = s.clock.Now()
+		_ = s.repo.SaveJob(ctx, job)
+		return Job{}, fmt.Errorf("%w: %s", ErrInvalidInput, err.Error())
+	}
+	resp, err := s.imagePrinter.PrintJob(ctx, client, job)
 	if err != nil {
 		message := err.Error()
 		job.Status = workspace.PrintStatusFailed
@@ -496,25 +511,14 @@ func (s *Service) submitJob(ctx context.Context, binding Binding, job Job) (Job,
 	return job, nil
 }
 
-func (s *Service) newClient(binding Binding) *memobird.Client {
-	return memobird.NewClient(memobird.Config{
+func (s *Service) newClient(binding Binding) (*memobirdapi.Client, error) {
+	return memobirdapi.NewClient(memobirdapi.Config{
 		AccessKey: s.accessKey,
 		DeviceID:  binding.DeviceIdentifier,
 		UserID:    binding.ProviderUserID,
 		BaseURL:   s.baseURL,
 		Timeout:   s.timeout,
 	})
-}
-
-func renderPrintHTML(title string, content string) string {
-	escapedTitle := html.EscapeString(strings.TrimSpace(title))
-	escapedContent := strings.ReplaceAll(html.EscapeString(strings.TrimSpace(content)), "\n", "<br>")
-
-	return fmt.Sprintf(
-		`<article style="font-family: sans-serif; width: 320px; padding: 12px 8px; color: #111827;"><h1 style="font-size: 22px; margin: 0 0 12px 0;">%s</h1><div style="font-size: 16px; line-height: 1.7; white-space: normal;">%s</div></article>`,
-		escapedTitle,
-		escapedContent,
-	)
 }
 
 func mapJob(job Job) workspace.PrintJob {
