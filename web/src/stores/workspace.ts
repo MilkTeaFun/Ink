@@ -1,6 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
+import type { AIConfigSummary } from "@/services/ai";
+import { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import {
   AuthApiError,
   changePasswordWithApi,
@@ -10,6 +12,16 @@ import {
   refreshAuthSession,
 } from "@/services/auth";
 import { generateReplyWithMockService } from "@/services/mockInk";
+import {
+  bindPrinter,
+  cancelPrintJob,
+  createPrintJob,
+  deletePrinter,
+  fetchPrintJobs,
+  fetchPrinters,
+  submitPrintJob,
+  updatePrintJobDevice as updatePrintJobDeviceWithApi,
+} from "@/services/printers";
 import {
   createUserWithApi,
   fetchWorkspaceStateWithApi,
@@ -358,6 +370,13 @@ function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
   }, []);
 }
 
+function buildAIReplyMessages(messages: ConversationMessage[]) {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.text,
+  })) as { role: "user" | "assistant"; content: string }[];
+}
+
 export const useWorkspaceStore = defineStore("workspace", () => {
   const persisted = readPersistedWorkspaceState();
   const persistedAuthSession = readPersistedAuthSession();
@@ -373,6 +392,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const workspaceSyncError = ref("");
   const accountCreationLoading = ref(false);
   const accountCreationError = ref("");
+  const aiConfigLoading = ref(false);
+  const aiConfigSaving = ref(false);
+  const aiConfigError = ref("");
+  const printerSyncError = ref("");
   const workspaceOwnerId = ref<string | null>(null);
   const workspaceHydrating = ref(false);
 
@@ -389,6 +412,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const defaultDeviceId = ref(persisted.preferences.defaultDeviceId);
 
   const serviceBinding = ref<ServiceBinding>(persisted.serviceBinding);
+  const aiConfigSummary = ref<AIConfigSummary>({
+    bound: persisted.serviceBinding.bound,
+    providerName: persisted.serviceBinding.providerName ?? "OpenAI Compatible",
+    providerType: "openai-compatible",
+    baseUrl: "",
+    model: persisted.serviceBinding.modelName,
+    keyConfigured: false,
+  });
 
   const isGenerating = ref(false);
   const generationError = ref("");
@@ -447,7 +478,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   });
 
   const activeDeviceLabel = computed(() => defaultDevice.value?.name ?? "");
-  const activeModelLabel = computed(() => serviceBinding.value.modelName);
+  const activeModelLabel = computed(
+    () => aiConfigSummary.value.model || serviceBinding.value.modelName,
+  );
   const todayPrintCount = computed(() => todayCompletedCount.value);
   const welcomeLabel = computed(() => "整理内容，准备打印");
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
@@ -571,12 +604,35 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     generationError.value = "";
   }
 
+  function applyAIConfig(nextConfig: AIConfigSummary) {
+    aiConfigSummary.value = nextConfig;
+    serviceBinding.value = {
+      providerName: nextConfig.bound ? nextConfig.providerName : null,
+      modelName: nextConfig.model || "Ink AI",
+      bound: nextConfig.bound,
+    };
+    aiConfigError.value = "";
+  }
+
+  function upsertPrintJob(nextJob: PrintJob) {
+    printJobs.value = [nextJob, ...printJobs.value.filter((job) => job.id !== nextJob.id)];
+  }
+
   function restoreAnonymousWorkspace() {
     workspaceOwnerId.value = null;
     workspaceHydrating.value = true;
     applyWorkspaceState(readPersistedWorkspaceState());
+    applyAIConfig({
+      bound: false,
+      providerName: "OpenAI Compatible",
+      providerType: "openai-compatible",
+      baseUrl: "",
+      model: "Ink AI",
+      keyConfigured: false,
+    });
     workspaceHydrating.value = false;
     workspaceSyncError.value = "";
+    printerSyncError.value = "";
   }
 
   async function persistRemoteWorkspace() {
@@ -635,6 +691,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     try {
       const state = await fetchWorkspaceStateWithApi(currentSession.accessToken);
       applyWorkspaceState(state);
+      await loadLiveIntegrations(currentSession.accessToken);
       workspaceOwnerId.value = currentUser.id;
       return true;
     } catch (error) {
@@ -644,6 +701,30 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     } finally {
       workspaceHydrating.value = false;
       workspaceLoading.value = false;
+    }
+  }
+
+  async function loadLiveIntegrations(accessToken: string) {
+    aiConfigLoading.value = true;
+    printerSyncError.value = "";
+
+    try {
+      const [aiSummary, printerResponse, printJobResponse] = await Promise.all([
+        fetchAIConfigSummary(accessToken),
+        fetchPrinters(accessToken),
+        fetchPrintJobs(accessToken),
+      ]);
+
+      applyAIConfig(aiSummary);
+      devices.value = printerResponse.devices;
+      printJobs.value = printJobResponse.printJobs;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "加载设备与 AI 配置失败，请稍后重试。";
+      aiConfigError.value = message;
+      printerSyncError.value = message;
+    } finally {
+      aiConfigLoading.value = false;
     }
   }
 
@@ -801,7 +882,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     touchConversation(conversation.id);
 
     try {
-      const reply = await generateReplyWithMockService({ prompt });
+      const reply =
+        isAuthenticated.value && authSession.value
+          ? (
+              await generateAIReply(authSession.value.accessToken, {
+                messages: buildAIReplyMessages([...conversation.messages, userMessage]),
+              })
+            ).content
+          : await generateReplyWithMockService({ prompt });
       const assistantMessage: ConversationMessage = {
         id: createId("message"),
         role: "assistant",
@@ -859,7 +947,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }));
 
     try {
-      const reply = await generateReplyWithMockService({ prompt: latestUserMessage.text });
+      const refreshedConversation =
+        conversations.value.find((item) => item.id === conversation.id) ?? conversation;
+      const reply =
+        isAuthenticated.value && authSession.value
+          ? (
+              await generateAIReply(authSession.value.accessToken, {
+                messages: buildAIReplyMessages(refreshedConversation.messages),
+              })
+            ).content
+          : await generateReplyWithMockService({ prompt: latestUserMessage.text });
       const assistantMessage: ConversationMessage = {
         id: createId("message"),
         role: "assistant",
@@ -926,18 +1023,46 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     isCreatingPrint.value = true;
-    const job = buildPrintJob(title, content, source);
-    printJobs.value = [job, ...printJobs.value];
+    try {
+      if (isAuthenticated.value && authSession.value) {
+        if (!defaultDeviceId.value) {
+          showFlash("请先绑定咕咕机并设为默认设备。", "error");
+          return null;
+        }
 
-    if (job.status === "queued") {
-      showFlash("内容已直接加入打印队列。", "success");
-      await maybeCompleteQueuedJob(job.id);
-    } else {
-      showFlash("已加入待确认打印。", "success");
+        const job = await createPrintJob(authSession.value.accessToken, {
+          title,
+          source,
+          content,
+          printerBindingId: defaultDeviceId.value,
+          submitImmediately: !sendConfirmationEnabled.value,
+        });
+        upsertPrintJob(job);
+        showFlash(
+          sendConfirmationEnabled.value ? "已加入待确认打印。" : "内容已直接加入打印队列。",
+          "success",
+        );
+        return job;
+      }
+
+      const job = buildPrintJob(title, content, source);
+      printJobs.value = [job, ...printJobs.value];
+
+      if (job.status === "queued") {
+        showFlash("内容已直接加入打印队列。", "success");
+        await maybeCompleteQueuedJob(job.id);
+      } else {
+        showFlash("已加入待确认打印。", "success");
+      }
+
+      return job;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "创建打印任务失败，请稍后重试。";
+      showFlash(message, "error");
+      return null;
+    } finally {
+      isCreatingPrint.value = false;
     }
-
-    isCreatingPrint.value = false;
-    return job;
   }
 
   async function createPrintFromSelectedMessages() {
@@ -982,6 +1107,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return false;
     }
 
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        const submitted = await submitPrintJob(authSession.value.accessToken, jobId);
+        upsertPrintJob(submitted);
+        showFlash("已加入打印队列。", "success");
+        return true;
+      } catch (error) {
+        showFlash(error instanceof Error ? error.message : "提交打印失败，请稍后重试。", "error");
+        return false;
+      }
+    }
+
     printJobs.value = printJobs.value.map((job) =>
       job.id === jobId
         ? {
@@ -996,11 +1133,23 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return true;
   }
 
-  function cancelPrint(jobId: string) {
+  async function cancelPrint(jobId: string) {
     const target = printJobs.value.find((job) => job.id === jobId);
 
     if (!target || (target.status !== "pending" && target.status !== "queued")) {
       return false;
+    }
+
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        const cancelled = await cancelPrintJob(authSession.value.accessToken, jobId);
+        upsertPrintJob(cancelled);
+        showFlash("已取消打印。", "success");
+        return true;
+      } catch (error) {
+        showFlash(error instanceof Error ? error.message : "取消打印失败，请稍后重试。", "error");
+        return false;
+      }
     }
 
     printJobs.value = printJobs.value.map((job) =>
@@ -1016,7 +1165,24 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return true;
   }
 
-  function updatePrintDevice(jobId: string, deviceId: string) {
+  async function updatePrintDevice(jobId: string, deviceId: string) {
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        const updated = await updatePrintJobDeviceWithApi(authSession.value.accessToken, jobId, {
+          printerBindingId: deviceId,
+        });
+        upsertPrintJob(updated);
+        showFlash("打印目标设备已更新。", "success");
+        return;
+      } catch (error) {
+        showFlash(
+          error instanceof Error ? error.message : "更新打印设备失败，请稍后重试。",
+          "error",
+        );
+        return;
+      }
+    }
+
     printJobs.value = printJobs.value.map((job) =>
       job.id === jobId
         ? {
@@ -1029,7 +1195,37 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     showFlash("打印目标设备已更新。", "success");
   }
 
-  function addDevice(options?: { name?: string; note?: string; setAsDefault?: boolean }) {
+  async function addDevice(options?: {
+    name?: string;
+    note?: string;
+    deviceId?: string;
+    setAsDefault?: boolean;
+  }) {
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        const deviceIdentifier = options?.deviceId?.trim() ?? "";
+        if (!deviceIdentifier) {
+          showFlash("请填写咕咕机设备编号。", "error");
+          return null;
+        }
+
+        const device = await bindPrinter(authSession.value.accessToken, {
+          name: options?.name?.trim() || `咕咕机 ${devices.value.length + 1}`,
+          note: options?.note?.trim() || "",
+          deviceId: deviceIdentifier,
+        });
+        devices.value = [device, ...devices.value];
+        if (options?.setAsDefault || !defaultDeviceId.value) {
+          defaultDeviceId.value = device.id;
+        }
+        showFlash("设备已绑定。", "success");
+        return device;
+      } catch (error) {
+        showFlash(error instanceof Error ? error.message : "绑定设备失败，请稍后重试。", "error");
+        return null;
+      }
+    }
+
     const nextIndex = devices.value.length + 1;
     const device: Device = {
       id: createId("device"),
@@ -1046,11 +1242,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     return device;
   }
 
-  function removeDevice(deviceId: string) {
+  async function removeDevice(deviceId: string) {
     const target = devices.value.find((device) => device.id === deviceId);
 
     if (!target) {
       return false;
+    }
+
+    if (isAuthenticated.value && authSession.value) {
+      try {
+        await deletePrinter(authSession.value.accessToken, deviceId);
+      } catch (error) {
+        showFlash(error instanceof Error ? error.message : "解绑设备失败，请稍后重试。", "error");
+        return false;
+      }
     }
 
     const remainingDevices = devices.value.filter((device) => device.id !== deviceId);
@@ -1154,13 +1359,36 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     showFlash(enabled ? "刷新后会要求重新登录。" : "刷新后将保留登录状态。");
   }
 
-  function bindService() {
-    serviceBinding.value = {
-      providerName: "Ink AI",
-      modelName: activeModelLabel.value,
-      bound: true,
-    };
-    showFlash("服务已连接。", "success");
+  async function saveAIServiceConfig(config: {
+    providerName: string;
+    providerType: string;
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+  }) {
+    const current = authSession.value;
+
+    if (!current) {
+      aiConfigError.value = "登录状态已失效，请重新登录。";
+      return false;
+    }
+
+    aiConfigSaving.value = true;
+    aiConfigError.value = "";
+
+    try {
+      const summary = await saveAIConfig(current.accessToken, config);
+      applyAIConfig(summary);
+      showFlash("AI 服务配置已保存。", "success");
+      return true;
+    } catch (error) {
+      aiConfigError.value =
+        error instanceof Error ? error.message : "保存 AI 配置失败，请稍后重试。";
+      showFlash(aiConfigError.value, "error");
+      return false;
+    } finally {
+      aiConfigSaving.value = false;
+    }
   }
 
   function setAuthState(user: User, session: AuthSession) {
@@ -1168,6 +1396,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authSession.value = session;
     authError.value = "";
     accountCreationError.value = "";
+    aiConfigError.value = "";
   }
 
   function clearAuthState() {
@@ -1180,6 +1409,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authSession.value = null;
     authError.value = "";
     accountCreationError.value = "";
+    aiConfigError.value = "";
     workspaceOwnerId.value = null;
   }
 
@@ -1391,6 +1621,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     workspaceSyncError,
     accountCreationLoading,
     accountCreationError,
+    aiConfigSummary,
+    aiConfigLoading,
+    aiConfigSaving,
+    aiConfigError,
+    printerSyncError,
     devices,
     conversations,
     activeConversationId,
@@ -1448,7 +1683,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     setTheme,
     setSendConfirmation,
     setLoginProtection,
-    bindService,
+    saveAIServiceConfig,
     initializeAuth,
     refreshSessionIfNeeded,
     changePassword,

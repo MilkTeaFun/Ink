@@ -15,6 +15,7 @@ import LoginView from "@/views/LoginView.vue";
 import PrintsView from "@/views/PrintsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import StatusView from "@/views/StatusView.vue";
+import TutorialView from "@/views/TutorialView.vue";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -23,6 +24,7 @@ declare module "vue-router" {
     description?: string;
     navHint?: string;
     requiresAuth?: boolean;
+    showInNav?: boolean;
   }
 }
 
@@ -72,14 +74,26 @@ const shellChildren: RouteRecordRaw[] = [
       requiresAuth: true,
     },
   },
+  {
+    path: "tutorial",
+    name: "tutorial",
+    component: TutorialView,
+    meta: {
+      title: "使用教程",
+      description: "了解如何绑定咕咕机、配置 AI，并打印第一张纸条。",
+      showInNav: false,
+    },
+  },
 ];
 
-export const navigationItems = shellChildren.map((route) => ({
-  name: route.name as string,
-  path: `/${route.path}`,
-  label: route.meta?.label as string,
-  navHint: route.meta?.navHint as string,
-}));
+export const navigationItems = shellChildren
+  .filter((route) => route.meta?.showInNav !== false)
+  .map((route) => ({
+    name: route.name as string,
+    path: `/${route.path}`,
+    label: route.meta?.label as string,
+    navHint: route.meta?.navHint as string,
+  }));
 
 export const routes: RouteRecordRaw[] = [
   {

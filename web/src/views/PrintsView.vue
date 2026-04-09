@@ -57,10 +57,17 @@ async function submitPrintDialog() {
     return;
   }
 
-  await workspaceStore.createManualPrint({
+  const created = await workspaceStore.createManualPrint({
     title: printTitle.value,
     content: printContent.value,
   });
+
+  if (!created) {
+    printError.value =
+      workspaceStore.flashTone === "error" ? workspaceStore.flashMessage : "创建打印失败。";
+    return;
+  }
+
   closePrintDialog();
 }
 
@@ -90,6 +97,11 @@ function submitScheduleDialog() {
     return;
   }
 
+  if (!(scheduleDeviceId.value || workspaceStore.defaultDeviceId)) {
+    scheduleError.value = "请先绑定设备，再创建定时任务。";
+    return;
+  }
+
   workspaceStore.createSchedule({
     title: scheduleTitle.value,
     source: scheduleSource.value || "手动创建",
@@ -107,6 +119,9 @@ function submitScheduleDialog() {
         <h2 class="text-2xl font-semibold tracking-tight text-stone-900">打印</h2>
       </div>
       <div class="flex flex-wrap gap-2">
+        <RouterLink to="/tutorial" class="ui-btn-secondary px-3 py-1.5 text-sm">
+          绑定教程
+        </RouterLink>
         <button class="ui-btn-primary px-3 py-1.5 text-sm" @click="openPrintDialog">
           新建打印
         </button>
@@ -118,6 +133,14 @@ function submitScheduleDialog() {
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
+        <section
+          v-if="workspaceStore.printerSyncError"
+          class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
+        >
+          <p class="text-sm font-medium text-amber-900">设备状态同步异常</p>
+          <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
+        </section>
+
         <section>
           <div class="mb-4">
             <h3 class="text-base leading-6 font-semibold text-stone-900">待处理打印</h3>
@@ -128,6 +151,13 @@ function submitScheduleDialog() {
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
             <h4 class="text-base font-semibold text-stone-900">当前没有待处理打印</h4>
+            <p class="mt-2 text-sm text-stone-500">
+              {{
+                workspaceStore.isAuthenticated
+                  ? "绑定设备后可以先在对话页生成内容，再回到这里确认是否出纸。"
+                  : "当前未登录时显示的是演示数据流，登录后会切到各账号自己的真实打印记录。"
+              }}
+            </p>
           </div>
 
           <div v-else class="ui-list-card">
@@ -307,9 +337,9 @@ function submitScheduleDialog() {
             <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">默认打印设置</h3>
             </div>
-            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm"
-              >调整</RouterLink
-            >
+            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm">
+              调整
+            </RouterLink>
           </div>
 
           <div class="ui-list-card">
@@ -318,6 +348,9 @@ function submitScheduleDialog() {
               <p class="mt-1 text-sm text-stone-500">{{ item.value }}</p>
             </div>
           </div>
+          <p class="mt-3 text-sm text-stone-500">
+            如果你还没绑定咕咕机，先去教程页拿到设备编号，再回到状态页完成绑定。
+          </p>
         </section>
 
         <section>

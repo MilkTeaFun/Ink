@@ -9,6 +9,7 @@ const workspaceStore = useWorkspaceStore();
 const addDeviceOpen = ref(false);
 const deviceName = ref("");
 const deviceNote = ref("");
+const deviceIdentifier = ref("");
 const setAsDefault = ref(false);
 const addDeviceError = ref("");
 
@@ -17,6 +18,7 @@ function openAddDeviceDialog() {
   addDeviceError.value = "";
   deviceName.value = "";
   deviceNote.value = "";
+  deviceIdentifier.value = "";
   setAsDefault.value = false;
 }
 
@@ -24,7 +26,7 @@ function closeAddDeviceDialog() {
   addDeviceOpen.value = false;
 }
 
-function submitAddDevice() {
+async function submitAddDevice() {
   addDeviceError.value = "";
 
   if (!deviceName.value.trim()) {
@@ -32,11 +34,22 @@ function submitAddDevice() {
     return;
   }
 
-  workspaceStore.addDevice({
+  if (workspaceStore.isAuthenticated && !deviceIdentifier.value.trim()) {
+    addDeviceError.value = "请输入咕咕机设备编号。";
+    return;
+  }
+
+  const created = await workspaceStore.addDevice({
     name: deviceName.value,
     note: deviceNote.value,
+    deviceId: deviceIdentifier.value,
     setAsDefault: setAsDefault.value,
   });
+  if (!created) {
+    addDeviceError.value =
+      workspaceStore.flashTone === "error" ? workspaceStore.flashMessage : "绑定设备失败。";
+    return;
+  }
   closeAddDeviceDialog();
 }
 </script>
@@ -80,18 +93,53 @@ function submitAddDevice() {
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div class="space-y-8">
         <section>
-          <div class="mb-4 flex items-center justify-between gap-3">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
-            <button
-              type="button"
-              class="ui-btn-secondary px-3 py-1.5 text-sm"
-              @click="openAddDeviceDialog"
-            >
-              添加设备
-            </button>
+          <div
+            v-if="workspaceStore.printerSyncError"
+            class="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
+          >
+            <p class="text-sm font-medium text-amber-900">设备同步异常</p>
+            <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
           </div>
 
-          <div class="ui-list-card">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
+              <RouterLink to="/tutorial" class="text-sm text-stone-500 hover:text-stone-900">
+                查看教程
+              </RouterLink>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="ui-btn-secondary px-3 py-1.5 text-sm"
+                @click="openAddDeviceDialog"
+              >
+                添加设备
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="workspaceStore.devices.length === 0"
+            class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
+          >
+            <h4 class="text-base font-semibold text-stone-900">还没有绑定任何咕咕机</h4>
+            <p class="mt-2 text-sm text-stone-500">
+              {{
+                workspaceStore.isAuthenticated
+                  ? "先去教程页看一眼，再回来填写设备编号完成真实绑定。"
+                  : "当前未登录时展示的是演示工作区；登录后，这里会切到你账号自己的真实设备列表。"
+              }}
+            </p>
+            <RouterLink
+              to="/tutorial"
+              class="ui-btn-secondary mt-4 inline-flex px-3 py-1.5 text-sm"
+            >
+              打开教程
+            </RouterLink>
+          </div>
+
+          <div v-else class="ui-list-card">
             <article
               v-for="device in workspaceStore.devices"
               :key="device.id"
@@ -239,7 +287,11 @@ function submitAddDevice() {
     <AppDialog
       :open="addDeviceOpen"
       title="添加设备"
-      description="添加后可在状态页继续设为默认或解绑。"
+      :description="
+        workspaceStore.isAuthenticated
+          ? '登录后会把设备真实绑定到当前账号下，并可继续设为默认或解绑。'
+          : '当前为演示模式，添加后只会保存在本地示例数据里。'
+      "
       @close="closeAddDeviceDialog"
     >
       <form class="space-y-4" @submit.prevent="submitAddDevice">
@@ -259,6 +311,16 @@ function submitAddDevice() {
             v-model="deviceNote"
             type="text"
             placeholder="例如：窗边打印机"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <label v-if="workspaceStore.isAuthenticated" class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">咕咕机设备编号</span>
+          <input
+            v-model="deviceIdentifier"
+            type="text"
+            placeholder="例如：xxxxxx"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>

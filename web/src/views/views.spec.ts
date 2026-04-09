@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, vi } from "vitest";
 
 import { createTestRouter } from "@/router";
+import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import type {
   changePasswordWithApi,
   fetchCurrentUser,
@@ -10,6 +11,16 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type {
+  bindPrinter,
+  cancelPrintJob,
+  createPrintJob,
+  deletePrinter,
+  fetchPrintJobs,
+  fetchPrinters,
+  submitPrintJob,
+  updatePrintJobDevice,
+} from "@/services/printers";
 import type {
   createUserWithApi,
   fetchWorkspaceStateWithApi,
@@ -22,6 +33,7 @@ import LoginView from "@/views/LoginView.vue";
 import PrintsView from "@/views/PrintsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 import StatusView from "@/views/StatusView.vue";
+import TutorialView from "@/views/TutorialView.vue";
 
 vi.mock("@/services/auth", () => ({
   changePasswordWithApi: vi.fn<typeof changePasswordWithApi>(async () => undefined),
@@ -72,6 +84,88 @@ vi.mock("@/services/workspace", () => ({
   })),
   saveWorkspaceStateWithApi: vi.fn<typeof saveWorkspaceStateWithApi>(
     async (_accessToken, state) => state,
+  ),
+}));
+
+vi.mock("@/services/ai", () => ({
+  fetchAIConfigSummary: vi.fn<typeof fetchAIConfigSummary>(async () => ({
+    bound: false,
+    providerName: "OpenAI Compatible",
+    providerType: "openai-compatible",
+    baseUrl: "",
+    model: "gpt-4.1-mini",
+    keyConfigured: false,
+  })),
+  generateAIReply: vi.fn<typeof generateAIReply>(async () => ({
+    content: "这是来自真实 AI 服务的回复。",
+    model: "gpt-4.1-mini",
+    providerName: "OpenAI Compatible",
+  })),
+  saveAIConfig: vi.fn<typeof saveAIConfig>(async (_accessToken, payload) => ({
+    bound: true,
+    providerName: payload.providerName,
+    providerType: payload.providerType,
+    baseUrl: payload.baseUrl,
+    model: payload.model,
+    keyConfigured: true,
+  })),
+}));
+
+vi.mock("@/services/printers", () => ({
+  bindPrinter: vi.fn<typeof bindPrinter>(async (_accessToken, payload) => ({
+    id: "device-api-1",
+    name: payload.name,
+    status: "connected",
+    note: payload.note,
+  })),
+  cancelPrintJob: vi.fn<typeof cancelPrintJob>(async (_accessToken, jobId) => ({
+    id: jobId,
+    title: "服务端任务",
+    source: "手动打印",
+    deviceId: "device-api-1",
+    status: "cancelled",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: "内容",
+  })),
+  createPrintJob: vi.fn<typeof createPrintJob>(async (_accessToken, payload) => ({
+    id: "print-api-1",
+    title: payload.title,
+    source: payload.source,
+    deviceId: payload.printerBindingId,
+    status: payload.submitImmediately ? "queued" : "pending",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: payload.content,
+  })),
+  deletePrinter: vi.fn<typeof deletePrinter>(async () => undefined),
+  fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(async () => ({
+    printJobs: [],
+  })),
+  fetchPrinters: vi.fn<typeof fetchPrinters>(async () => ({
+    devices: [],
+  })),
+  submitPrintJob: vi.fn<typeof submitPrintJob>(async (_accessToken, jobId) => ({
+    id: jobId,
+    title: "服务端任务",
+    source: "手动打印",
+    deviceId: "device-api-1",
+    status: "queued",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: "内容",
+  })),
+  updatePrintJobDevice: vi.fn<typeof updatePrintJobDevice>(
+    async (_accessToken, jobId, payload) => ({
+      id: jobId,
+      title: "服务端任务",
+      source: "手动打印",
+      deviceId: payload.printerBindingId,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      content: "内容",
+    }),
   ),
 }));
 
@@ -141,24 +235,21 @@ describe("workspace views", () => {
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     await wrapper.find("input[placeholder='例如：客厅咕咕机']").setValue("客厅咕咕机");
     await wrapper.find("input[placeholder='例如：窗边打印机']").setValue("窗边打印机");
+    await wrapper.find("input[placeholder='例如：xxxxxx']").setValue("m1-123456");
     await wrapper.find("input[type='checkbox']").setValue(true);
     await wrapper.find("form").trigger("submit");
+
     expect(store.devices).toHaveLength(previousLength + 1);
-    expect(store.defaultDeviceId).toBe(store.devices.at(-1)?.id);
+    expect(store.defaultDeviceId).toBe(store.devices.at(0)?.id);
 
-    const bedroomArticle = wrapper
+    const deskArticle = wrapper
       .findAll("article")
-      .find((article) => article.text().includes("卧室咕咕机"));
-    await bedroomArticle
+      .find((article) => article.text().includes("书桌咕咕机"));
+    await deskArticle
       ?.findAll("button")
-      .find((button) => button.text() === "设为默认")
-      ?.trigger("click");
-    expect(store.defaultDeviceId).toBe("device-bedroom");
-
-    await wrapper
-      .findAll("button")
       .find((button) => button.text() === "解绑")
       ?.trigger("click");
+
     expect(store.devices.some((device) => device.id === "device-desk")).toBe(false);
   });
 
@@ -308,6 +399,20 @@ describe("workspace views", () => {
     expect(router.currentRoute.value.fullPath).toBe("/settings");
   });
 
+  it("renders the tutorial page with binding and printing guidance", async () => {
+    const { pinia, router } = await createWorkspaceContext("/tutorial", false);
+    const wrapper = mount(TutorialView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(router.currentRoute.value.fullPath).toBe("/tutorial");
+    expect(wrapper.text()).toContain("绑定咕咕机并打印第一张纸条");
+    expect(wrapper.text()).toContain("步骤 1");
+    expect(wrapper.text()).toContain("去设置 AI");
+  });
+
   it("confirms pending prints and reflects shared defaults", async () => {
     const { pinia, router, store } = await createWorkspaceContext("/prints");
     const wrapper = mount(PrintsView, {
@@ -323,6 +428,7 @@ describe("workspace views", () => {
     expect(store.pendingPrintJobs.some((job: PrintJob) => job.status === "queued")).toBe(true);
     expect(wrapper.text()).toContain("默认打印设置");
     expect(wrapper.text()).toContain("书桌咕咕机");
+    expect(wrapper.text()).toContain("绑定教程");
   });
 
   it("cancels a pending print job from the prints view", async () => {
@@ -359,6 +465,48 @@ describe("workspace views", () => {
     expect(store.activeDeviceLabel).toBe("卧室咕咕机");
     expect(selects).toHaveLength(1);
     expect(wrapper.text()).toContain("AI 服务");
+    expect(wrapper.text()).toContain("仅管理员可修改");
+  });
+
+  it("lets administrators submit the real AI config form", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/settings");
+    store.authUser = {
+      id: "user-1",
+      email: "admin",
+      name: "Administrator",
+      role: "admin",
+    };
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    await wrapper.find("input[placeholder='例如：OpenAI Compatible']").setValue("Acme AI");
+    await wrapper
+      .find("input[placeholder='例如：https://api.openai.com/v1']")
+      .setValue("https://example.com/v1");
+    await wrapper.find("input[placeholder='例如：gpt-4.1-mini']").setValue("gpt-4.1-mini");
+    await wrapper.find("input[placeholder='输入新的服务端密钥']").setValue("secret-key");
+
+    const aiForm = wrapper.findAll("form").at(-1);
+    await aiForm?.trigger("submit");
+
+    expect(store.aiConfigSummary.bound).toBe(true);
+    expect(store.aiConfigSummary.providerName).toBe("Acme AI");
+  });
+
+  it("shows AI summary-only copy for non-admin settings users", async () => {
+    const { pinia, router } = await createWorkspaceContext("/settings");
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).toContain("仅管理员可修改");
+    expect(wrapper.text()).toContain("当前接入状态");
   });
 
   it("submits the password change form and returns to login", async () => {
@@ -377,7 +525,7 @@ describe("workspace views", () => {
     await showButtons[0]?.trigger("click");
     expect(passwordInputs[0].attributes("type")).toBe("text");
 
-    await wrapper.find("form").trigger("submit");
+    await wrapper.findAll("form")[0]?.trigger("submit");
     await new Promise((resolve) => window.setTimeout(resolve, 10));
 
     expect(store.isAuthenticated).toBe(false);
@@ -401,5 +549,6 @@ describe("workspace views", () => {
 
     expect(wrapper.text()).toContain("创建新账号");
     expect(wrapper.text()).toContain("管理员");
+    expect(wrapper.text()).toContain("管理员配置");
   });
 });
