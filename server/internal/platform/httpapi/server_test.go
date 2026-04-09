@@ -11,7 +11,9 @@ import (
 
 	"log/slog"
 
+	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -30,7 +32,7 @@ func TestLoginHandlerReturnsTokens(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -53,7 +55,7 @@ func TestLoginHandlerReturnsTokens(t *testing.T) {
 }
 
 func TestMeRequiresBearerToken(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	response := httptest.NewRecorder()
 
@@ -79,7 +81,7 @@ func TestLoginRateLimit(t *testing.T) {
 				AccessTokenExpiresAt: time.Now().UTC().Add(15 * time.Minute),
 			},
 		},
-	}, fakeWorkspaceService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1)
+	}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 1)
 
 	first := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"email":"name@example.com","password":"demo-password"}`))
 	first.RemoteAddr = "127.0.0.1:1234"
@@ -100,7 +102,7 @@ func TestLoginRateLimit(t *testing.T) {
 }
 
 func TestChangePasswordReturnsNoContent(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
 	request := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/change-password",
@@ -127,6 +129,8 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 			},
 		},
 		fakeWorkspaceService{},
+		fakeAIService{},
+		fakePrinterService{},
 		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
 		time.Minute,
 		5,
@@ -147,7 +151,7 @@ func TestCreateUserRequiresAdminAuthorization(t *testing.T) {
 }
 
 func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
-	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
 
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/workspace", nil)
 	getResponse := httptest.NewRecorder()
@@ -163,6 +167,43 @@ func TestWorkspaceHandlersRequireAuthorization(t *testing.T) {
 
 	if putResponse.Code != http.StatusUnauthorized {
 		t.Fatalf("expected save workspace to require auth, got %d", putResponse.Code)
+	}
+}
+
+func TestAIConfigRequiresAuthorization(t *testing.T) {
+	server := NewServer(fakeAuthService{}, fakeWorkspaceService{}, fakeAIService{}, fakePrinterService{}, slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), time.Minute, 5)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/ai/config", nil)
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestListPrintersReturnsDevices(t *testing.T) {
+	server := NewServer(
+		fakeAuthService{},
+		fakeWorkspaceService{},
+		fakeAIService{},
+		fakePrinterService{
+			devices: []workspace.Device{
+				{ID: "device-1", Name: "书桌咕咕机", Status: "connected", Note: "默认设备"},
+			},
+		},
+		slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)),
+		time.Minute,
+		5,
+	)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/printers", nil)
+	request.Header.Set("Authorization", "Bearer access-token")
+	response := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
 	}
 }
 
@@ -241,3 +282,92 @@ func (f fakeWorkspaceService) SaveState(
 
 var _ auth.AuthService = fakeAuthService{}
 var _ workspace.WorkspaceService = fakeWorkspaceService{}
+
+type fakeAIService struct {
+	summary ai.ConfigSummary
+	reply   ai.ReplyResult
+	err     error
+}
+
+func (f fakeAIService) GetConfigSummary(_ context.Context, _ string) (ai.ConfigSummary, error) {
+	return f.summary, f.err
+}
+
+func (f fakeAIService) UpdateSystemConfig(_ context.Context, _ string, _ ai.UpdateConfigInput) (ai.ConfigSummary, error) {
+	return f.summary, f.err
+}
+
+func (f fakeAIService) GenerateReply(_ context.Context, _ string, _ ai.ReplyInput) (ai.ReplyResult, error) {
+	return f.reply, f.err
+}
+
+type fakePrinterService struct {
+	devices   []workspace.Device
+	printJobs []workspace.PrintJob
+	err       error
+}
+
+func (f fakePrinterService) ListDevices(_ context.Context, _ string) ([]workspace.Device, error) {
+	return f.devices, f.err
+}
+
+func (f fakePrinterService) BindDevice(_ context.Context, _ string, _ printer.BindInput) (workspace.Device, error) {
+	if f.err != nil {
+		return workspace.Device{}, f.err
+	}
+	if len(f.devices) > 0 {
+		return f.devices[0], nil
+	}
+	return workspace.Device{}, nil
+}
+
+func (f fakePrinterService) DeleteDevice(_ context.Context, _ string, _ string) error {
+	return f.err
+}
+
+func (f fakePrinterService) ListPrintJobs(_ context.Context, _ string) ([]workspace.PrintJob, error) {
+	return f.printJobs, f.err
+}
+
+func (f fakePrinterService) CreatePrintJob(_ context.Context, _ string, _ printer.CreateJobInput) (workspace.PrintJob, error) {
+	if f.err != nil {
+		return workspace.PrintJob{}, f.err
+	}
+	if len(f.printJobs) > 0 {
+		return f.printJobs[0], nil
+	}
+	return workspace.PrintJob{}, nil
+}
+
+func (f fakePrinterService) SubmitPrintJob(_ context.Context, _ string, _ string) (workspace.PrintJob, error) {
+	if f.err != nil {
+		return workspace.PrintJob{}, f.err
+	}
+	if len(f.printJobs) > 0 {
+		return f.printJobs[0], nil
+	}
+	return workspace.PrintJob{}, nil
+}
+
+func (f fakePrinterService) CancelPrintJob(_ context.Context, _ string, _ string) (workspace.PrintJob, error) {
+	if f.err != nil {
+		return workspace.PrintJob{}, f.err
+	}
+	if len(f.printJobs) > 0 {
+		return f.printJobs[0], nil
+	}
+	return workspace.PrintJob{}, nil
+}
+
+func (f fakePrinterService) UpdatePrintJobDevice(_ context.Context, _ string, _ string, _ printer.UpdateJobDeviceInput) (workspace.PrintJob, error) {
+	if f.err != nil {
+		return workspace.PrintJob{}, f.err
+	}
+	if len(f.printJobs) > 0 {
+		return f.printJobs[0], nil
+	}
+	return workspace.PrintJob{}, nil
+}
+
+var _ ai.AIService = fakeAIService{}
+var _ printer.PrinterService = fakePrinterService{}

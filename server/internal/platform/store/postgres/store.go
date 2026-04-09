@@ -9,7 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/user"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -25,6 +27,8 @@ var (
 	_ auth.SessionRepository = (*Store)(nil)
 	_ auth.AuditLogger       = (*Store)(nil)
 	_ workspace.Repository   = (*Store)(nil)
+	_ ai.Repository          = (*Store)(nil)
+	_ printer.Repository     = (*Store)(nil)
 )
 
 // New creates a PostgreSQL-backed auth store.
@@ -292,6 +296,280 @@ func (s *Store) SaveByUserID(
 		on conflict (user_id)
 		do update set state = excluded.state, updated_at = excluded.updated_at
 	`, userID, payload, updatedAt)
+	return err
+}
+
+func (s *Store) GetSystemConfig(ctx context.Context) (*ai.StoredConfig, error) {
+	row := s.db.QueryRow(ctx, `
+		select provider_name, provider_type, base_url, model, api_key_ciphertext, api_key_nonce,
+			updated_by, created_at, updated_at
+		from ai_provider_settings
+		where setting_key = 'system'
+	`)
+
+	var config ai.StoredConfig
+	var updatedBy *string
+	if err := row.Scan(
+		&config.ProviderName,
+		&config.ProviderType,
+		&config.BaseURL,
+		&config.Model,
+		&config.Ciphertext,
+		&config.Nonce,
+		&updatedBy,
+		&config.CreatedAt,
+		&config.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	config.UpdatedByUser = updatedBy
+	return &config, nil
+}
+
+func (s *Store) SaveSystemConfig(ctx context.Context, config ai.StoredConfig) error {
+	_, err := s.db.Exec(ctx, `
+		insert into ai_provider_settings (
+			setting_key, provider_name, provider_type, base_url, model,
+			api_key_ciphertext, api_key_nonce, updated_by, created_at, updated_at
+		) values ('system', $1, $2, $3, $4, $5, $6, $7, $8, $9)
+		on conflict (setting_key)
+		do update set
+			provider_name = excluded.provider_name,
+			provider_type = excluded.provider_type,
+			base_url = excluded.base_url,
+			model = excluded.model,
+			api_key_ciphertext = excluded.api_key_ciphertext,
+			api_key_nonce = excluded.api_key_nonce,
+			updated_by = excluded.updated_by,
+			updated_at = excluded.updated_at
+	`,
+		config.ProviderName,
+		config.ProviderType,
+		config.BaseURL,
+		config.Model,
+		config.Ciphertext,
+		config.Nonce,
+		config.UpdatedByUser,
+		config.CreatedAt,
+		config.UpdatedAt,
+	)
+	return err
+}
+
+func (s *Store) ListBindingsByUserID(ctx context.Context, userID string) ([]printer.Binding, error) {
+	rows, err := s.db.Query(ctx, `
+		select id, user_id, name, note, device_identifier, provider_user_id, status, created_at, updated_at
+		from printer_bindings
+		where user_id = $1
+		order by updated_at desc, created_at desc
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var bindings []printer.Binding
+	for rows.Next() {
+		var binding printer.Binding
+		if err := rows.Scan(
+			&binding.ID,
+			&binding.UserID,
+			&binding.Name,
+			&binding.Note,
+			&binding.DeviceIdentifier,
+			&binding.ProviderUserID,
+			&binding.Status,
+			&binding.CreatedAt,
+			&binding.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
+	}
+
+	return bindings, rows.Err()
+}
+
+func (s *Store) FindBindingByID(ctx context.Context, userID string, bindingID string) (*printer.Binding, error) {
+	row := s.db.QueryRow(ctx, `
+		select id, user_id, name, note, device_identifier, provider_user_id, status, created_at, updated_at
+		from printer_bindings
+		where user_id = $1 and id = $2
+	`, userID, bindingID)
+
+	var binding printer.Binding
+	if err := row.Scan(
+		&binding.ID,
+		&binding.UserID,
+		&binding.Name,
+		&binding.Note,
+		&binding.DeviceIdentifier,
+		&binding.ProviderUserID,
+		&binding.Status,
+		&binding.CreatedAt,
+		&binding.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &binding, nil
+}
+
+func (s *Store) SaveBinding(ctx context.Context, binding printer.Binding) error {
+	_, err := s.db.Exec(ctx, `
+		insert into printer_bindings (
+			id, user_id, name, note, device_identifier, provider_user_id, status, created_at, updated_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		on conflict (id)
+		do update set
+			name = excluded.name,
+			note = excluded.note,
+			device_identifier = excluded.device_identifier,
+			provider_user_id = excluded.provider_user_id,
+			status = excluded.status,
+			updated_at = excluded.updated_at
+	`,
+		binding.ID,
+		binding.UserID,
+		binding.Name,
+		binding.Note,
+		binding.DeviceIdentifier,
+		binding.ProviderUserID,
+		binding.Status,
+		binding.CreatedAt,
+		binding.UpdatedAt,
+	)
+	return err
+}
+
+func (s *Store) DeleteBinding(ctx context.Context, userID string, bindingID string) error {
+	_, err := s.db.Exec(ctx, `
+		delete from printer_bindings
+		where user_id = $1 and id = $2
+	`, userID, bindingID)
+	return err
+}
+
+func (s *Store) ListJobsByUserID(ctx context.Context, userID string) ([]printer.Job, error) {
+	rows, err := s.db.Query(ctx, `
+		select id, user_id, printer_binding_id, title, source, content, status,
+			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
+		from print_jobs
+		where user_id = $1
+		order by updated_at desc, created_at desc
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []printer.Job
+	for rows.Next() {
+		var job printer.Job
+		var providerPrintContentID *int
+		var providerSmartGUID *string
+		var errorMessage *string
+		if err := rows.Scan(
+			&job.ID,
+			&job.UserID,
+			&job.PrinterBindingID,
+			&job.Title,
+			&job.Source,
+			&job.Content,
+			&job.Status,
+			&providerPrintContentID,
+			&providerSmartGUID,
+			&errorMessage,
+			&job.CreatedAt,
+			&job.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		job.ProviderPrintContentID = providerPrintContentID
+		job.ProviderSmartGUID = providerSmartGUID
+		job.ErrorMessage = errorMessage
+		jobs = append(jobs, job)
+	}
+
+	return jobs, rows.Err()
+}
+
+func (s *Store) FindJobByID(ctx context.Context, userID string, jobID string) (*printer.Job, error) {
+	row := s.db.QueryRow(ctx, `
+		select id, user_id, printer_binding_id, title, source, content, status,
+			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
+		from print_jobs
+		where user_id = $1 and id = $2
+	`, userID, jobID)
+
+	var job printer.Job
+	var providerPrintContentID *int
+	var providerSmartGUID *string
+	var errorMessage *string
+	if err := row.Scan(
+		&job.ID,
+		&job.UserID,
+		&job.PrinterBindingID,
+		&job.Title,
+		&job.Source,
+		&job.Content,
+		&job.Status,
+		&providerPrintContentID,
+		&providerSmartGUID,
+		&errorMessage,
+		&job.CreatedAt,
+		&job.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	job.ProviderPrintContentID = providerPrintContentID
+	job.ProviderSmartGUID = providerSmartGUID
+	job.ErrorMessage = errorMessage
+	return &job, nil
+}
+
+func (s *Store) SaveJob(ctx context.Context, job printer.Job) error {
+	_, err := s.db.Exec(ctx, `
+		insert into print_jobs (
+			id, user_id, printer_binding_id, title, source, content, status,
+			provider_print_content_id, provider_smart_guid, error_message, created_at, updated_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		on conflict (id)
+		do update set
+			printer_binding_id = excluded.printer_binding_id,
+			title = excluded.title,
+			source = excluded.source,
+			content = excluded.content,
+			status = excluded.status,
+			provider_print_content_id = excluded.provider_print_content_id,
+			provider_smart_guid = excluded.provider_smart_guid,
+			error_message = excluded.error_message,
+			updated_at = excluded.updated_at
+	`,
+		job.ID,
+		job.UserID,
+		job.PrinterBindingID,
+		job.Title,
+		job.Source,
+		job.Content,
+		job.Status,
+		job.ProviderPrintContentID,
+		job.ProviderSmartGUID,
+		job.ErrorMessage,
+		job.CreatedAt,
+		job.UpdatedAt,
+	)
 	return err
 }
 
