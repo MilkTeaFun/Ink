@@ -31,7 +31,9 @@ function createAuthenticatedRouter() {
 describe("router configuration", () => {
   it("keeps navigation items in sync with workspace routes", () => {
     const workspaceRoute = routes.find((route) => route.path === "/");
-    const shellChildren = workspaceRoute?.children ?? [];
+    const shellChildren = (workspaceRoute?.children ?? []).filter(
+      (route) => route.meta?.showInNav !== false,
+    );
 
     expect(navigationItems).toHaveLength(shellChildren.length);
     expect(navigationItems.map((item) => item.path)).toEqual([
@@ -119,6 +121,35 @@ describe("router configuration", () => {
               modelName: "Ink AI",
               bound: false,
             },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            bound: false,
+            providerName: "OpenAI Compatible",
+            providerType: "openai-compatible",
+            baseUrl: "",
+            model: "gpt-4.1-mini",
+            keyConfigured: false,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            devices: [],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            printJobs: [],
           }),
           { status: 200 },
         ),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -26,6 +26,27 @@ const newAccountName = ref("");
 const newAccountPassword = ref("");
 const newAccountFormError = ref("");
 const newAccountPasswordVisible = ref(false);
+const aiProviderName = ref("OpenAI Compatible");
+const aiBaseUrl = ref("");
+const aiModel = ref("gpt-4.1-mini");
+const aiApiKey = ref("");
+const aiFormError = ref("");
+
+const AI_PROVIDER_TYPE = "openai-compatible";
+const AI_PROVIDER_NAME_FALLBACK = "OpenAI Compatible";
+const AI_MODEL_FALLBACK = "gpt-4.1-mini";
+
+const aiConfigErrorMessage = computed(() => aiFormError.value || workspaceStore.aiConfigError);
+
+watch(
+  () => workspaceStore.aiConfigSummary,
+  (summary) => {
+    aiProviderName.value = summary.providerName || AI_PROVIDER_NAME_FALLBACK;
+    aiBaseUrl.value = summary.baseUrl;
+    aiModel.value = summary.model || AI_MODEL_FALLBACK;
+  },
+  { deep: true, immediate: true },
+);
 
 function handleDefaultDeviceChange(event: Event) {
   const target = event.target as HTMLSelectElement | null;
@@ -101,6 +122,40 @@ async function handleCreateAccountSubmit() {
   newAccountEmail.value = "";
   newAccountName.value = "";
   newAccountPassword.value = "";
+}
+
+async function handleAIConfigSubmit() {
+  aiFormError.value = "";
+
+  if (!aiBaseUrl.value.trim()) {
+    aiFormError.value = "请输入兼容接口的 API URL。";
+    return;
+  }
+
+  if (!aiModel.value.trim()) {
+    aiFormError.value = "请输入默认模型名称。";
+    return;
+  }
+
+  if (!aiApiKey.value.trim() && !workspaceStore.aiConfigSummary.keyConfigured) {
+    aiFormError.value = "请先输入 API Key。";
+    return;
+  }
+
+  const success = await workspaceStore.saveAIServiceConfig({
+    providerName: aiProviderName.value.trim() || AI_PROVIDER_NAME_FALLBACK,
+    providerType: AI_PROVIDER_TYPE,
+    baseUrl: aiBaseUrl.value.trim(),
+    model: aiModel.value.trim() || AI_MODEL_FALLBACK,
+    apiKey: aiApiKey.value.trim(),
+  });
+
+  if (!success) {
+    aiFormError.value = workspaceStore.aiConfigError;
+    return;
+  }
+
+  aiApiKey.value = "";
 }
 </script>
 
@@ -343,9 +398,11 @@ async function handleCreateAccountSubmit() {
               </div>
               <select
                 :value="workspaceStore.defaultDeviceId"
+                :disabled="workspaceStore.devices.length === 0"
                 class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
                 @change="handleDefaultDeviceChange"
               >
+                <option v-if="workspaceStore.devices.length === 0" value="">暂未设置设备</option>
                 <option
                   v-for="device in workspaceStore.devices"
                   :key="device.id"
@@ -419,35 +476,160 @@ async function handleCreateAccountSubmit() {
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
-            <div class="ui-settings-row">
-              <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">默认服务商</p>
-                <p class="mt-0.5 text-sm text-stone-500">
-                  {{
-                    workspaceStore.serviceBinding.bound
-                      ? workspaceStore.serviceBinding.providerName
-                      : "未连接"
-                  }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="ui-btn-secondary px-3 py-1.5 text-sm"
-                @click="workspaceStore.bindService"
-              >
-                {{ workspaceStore.serviceBinding.bound ? "重新绑定" : "去绑定" }}
-              </button>
+            <div
+              v-if="workspaceStore.aiConfigLoading"
+              class="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"
+            >
+              <p class="text-sm text-stone-600">正在加载当前 AI 配置…</p>
             </div>
-            <div class="ui-settings-row">
-              <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">当前模型标签</p>
-                <p class="mt-0.5 text-sm text-stone-500">{{ workspaceStore.activeModelLabel }}</p>
+
+            <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p class="text-sm font-medium text-stone-900">当前接入状态</p>
+                  <p class="mt-1 text-sm text-stone-500">
+                    {{
+                      workspaceStore.aiConfigSummary.bound
+                        ? "问答会通过服务端代理转发到你配置的 OpenAI 兼容模型。"
+                        : "当前还没有可用于登录用户的真实 AI 服务。"
+                    }}
+                  </p>
+                </div>
+                <span
+                  class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+                >
+                  {{ workspaceStore.aiConfigSummary.bound ? "已连接" : "未连接" }}
+                </span>
               </div>
-              <span
-                class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+
+              <div class="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    服务商
+                  </p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ workspaceStore.aiConfigSummary.providerName || AI_PROVIDER_NAME_FALLBACK }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">模型</p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ workspaceStore.aiConfigSummary.model || AI_MODEL_FALLBACK }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    API URL
+                  </p>
+                  <p class="mt-1 text-sm break-all text-stone-900">
+                    {{ workspaceStore.aiConfigSummary.baseUrl || "尚未设置" }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    API Key
+                  </p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{
+                      workspaceStore.aiConfigSummary.keyConfigured
+                        ? "已在服务端加密保存"
+                        : "尚未配置"
+                    }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form
+              v-if="workspaceStore.isAdmin"
+              class="rounded-xl border border-stone-200 bg-white p-4"
+              @submit.prevent="handleAIConfigSubmit"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-medium text-stone-900">管理员配置</p>
+                  <p class="mt-1 text-sm text-stone-500">
+                    这里只保存供应商、API URL、模型与服务端密钥。浏览器不会回显已保存的 Key。
+                  </p>
+                </div>
+                <span
+                  class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                >
+                  管理员
+                </span>
+              </div>
+
+              <div class="mt-4 grid gap-4 md:grid-cols-2">
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-stone-900">供应商名称</span>
+                  <input
+                    v-model="aiProviderName"
+                    type="text"
+                    placeholder="例如：OpenAI Compatible"
+                    class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                  />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-stone-900">API URL</span>
+                  <input
+                    v-model="aiBaseUrl"
+                    type="url"
+                    placeholder="例如：https://api.openai.com/v1"
+                    class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                  />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-stone-900">默认模型</span>
+                  <input
+                    v-model="aiModel"
+                    type="text"
+                    placeholder="例如：gpt-4.1-mini"
+                    class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                  />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-stone-900">API Key</span>
+                  <input
+                    v-model="aiApiKey"
+                    :placeholder="
+                      workspaceStore.aiConfigSummary.keyConfigured
+                        ? '留空则沿用当前服务端密钥'
+                        : '输入新的服务端密钥'
+                    "
+                    type="password"
+                    autocomplete="off"
+                    class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                  />
+                </label>
+              </div>
+
+              <p class="mt-4 text-sm text-stone-500">
+                API Key 只会通过后端保存到服务端加密存储，前端只支持新增或替换，不支持读取回显。
+              </p>
+
+              <p
+                v-if="aiConfigErrorMessage"
+                class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
               >
-                {{ workspaceStore.serviceBinding.bound ? "已连接" : "未连接" }}
-              </span>
+                {{ aiConfigErrorMessage }}
+              </p>
+
+              <div class="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  :disabled="workspaceStore.aiConfigSaving || workspaceStore.aiConfigLoading"
+                >
+                  {{ workspaceStore.aiConfigSaving ? "保存中..." : "保存 AI 配置" }}
+                </button>
+              </div>
+            </form>
+
+            <div v-else class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <p class="text-sm font-medium text-stone-900">仅管理员可修改</p>
+              <p class="mt-1 text-sm text-stone-500">
+                当前账号只能查看 AI 接入摘要，不能读取或编辑服务端保存的 API Key。
+              </p>
             </div>
           </div>
         </div>

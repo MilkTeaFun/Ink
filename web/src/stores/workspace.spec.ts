@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from "pinia";
 import { vi } from "vitest";
 
+import type { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import type {
   changePasswordWithApi,
   fetchCurrentUser,
@@ -8,6 +9,16 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type {
+  bindPrinter,
+  cancelPrintJob,
+  createPrintJob,
+  deletePrinter,
+  fetchPrintJobs,
+  fetchPrinters,
+  submitPrintJob,
+  updatePrintJobDevice,
+} from "@/services/printers";
 import type {
   createUserWithApi,
   fetchWorkspaceStateWithApi,
@@ -68,11 +79,111 @@ vi.mock("@/services/workspace", () => ({
   ),
 }));
 
+vi.mock("@/services/ai", () => ({
+  fetchAIConfigSummary: vi.fn<typeof fetchAIConfigSummary>(async () => ({
+    bound: false,
+    providerName: "OpenAI Compatible",
+    providerType: "openai-compatible",
+    baseUrl: "",
+    model: "gpt-4.1-mini",
+    keyConfigured: false,
+  })),
+  generateAIReply: vi.fn<typeof generateAIReply>(async () => ({
+    content: "这是来自真实 AI 服务的回复。",
+    model: "gpt-4.1-mini",
+    providerName: "OpenAI Compatible",
+  })),
+  saveAIConfig: vi.fn<typeof saveAIConfig>(async (_accessToken, payload) => ({
+    bound: true,
+    providerName: payload.providerName,
+    providerType: payload.providerType,
+    baseUrl: payload.baseUrl,
+    model: payload.model,
+    keyConfigured: true,
+  })),
+}));
+
+vi.mock("@/services/printers", () => ({
+  bindPrinter: vi.fn<typeof bindPrinter>(async (_accessToken, payload) => ({
+    id: "device-api-1",
+    name: payload.name,
+    status: "connected",
+    note: payload.note,
+  })),
+  cancelPrintJob: vi.fn<typeof cancelPrintJob>(async (_accessToken, jobId) => ({
+    id: jobId,
+    title: "服务端任务",
+    source: "手动打印",
+    deviceId: "device-api-1",
+    status: "cancelled",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: "内容",
+  })),
+  createPrintJob: vi.fn<typeof createPrintJob>(async (_accessToken, payload) => ({
+    id: "print-api-1",
+    title: payload.title,
+    source: payload.source,
+    deviceId: payload.printerBindingId,
+    status: payload.submitImmediately ? "queued" : "pending",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: payload.content,
+  })),
+  deletePrinter: vi.fn<typeof deletePrinter>(async () => undefined),
+  fetchPrintJobs: vi.fn<typeof fetchPrintJobs>(async () => ({
+    printJobs: [],
+  })),
+  fetchPrinters: vi.fn<typeof fetchPrinters>(async () => ({
+    devices: [],
+  })),
+  submitPrintJob: vi.fn<typeof submitPrintJob>(async (_accessToken, jobId) => ({
+    id: jobId,
+    title: "服务端任务",
+    source: "手动打印",
+    deviceId: "device-api-1",
+    status: "queued",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    content: "内容",
+  })),
+  updatePrintJobDevice: vi.fn<typeof updatePrintJobDevice>(
+    async (_accessToken, jobId, payload) => ({
+      id: jobId,
+      title: "服务端任务",
+      source: "手动打印",
+      deviceId: payload.printerBindingId,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      content: "内容",
+    }),
+  ),
+}));
+
+function authenticateStore(role: "admin" | "member" = "member") {
+  const store = useWorkspaceStore();
+  store.authUser = {
+    id: "user-1",
+    email: role === "admin" ? "admin" : "name@example.com",
+    name: role === "admin" ? "Administrator" : "Ink User",
+    role,
+  };
+  store.authSession = {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+
+  return store;
+}
+
 describe("workspace store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     window.localStorage.clear();
     window.sessionStorage.clear();
+    vi.clearAllMocks();
   });
 
   it("exposes stable defaults and derived summaries", () => {
@@ -106,29 +217,28 @@ describe("workspace store", () => {
     expect(store.welcomeLabel).toBe("整理内容，准备打印");
   });
 
-  it("adds devices and prevents removing the default device", () => {
+  it("adds devices and removes the default device in anonymous mode", async () => {
     const store = useWorkspaceStore();
     const previousLength = store.devices.length;
 
-    const newDevice = store.addDevice({
+    const newDevice = await store.addDevice({
       name: "客厅咕咕机",
       note: "窗边打印机",
       setAsDefault: true,
     });
 
     expect(store.devices).toHaveLength(previousLength + 1);
-    expect(store.devices.at(-1)?.id).toBe(newDevice.id);
-    expect(store.defaultDeviceId).toBe(newDevice.id);
-    expect(store.devices.at(-1)?.name).toBe("客厅咕咕机");
-    expect(store.devices.at(-1)?.note).toBe("窗边打印机");
-    expect(store.removeDevice(store.defaultDeviceId)).toBe(true);
-    expect(store.devices.some((device) => device.id === newDevice.id)).toBe(false);
+    expect(store.devices.at(-1)?.id).toBe(newDevice?.id);
+    expect(store.defaultDeviceId).toBe(newDevice?.id);
+
+    await expect(store.removeDevice(store.defaultDeviceId)).resolves.toBe(true);
+    expect(store.devices.some((device) => device.id === newDevice?.id)).toBe(false);
   });
 
-  it("removes non-default devices and reassigns related items to the default device", () => {
+  it("removes non-default devices and reassigns related items to the default device", async () => {
     const store = useWorkspaceStore();
 
-    expect(store.removeDevice("device-bedroom")).toBe(true);
+    await expect(store.removeDevice("device-bedroom")).resolves.toBe(true);
     expect(store.devices.some((device) => device.id === "device-bedroom")).toBe(false);
     expect(store.printJobs.some((job) => job.deviceId === "device-bedroom")).toBe(false);
     expect(store.schedules.some((schedule) => schedule.deviceId === "device-bedroom")).toBe(false);
@@ -138,11 +248,11 @@ describe("workspace store", () => {
     );
   });
 
-  it("allows removing all devices and clears the default device", () => {
+  it("allows removing all devices and clears the default device", async () => {
     const store = useWorkspaceStore();
 
-    expect(store.removeDevice("device-bedroom")).toBe(true);
-    expect(store.removeDevice("device-desk")).toBe(true);
+    await expect(store.removeDevice("device-bedroom")).resolves.toBe(true);
+    await expect(store.removeDevice("device-desk")).resolves.toBe(true);
     expect(store.devices).toHaveLength(0);
     expect(store.defaultDeviceId).toBe("");
     expect(
@@ -193,7 +303,7 @@ describe("workspace store", () => {
     const pendingJob = store.printJobs.find((job) => job.status === "pending");
 
     expect(pendingJob).toBeTruthy();
-    expect(store.cancelPrint(pendingJob!.id)).toBe(true);
+    await expect(store.cancelPrint(pendingJob!.id)).resolves.toBe(true);
     expect(store.printJobs.find((job) => job.id === pendingJob!.id)?.status).toBe("cancelled");
 
     store.updateCurrentDraft("请整理一条准备直接排队的纸条");
@@ -203,7 +313,7 @@ describe("workspace store", () => {
     const queuedJob = await store.createPrintFromSelectedMessages();
 
     expect(queuedJob?.status).toBe("queued");
-    expect(store.cancelPrint(queuedJob!.id)).toBe(true);
+    await expect(store.cancelPrint(queuedJob!.id)).resolves.toBe(true);
     expect(store.printJobs.find((job) => job.id === queuedJob!.id)?.status).toBe("cancelled");
   });
 
@@ -218,7 +328,7 @@ describe("workspace store", () => {
     expect(store.activeConversationId).not.toBe(currentId);
   });
 
-  it("supports print queue updates, source state cycling, and service binding", async () => {
+  it("supports print queue updates and source state cycling", async () => {
     const store = useWorkspaceStore();
     const pendingJob = store.pendingPrintJobs.find((job: PrintJob) => job.status === "pending");
     const schedule = store.schedules[0];
@@ -231,7 +341,6 @@ describe("workspace store", () => {
     store.toggleSourceConnection(source.id);
     store.setTheme("soft");
     store.setLoginProtection(false);
-    store.bindService();
     await store.logout();
 
     expect(store.printJobs.find((job) => job.id === pendingJob!.id)?.status).toBe("queued");
@@ -241,23 +350,11 @@ describe("workspace store", () => {
     expect(store.sources.find((item) => item.id === source.id)?.status).toBe("disconnected");
     expect(store.selectedTheme).toBe("soft");
     expect(store.loginProtectionEnabled).toBe(false);
-    expect(store.serviceBinding.bound).toBe(true);
     expect(store.isAuthenticated).toBe(false);
   });
 
   it("clears the local auth state after a successful password change", async () => {
-    const store = useWorkspaceStore();
-    store.authUser = {
-      id: "user-1",
-      email: "name@example.com",
-      name: "Ink User",
-      role: "member",
-    };
-    store.authSession = {
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-    };
+    const store = authenticateStore();
 
     await expect(store.changePassword("demo-password", "next-password")).resolves.toBe(true);
     expect(store.isAuthenticated).toBe(false);
@@ -272,40 +369,67 @@ describe("workspace store", () => {
     expect(store.isAuthenticated).toBe(true);
     expect(store.devices).toEqual([]);
     expect(store.conversations).toEqual([]);
+    expect(store.aiConfigSummary.bound).toBe(false);
+  });
+
+  it("uses the real AI reply endpoint when the user is authenticated", async () => {
+    const store = authenticateStore();
+
+    store.updateCurrentDraft("帮我整理一句真实回复");
+    await expect(store.sendCurrentDraft()).resolves.toBe(true);
+
+    expect(store.activeConversation?.messages.at(-1)?.text).toBe("这是来自真实 AI 服务的回复。");
+  });
+
+  it("allows admins to save the server-side AI provider config", async () => {
+    const store = authenticateStore("admin");
+
+    await expect(
+      store.saveAIServiceConfig({
+        providerName: "Acme AI",
+        providerType: "openai-compatible",
+        baseUrl: "https://example.com/v1",
+        model: "gpt-4.1-mini",
+        apiKey: "secret-key",
+      }),
+    ).resolves.toBe(true);
+
+    expect(store.aiConfigSummary.bound).toBe(true);
+    expect(store.aiConfigSummary.providerName).toBe("Acme AI");
+    expect(store.aiConfigSummary.keyConfigured).toBe(true);
+  });
+
+  it("binds devices and creates print jobs through the authenticated printer API", async () => {
+    const store = authenticateStore();
+
+    const device = await store.addDevice({
+      name: "我的咕咕机",
+      note: "书房",
+      deviceId: "m1-123456",
+      setAsDefault: true,
+    });
+    const job = await store.createManualPrint({
+      title: "真实打印",
+      content: "这是一条真实打印任务。",
+    });
+
+    expect(device?.status).toBe("connected");
+    expect(store.defaultDeviceId).toBe(device?.id);
+    expect(job?.deviceId).toBe(device?.id);
+
+    await expect(store.confirmPrint(job!.id)).resolves.toBe(true);
+    expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
   });
 
   it("allows admins to create member accounts", async () => {
-    const store = useWorkspaceStore();
-    store.authUser = {
-      id: "user-1",
-      email: "admin",
-      name: "Administrator",
-      role: "admin",
-    };
-    store.authSession = {
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-    };
+    const store = authenticateStore("admin");
 
     await expect(store.createAccount("new-user", "New User", "demo-password")).resolves.toBe(true);
     expect(store.flashMessage).toBe("新账号已创建。");
   });
 
   it("keeps auth tokens out of the workspace snapshot and stores them only for the tab session", async () => {
-    const store = useWorkspaceStore();
-
-    store.authUser = {
-      id: "user-1",
-      email: "name@example.com",
-      name: "Ink User",
-      role: "member",
-    };
-    store.authSession = {
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-    };
+    authenticateStore();
 
     await Promise.resolve();
 
