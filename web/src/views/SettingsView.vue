@@ -398,13 +398,20 @@ async function handleAIConfigSubmit() {
               </div>
               <select
                 :value="workspaceStore.defaultDeviceId"
-                :disabled="workspaceStore.devices.length === 0"
+                :disabled="workspaceStore.devices.every((device) => device.status === 'offline')"
                 class="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900"
                 @change="handleDefaultDeviceChange"
               >
-                <option v-if="workspaceStore.devices.length === 0" value="">暂未设置设备</option>
                 <option
-                  v-for="device in workspaceStore.devices"
+                  v-if="workspaceStore.devices.every((device) => device.status === 'offline')"
+                  value=""
+                >
+                  暂未设置设备
+                </option>
+                <option
+                  v-for="device in workspaceStore.devices.filter(
+                    (device) => device.status !== 'offline',
+                  )"
                   :key="device.id"
                   :value="device.id"
                 >

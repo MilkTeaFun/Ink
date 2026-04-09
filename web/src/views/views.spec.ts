@@ -250,7 +250,8 @@ describe("workspace views", () => {
       .find((button) => button.text() === "解绑")
       ?.trigger("click");
 
-    expect(store.devices.some((device) => device.id === "device-desk")).toBe(false);
+    expect(store.devices.find((device) => device.id === "device-desk")?.status).toBe("offline");
+    expect(store.devices.find((device) => device.id === "device-desk")?.note).toContain("已解绑");
   });
 
   it("allows sending a message and selecting a reply for printing", async () => {
@@ -449,6 +450,25 @@ describe("workspace views", () => {
 
     expect(store.pendingPrintJobs.some((job: PrintJob) => job.status === "pending")).toBe(false);
     expect(store.printJobs.some((job: PrintJob) => job.status === "cancelled")).toBe(true);
+  });
+
+  it("prevents cancelling or rebinding queued print jobs for authenticated users", async () => {
+    const { pinia, router } = await createWorkspaceContext("/prints");
+    const wrapper = mount(PrintsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    const queuedArticle = wrapper
+      .findAll("article")
+      .find((article) => article.text().includes("明日早报"));
+
+    expect(queuedArticle?.text()).toContain("已提交到咕咕机后不能再取消或改绑设备。");
+    expect(queuedArticle?.findAll("button").some((button) => button.text() === "取消打印")).toBe(
+      false,
+    );
+    expect(queuedArticle?.find("select").attributes("disabled")).toBeDefined();
   });
 
   it("updates shared settings state through the settings panel", async () => {

@@ -154,8 +154,12 @@ async function submitAddDevice() {
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
                   <p class="mt-0.5 text-sm text-stone-500">
-                    {{ device.id === workspaceStore.defaultDeviceId ? "默认设备 · " : ""
-                    }}{{ device.note }}
+                    {{ device.id === workspaceStore.defaultDeviceId ? "默认设备 · " : "" }}
+                    {{
+                      device.status === "offline" && !device.note
+                        ? "已解绑，仅保留历史记录"
+                        : device.note
+                    }}
                   </p>
                 </div>
               </div>
@@ -174,7 +178,7 @@ async function submitAddDevice() {
                   {{ workspaceStore.getDeviceStatusLabel(device.status) }}
                 </span>
                 <button
-                  v-if="device.id !== workspaceStore.defaultDeviceId"
+                  v-if="device.id !== workspaceStore.defaultDeviceId && device.status !== 'offline'"
                   type="button"
                   class="ui-btn-secondary px-3 py-1.5 text-sm"
                   @click="workspaceStore.setDefaultDevice(device.id)"
@@ -182,6 +186,7 @@ async function submitAddDevice() {
                   设为默认
                 </button>
                 <button
+                  v-if="device.status !== 'offline'"
                   type="button"
                   class="ui-btn-secondary px-3 py-1.5 text-sm"
                   @click="workspaceStore.removeDevice(device.id)"

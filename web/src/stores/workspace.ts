@@ -618,6 +618,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     printJobs.value = [nextJob, ...printJobs.value.filter((job) => job.id !== nextJob.id)];
   }
 
+  function upsertDevice(nextDevice: Device) {
+    devices.value = [nextDevice, ...devices.value.filter((device) => device.id !== nextDevice.id)];
+  }
+
   function restoreAnonymousWorkspace() {
     workspaceOwnerId.value = null;
     workspaceHydrating.value = true;
@@ -1214,7 +1218,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           note: options?.note?.trim() || "",
           deviceId: deviceIdentifier,
         });
-        devices.value = [device, ...devices.value];
+        upsertDevice(device);
         if (options?.setAsDefault || !defaultDeviceId.value) {
           defaultDeviceId.value = device.id;
         }
@@ -1256,6 +1260,29 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         showFlash(error instanceof Error ? error.message : "解绑设备失败，请稍后重试。", "error");
         return false;
       }
+
+      const fallbackDeviceId =
+        defaultDeviceId.value === deviceId
+          ? (devices.value.find((device) => device.id !== deviceId && device.status !== "offline")
+              ?.id ?? "")
+          : defaultDeviceId.value;
+
+      devices.value = devices.value.map((device) =>
+        device.id === deviceId
+          ? {
+              ...device,
+              note: device.note.includes("已解绑")
+                ? device.note
+                : device.note
+                  ? `${device.note} · 已解绑，仅保留历史记录`
+                  : "已解绑，仅保留历史记录",
+              status: "offline",
+            }
+          : device,
+      );
+      defaultDeviceId.value = fallbackDeviceId;
+      showFlash("已解绑设备，历史记录会保留。", "success");
+      return true;
     }
 
     const remainingDevices = devices.value.filter((device) => device.id !== deviceId);
@@ -1298,12 +1325,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     timeLabel?: string;
     deviceId?: string;
   }) {
+    const nextDeviceId = options?.deviceId || defaultDeviceId.value;
+    const targetDevice = devices.value.find((device) => device.id === nextDeviceId);
+
+    if (!targetDevice || targetDevice.status === "offline") {
+      showFlash("请先选择可用设备。", "error");
+      return;
+    }
+
     const schedule: Schedule = {
       id: createId("schedule"),
       title: options?.title?.trim() || "新的定时任务",
       source: options?.source?.trim() || "手动创建",
       timeLabel: options?.timeLabel?.trim() || "每天 19:30",
-      deviceId: options?.deviceId || defaultDeviceId.value,
+      deviceId: nextDeviceId,
       enabled: true,
     };
 
@@ -1312,6 +1347,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function updateScheduleDevice(scheduleId: string, deviceId: string) {
+    const targetDevice = devices.value.find((device) => device.id === deviceId);
+
+    if (!targetDevice || targetDevice.status === "offline") {
+      showFlash("请先选择可用设备。", "error");
+      return;
+    }
+
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, deviceId } : schedule,
     );
@@ -1340,6 +1382,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function setDefaultDevice(deviceId: string) {
+    const targetDevice = devices.value.find((device) => device.id === deviceId);
+
+    if (!targetDevice || targetDevice.status === "offline") {
+      showFlash("已解绑设备不能设为默认。", "error");
+      return;
+    }
+
     defaultDeviceId.value = deviceId;
     showFlash("默认设备已更新。", "success");
   }
