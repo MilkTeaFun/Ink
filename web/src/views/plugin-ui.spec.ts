@@ -213,6 +213,7 @@ describe("plugin ui flows", () => {
   it("creates and deletes authenticated plugin schedules from the prints view", async () => {
     const { pinia, router, store } = await createWorkspaceContext("/prints");
     const plugin = createPluginDetails();
+    const expectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
     store.availablePlugins = [plugin];
     store.remoteSchedules = [createSchedule()];
     store.devices = [
@@ -258,7 +259,7 @@ describe("plugin ui flows", () => {
       deviceId: "device-1",
       pluginInstallationId: "plugin-installation-1",
       frequencyType: "weekly",
-      timezone: "Asia/Shanghai",
+      timezone: expectedTimezone,
       hour: 19,
       minute: 30,
       weekdays: [1],
