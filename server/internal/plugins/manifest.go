@@ -3,6 +3,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"regexp"
 	"sort"
@@ -33,8 +34,10 @@ func ValidateManifest(manifest Manifest) error {
 		return fmt.Errorf("%w: kind must be source", ErrInvalidPlugin)
 	}
 
-	key := strings.TrimSpace(manifest.PluginKey)
-	if key == "" || !pluginKeyPattern.MatchString(key) {
+	if manifest.PluginKey == "" || manifest.PluginKey != strings.TrimSpace(manifest.PluginKey) {
+		return fmt.Errorf("%w: pluginKey cannot contain surrounding whitespace", ErrInvalidPlugin)
+	}
+	if !pluginKeyPattern.MatchString(manifest.PluginKey) {
 		return fmt.Errorf("%w: pluginKey must use lowercase letters, digits, and dashes", ErrInvalidPlugin)
 	}
 
@@ -47,10 +50,12 @@ func ValidateManifest(manifest Manifest) error {
 	if manifest.Runtime.Type != "node" && manifest.Runtime.Type != "python" {
 		return fmt.Errorf("%w: runtime.type must be node or python", ErrInvalidPlugin)
 	}
-	if len(manifest.Entrypoints.Validate.Command) == 0 {
+	if len(manifest.Entrypoints.Validate.Command) == 0 ||
+		strings.TrimSpace(manifest.Entrypoints.Validate.Command[0]) == "" {
 		return fmt.Errorf("%w: entrypoints.validate.command is required", ErrInvalidPlugin)
 	}
-	if len(manifest.Entrypoints.Fetch.Command) == 0 {
+	if len(manifest.Entrypoints.Fetch.Command) == 0 ||
+		strings.TrimSpace(manifest.Entrypoints.Fetch.Command[0]) == "" {
 		return fmt.Errorf("%w: entrypoints.fetch.command is required", ErrInvalidPlugin)
 	}
 	if err := validateFieldSpecs(manifest.WorkspaceConfigSchema, true); err != nil {
@@ -66,11 +71,15 @@ func ValidateManifest(manifest Manifest) error {
 func validateFieldSpecs(fields []FieldSpec, allowSecret bool) error {
 	seenKeys := map[string]struct{}{}
 	for _, field := range fields {
-		key := strings.TrimSpace(field.Key)
-		label := strings.TrimSpace(field.Label)
-		if key == "" {
+		if strings.TrimSpace(field.Key) == "" {
 			return fmt.Errorf("%w: schema field key is required", ErrInvalidPlugin)
 		}
+		if field.Key != strings.TrimSpace(field.Key) {
+			return fmt.Errorf("%w: schema field key %q cannot contain surrounding whitespace", ErrInvalidPlugin, field.Key)
+		}
+
+		key := field.Key
+		label := strings.TrimSpace(field.Label)
 		if label == "" {
 			return fmt.Errorf("%w: schema field label is required for %s", ErrInvalidPlugin, key)
 		}
@@ -307,8 +316,14 @@ func intFromValue(value any) (int, error) {
 	case uint64:
 		return int(current), nil
 	case float64:
+		if current != math.Trunc(current) {
+			return 0, fmt.Errorf("invalid integer")
+		}
 		return int(current), nil
 	case float32:
+		if float64(current) != math.Trunc(float64(current)) {
+			return 0, fmt.Errorf("invalid integer")
+		}
 		return int(current), nil
 	case json.Number:
 		intValue, err := current.Int64()

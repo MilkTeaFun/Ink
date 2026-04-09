@@ -93,3 +93,79 @@ func TestNormalizeConfigValuesSeparatesSecretsAndReportsUnknownFields(t *testing
 		t.Fatalf("unexpected secrets map: %+v", secrets)
 	}
 }
+
+func TestParseManifestRejectsSurroundingWhitespaceInIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"schemaVersion": 1,
+		"kind": "source",
+		"pluginKey": " demo-source ",
+		"name": "Demo Source",
+		"version": "1.0.0",
+		"description": "bad",
+		"runtime": { "type": "node" },
+		"entrypoints": {
+			"validate": { "command": ["node", "validate.mjs"] },
+			"fetch": { "command": ["node", "fetch.mjs"] }
+		},
+		"workspaceConfigSchema": [
+			{
+				"key": " feedUrl ",
+				"label": "Feed URL",
+				"type": "url",
+				"required": true
+			}
+		],
+		"scheduleConfigSchema": []
+	}`)
+
+	_, err := ParseManifest(raw)
+	if !errors.Is(err, ErrInvalidPlugin) {
+		t.Fatalf("expected invalid plugin error, got %v", err)
+	}
+}
+
+func TestParseManifestRejectsBlankCommandEntries(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{
+		"schemaVersion": 1,
+		"kind": "source",
+		"pluginKey": "demo-source",
+		"name": "Demo Source",
+		"version": "1.0.0",
+		"description": "bad",
+		"runtime": { "type": "node" },
+		"entrypoints": {
+			"validate": { "command": ["   "] },
+			"fetch": { "command": ["node", "fetch.mjs"] }
+		},
+		"workspaceConfigSchema": [],
+		"scheduleConfigSchema": []
+	}`)
+
+	_, err := ParseManifest(raw)
+	if !errors.Is(err, ErrInvalidPlugin) {
+		t.Fatalf("expected invalid plugin error, got %v", err)
+	}
+}
+
+func TestNormalizeConfigValuesRejectsFractionalNumbers(t *testing.T) {
+	t.Parallel()
+
+	_, _, errs := NormalizeConfigValues([]FieldSpec{
+		{
+			Key:      "repeat",
+			Label:    "Repeat",
+			Type:     FieldTypeNumber,
+			Required: true,
+		},
+	}, map[string]any{
+		"repeat": 1.5,
+	}, false)
+
+	if len(errs) != 1 || errs[0].Field != "repeat" {
+		t.Fatalf("expected repeat field error, got %+v", errs)
+	}
+}

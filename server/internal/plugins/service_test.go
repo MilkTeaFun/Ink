@@ -304,6 +304,36 @@ func TestUnzipSecureRejectsPathTraversal(t *testing.T) {
 	}
 }
 
+func TestUnzipSecureRejectsArchiveExceedingActualLimit(t *testing.T) {
+	t.Parallel()
+
+	zipPath := filepath.Join(t.TempDir(), "oversized.zip")
+	file, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+
+	writer := zip.NewWriter(file)
+	entry, err := writer.Create("large.txt")
+	if err != nil {
+		t.Fatalf("create entry: %v", err)
+	}
+	if _, err := entry.Write([]byte("0123456789")); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close zip file: %v", err)
+	}
+
+	err = unzipSecureWithLimit(zipPath, t.TempDir(), 8)
+	if !errors.Is(err, ErrInvalidPlugin) {
+		t.Fatalf("expected invalid plugin error, got %v", err)
+	}
+}
+
 func zipDirectory(sourceDir string, zipPath string, wrapTopLevel bool) error {
 	file, err := os.Create(zipPath)
 	if err != nil {
