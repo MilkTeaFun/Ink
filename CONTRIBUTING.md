@@ -64,9 +64,12 @@ git checkout -b feat/your-change
 Install dependencies:
 
 ```bash
+pnpm install
 cd web
 pnpm install
 ```
+
+The root install sets up the repository Git hooks. The `web/` install provides the frontend toolchain used by the pre-commit checks.
 
 Start the frontend dev server:
 
@@ -181,6 +184,13 @@ feat(web): Added printer status cards.
 ```
 
 Please keep commits readable and consistent with the existing project history.
+
+This repository enforces the format in two places:
+
+- Locally, a root Husky `commit-msg` hook runs `scripts/check_commit_msg.sh`.
+- In CI, the `commit-message` workflow checks every commit on pull requests and pushes to `main`.
+
+If the first line does not match the rule, the commit is rejected locally or fails CI.
 
 ## Testing before submission
 

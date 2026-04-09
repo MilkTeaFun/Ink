@@ -11,7 +11,6 @@
     "format:check": "oxfmt -c .oxfmtrc.json --check .",
     "lint": "oxlint -c .oxlintrc.json --deny-warnings src vite.config.ts tailwind.config.ts postcss.config.js",
     "lint:fix": "oxlint -c .oxlintrc.json --fix --deny-warnings src vite.config.ts tailwind.config.ts postcss.config.js",
-    "prepare": "cd .. && husky web/.husky",
     "precommit": "lint-staged",
     "preview": "vite preview",
     "test": "vitest",

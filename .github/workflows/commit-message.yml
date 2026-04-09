@@ -1,0 +1,57 @@
+name: commit-message
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: commit-message-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  commit-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.event.pull_request.base.sha }}"
+            head_ref="${{ github.event.pull_request.head.sha }}"
+            range="${base_ref}..${head_ref}"
+          else
+            before_ref="${{ github.event.before }}"
+            head_ref="${{ github.sha }}"
+            if [[ "$before_ref" == "0000000000000000000000000000000000000000" ]]; then
+              range="$head_ref"
+            else
+              range="${before_ref}..${head_ref}"
+            fi
+          fi
+
+          mapfile -t commits < <(git rev-list --reverse "$range")
+
+          if [[ "${#commits[@]}" -eq 0 ]]; then
+            echo "No commits to validate."
+            exit 0
+          fi
+
+          for commit in "${commits[@]}"; do
+            tmp_file="$(mktemp)"
+            git log -1 --format=%B "$commit" > "$tmp_file"
+            echo "Checking $commit: $(cat "$tmp_file")"
+            ./scripts/check_commit_msg.sh "$tmp_file"
+            rm -f "$tmp_file"
+          done
