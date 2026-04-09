@@ -21,8 +21,8 @@ func TestGetStateSeedsMissingWorkspace(t *testing.T) {
 		t.Fatalf("get state failed: %v", err)
 	}
 
-	if len(state.Devices) == 0 {
-		t.Fatalf("expected seeded workspace")
+	if len(state.Devices) != 0 || len(state.Conversations) != 0 || len(state.PrintJobs) != 0 {
+		t.Fatalf("expected empty account workspace, got %+v", state)
 	}
 	if repo.savedUserID != "user-1" {
 		t.Fatalf("expected seeded workspace to be saved for current user")

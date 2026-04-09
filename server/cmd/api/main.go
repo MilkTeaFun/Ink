@@ -11,14 +11,17 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
 	"github.com/ruhuang/ink/server/internal/platform/idgen"
 	"github.com/ruhuang/ink/server/internal/platform/password"
+	"github.com/ruhuang/ink/server/internal/platform/secret"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
 	"github.com/ruhuang/ink/server/internal/platform/token"
+	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
@@ -62,10 +65,34 @@ func main() {
 		cfg.RefreshTokenTTL,
 	)
 	workspaceService := workspace.NewService(store, service, clock.SystemClock{})
+	var encryptor *secret.Box
+	if cfg.AIConfigEncryptionKey != "" {
+		encryptor, err = secret.NewBox(cfg.AIConfigEncryptionKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+	aiService := ai.NewService(
+		store,
+		service,
+		ai.NewOpenAIClient(cfg.AIProviderTimeout, cfg.AIAllowInsecurePrivateURL),
+		encryptor,
+		clock.SystemClock{},
+		cfg.AIAllowInsecurePrivateURL,
+	)
+	printerService := printer.NewService(
+		store,
+		service,
+		idgen.Generator{},
+		clock.SystemClock{},
+		cfg.MemobirdAccessKey,
+		cfg.MemobirdBaseURL,
+		cfg.MemobirdTimeout,
+	)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           httpapi.NewServer(service, workspaceService, logger, cfg.RateLimitWindow, cfg.RateLimitMax).Handler(),
+		Handler:           httpapi.NewServer(service, workspaceService, aiService, printerService, logger, cfg.RateLimitWindow, cfg.RateLimitMax).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -53,7 +53,7 @@ func (s *Service) GetState(ctx context.Context, accessToken string) (State, erro
 		return NormalizeState(*current), nil
 	}
 
-	seeded := SeedState(s.clock.Now())
+	seeded := EmptyState()
 	if err := s.repo.SaveByUserID(ctx, currentUser.ID, seeded, s.clock.Now()); err != nil {
 		return State{}, err
 	}

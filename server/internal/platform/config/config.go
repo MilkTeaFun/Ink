@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -12,14 +13,20 @@ import (
 
 // Config contains the runtime settings required by the auth service.
 type Config struct {
-	AppName         string
-	Port            int
-	DatabaseURL     string
-	JWTSecret       string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
-	RateLimitWindow time.Duration
-	RateLimitMax    int
+	AppName                   string
+	Port                      int
+	DatabaseURL               string
+	JWTSecret                 string
+	AccessTokenTTL            time.Duration
+	RefreshTokenTTL           time.Duration
+	RateLimitWindow           time.Duration
+	RateLimitMax              int
+	AIConfigEncryptionKey     string
+	AIAllowInsecurePrivateURL bool
+	AIProviderTimeout         time.Duration
+	MemobirdAccessKey         string
+	MemobirdBaseURL           string
+	MemobirdTimeout           time.Duration
 }
 
 // Load reads application configuration from the current environment.
@@ -49,15 +56,31 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	aiProviderTimeout, err := envDuration("AI_PROVIDER_TIMEOUT", 45*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	memobirdTimeout, err := envDuration("MEMOBIRD_TIMEOUT", 30*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		AppName:         envString("APP_NAME", "ink-auth"),
-		Port:            port,
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		AccessTokenTTL:  accessTokenTTL,
-		RefreshTokenTTL: refreshTokenTTL,
-		RateLimitWindow: rateLimitWindow,
-		RateLimitMax:    rateLimitMax,
+		AppName:                   envString("APP_NAME", "ink-auth"),
+		Port:                      port,
+		DatabaseURL:               os.Getenv("DATABASE_URL"),
+		JWTSecret:                 os.Getenv("JWT_SECRET"),
+		AccessTokenTTL:            accessTokenTTL,
+		RefreshTokenTTL:           refreshTokenTTL,
+		RateLimitWindow:           rateLimitWindow,
+		RateLimitMax:              rateLimitMax,
+		AIConfigEncryptionKey:     os.Getenv("AI_CONFIG_ENCRYPTION_KEY"),
+		AIAllowInsecurePrivateURL: envBool("AI_ALLOW_INSECURE_PRIVATE_URL", false),
+		AIProviderTimeout:         aiProviderTimeout,
+		MemobirdAccessKey:         os.Getenv("MEMOBIRD_ACCESS_KEY"),
+		MemobirdBaseURL:           os.Getenv("MEMOBIRD_BASE_URL"),
+		MemobirdTimeout:           memobirdTimeout,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -86,6 +109,12 @@ func Load() (Config, error) {
 
 	if cfg.RateLimitMax <= 0 {
 		return Config{}, fmt.Errorf("LOGIN_RATE_LIMIT_MAX must be positive")
+	}
+	if cfg.AIProviderTimeout <= 0 {
+		return Config{}, fmt.Errorf("AI_PROVIDER_TIMEOUT must be positive")
+	}
+	if cfg.MemobirdTimeout <= 0 {
+		return Config{}, fmt.Errorf("MEMOBIRD_TIMEOUT must be positive")
 	}
 
 	return cfg, nil
@@ -157,4 +186,20 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	}
 
 	return parsed, nil
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	switch value {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	case "0", "false", "FALSE", "no", "NO", "off", "OFF":
+		return false
+	default:
+		return fallback
+	}
 }

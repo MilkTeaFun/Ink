@@ -11,10 +11,13 @@ type SourceConnectionStatus string
 const (
 	DeviceStatusConnected DeviceStatus = "connected"
 	DeviceStatusPending   DeviceStatus = "pending"
+	DeviceStatusOffline   DeviceStatus = "offline"
 
 	PrintStatusPending   PrintStatus = "pending"
 	PrintStatusQueued    PrintStatus = "queued"
 	PrintStatusCompleted PrintStatus = "completed"
+	PrintStatusFailed    PrintStatus = "failed"
+	PrintStatusCancelled PrintStatus = "cancelled"
 
 	ConversationRoleUser      ConversationMessageRole = "user"
 	ConversationRoleAssistant ConversationMessageRole = "assistant"
@@ -280,6 +283,26 @@ func SeedState(now time.Time) State {
 			SendConfirmationEnabled: true,
 			Theme:                   ThemeModeLight,
 			DefaultDeviceID:         "device-desk",
+		},
+		ServiceBinding: ServiceBinding{
+			ProviderName: nil,
+			ModelName:    "Ink AI",
+			Bound:        false,
+		},
+	})
+}
+
+func EmptyState() State {
+	return NormalizeState(State{
+		Devices:       []Device{},
+		Conversations: []Conversation{},
+		PrintJobs:     []PrintJob{},
+		Schedules:     []Schedule{},
+		Sources:       []SourceConnection{},
+		Preferences: Preferences{
+			LoginProtectionEnabled:  false,
+			SendConfirmationEnabled: true,
+			Theme:                   ThemeModeLight,
 		},
 		ServiceBinding: ServiceBinding{
 			ProviderName: nil,

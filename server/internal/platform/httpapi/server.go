@@ -12,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/session"
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
@@ -21,6 +23,8 @@ import (
 type Server struct {
 	auth        auth.AuthService
 	workspace   workspace.WorkspaceService
+	ai          ai.AIService
+	printer     printer.PrinterService
 	logger      *slog.Logger
 	rateLimiter *LoginRateLimiter
 }
@@ -29,6 +33,8 @@ type Server struct {
 func NewServer(
 	authService auth.AuthService,
 	workspaceService workspace.WorkspaceService,
+	aiService ai.AIService,
+	printerService printer.PrinterService,
 	logger *slog.Logger,
 	rateWindow time.Duration,
 	rateMax int,
@@ -36,6 +42,8 @@ func NewServer(
 	return &Server{
 		auth:        authService,
 		workspace:   workspaceService,
+		ai:          aiService,
+		printer:     printerService,
 		logger:      logger,
 		rateLimiter: NewLoginRateLimiter(rateWindow, rateMax),
 	}
@@ -53,6 +61,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/users", s.wrap(s.handleCreateUser))
 	mux.HandleFunc("GET /api/v1/workspace", s.wrap(s.handleGetWorkspace))
 	mux.HandleFunc("PUT /api/v1/workspace", s.wrap(s.handleSaveWorkspace))
+	mux.HandleFunc("GET /api/v1/ai/config", s.wrap(s.handleGetAIConfig))
+	mux.HandleFunc("PUT /api/v1/admin/ai/config", s.wrap(s.handleSaveAIConfig))
+	mux.HandleFunc("POST /api/v1/ai/reply", s.wrap(s.handleGenerateAIReply))
+	mux.HandleFunc("GET /api/v1/printers", s.wrap(s.handleListPrinters))
+	mux.HandleFunc("POST /api/v1/printers/bind", s.wrap(s.handleBindPrinter))
+	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
+	mux.HandleFunc("GET /api/v1/print-jobs", s.wrap(s.handleListPrintJobs))
+	mux.HandleFunc("POST /api/v1/print-jobs", s.wrap(s.handleCreatePrintJob))
+	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/submit", s.wrap(s.handleSubmitPrintJob))
+	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/cancel", s.wrap(s.handleCancelPrintJob))
+	mux.HandleFunc("PUT /api/v1/print-jobs/{jobID}/device", s.wrap(s.handleUpdatePrintJobDevice))
 	return mux
 }
 
@@ -85,6 +104,36 @@ type createUserRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
+}
+
+type aiConfigRequest struct {
+	ProviderName string `json:"providerName"`
+	ProviderType string `json:"providerType"`
+	BaseURL      string `json:"baseUrl"`
+	Model        string `json:"model"`
+	APIKey       string `json:"apiKey"`
+}
+
+type aiReplyRequest struct {
+	Messages []ai.ChatMessage `json:"messages"`
+}
+
+type bindPrinterRequest struct {
+	Name     string `json:"name"`
+	Note     string `json:"note"`
+	DeviceID string `json:"deviceId"`
+}
+
+type createPrintJobRequest struct {
+	Title             string `json:"title"`
+	Source            string `json:"source"`
+	Content           string `json:"content"`
+	PrinterBindingID  string `json:"printerBindingId"`
+	SubmitImmediately bool   `json:"submitImmediately"`
+}
+
+type updatePrintJobDeviceRequest struct {
+	PrinterBindingID string `json:"printerBindingId"`
 }
 
 type errorEnvelope struct {
@@ -279,6 +328,229 @@ func (s *Server) handleSaveWorkspace(w http.ResponseWriter, r *http.Request, req
 	writeJSON(w, http.StatusOK, saved)
 }
 
+func (s *Server) handleGetAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	summary, err := s.ai.GetConfigSummary(r.Context(), accessToken)
+	if err != nil {
+		s.writeAIError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleSaveAIConfig(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload aiConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	summary, err := s.ai.UpdateSystemConfig(r.Context(), accessToken, ai.UpdateConfigInput{
+		ProviderName: payload.ProviderName,
+		ProviderType: payload.ProviderType,
+		BaseURL:      payload.BaseURL,
+		Model:        payload.Model,
+		APIKey:       payload.APIKey,
+	})
+	if err != nil {
+		s.writeAIError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+func (s *Server) handleGenerateAIReply(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload aiReplyRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	reply, err := s.ai.GenerateReply(r.Context(), accessToken, ai.ReplyInput{Messages: payload.Messages})
+	if err != nil {
+		s.writeAIError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, reply)
+}
+
+func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	devices, err := s.printer.ListDevices(r.Context(), accessToken)
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string][]workspace.Device{"devices": devices})
+}
+
+func (s *Server) handleBindPrinter(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload bindPrinterRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	device, err := s.printer.BindDevice(r.Context(), accessToken, printer.BindInput{
+		Name:     payload.Name,
+		Note:     payload.Note,
+		DeviceID: payload.DeviceID,
+	})
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]workspace.Device{"device": device})
+}
+
+func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	if err := s.printer.DeleteDevice(r.Context(), accessToken, r.PathValue("printerID")); err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	jobs, err := s.printer.ListPrintJobs(r.Context(), accessToken)
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string][]workspace.PrintJob{"printJobs": jobs})
+}
+
+func (s *Server) handleCreatePrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload createPrintJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	job, err := s.printer.CreatePrintJob(r.Context(), accessToken, printer.CreateJobInput{
+		Title:             payload.Title,
+		Source:            payload.Source,
+		Content:           payload.Content,
+		PrinterBindingID:  payload.PrinterBindingID,
+		SubmitImmediately: payload.SubmitImmediately,
+	})
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]workspace.PrintJob{"printJob": job})
+}
+
+func (s *Server) handleSubmitPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	job, err := s.printer.SubmitPrintJob(r.Context(), accessToken, r.PathValue("jobID"))
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]workspace.PrintJob{"printJob": job})
+}
+
+func (s *Server) handleCancelPrintJob(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	job, err := s.printer.CancelPrintJob(r.Context(), accessToken, r.PathValue("jobID"))
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]workspace.PrintJob{"printJob": job})
+}
+
+func (s *Server) handleUpdatePrintJobDevice(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload updatePrintJobDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	job, err := s.printer.UpdatePrintJobDevice(r.Context(), accessToken, r.PathValue("jobID"), printer.UpdateJobDeviceInput{
+		PrinterBindingID: payload.PrinterBindingID,
+	})
+	if err != nil {
+		s.writePrinterError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]workspace.PrintJob{"printJob": job})
+}
+
 func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
@@ -306,6 +578,42 @@ func (s *Server) writeAuthError(w http.ResponseWriter, requestID string, err err
 	default:
 		s.logger.Error("auth handler failed", "request_id", requestID, "error", err)
 		writeError(w, requestID, http.StatusInternalServerError, "internal_error", "服务暂时不可用，请稍后重试。")
+	}
+}
+
+func (s *Server) writeAIError(w http.ResponseWriter, requestID string, err error) {
+	switch {
+	case errors.Is(err, ai.ErrForbidden):
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
+	case errors.Is(err, ai.ErrNotConfigured):
+		writeError(w, requestID, http.StatusPreconditionFailed, "ai_not_configured", "当前还没有配置 AI 服务。")
+	case errors.Is(err, ai.ErrMissingSecret):
+		writeError(w, requestID, http.StatusServiceUnavailable, "ai_secret_missing", "服务端尚未配置 AI 加密密钥。")
+	case errors.Is(err, ai.ErrInvalidConfig):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_config", "请输入有效的 AI 服务配置。")
+	case errors.Is(err, ai.ErrInvalidInput):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_ai_input", "请输入有效的对话内容。")
+	case errors.Is(err, ai.ErrProviderUnavailable):
+		writeError(w, requestID, http.StatusBadGateway, "ai_provider_unavailable", "AI 服务暂时不可用，请稍后重试。")
+	default:
+		s.writeAuthError(w, requestID, err)
+	}
+}
+
+func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err error) {
+	switch {
+	case errors.Is(err, printer.ErrForbidden):
+		writeError(w, requestID, http.StatusForbidden, "forbidden", "当前账号没有该操作权限。")
+	case errors.Is(err, printer.ErrNotConfigured):
+		writeError(w, requestID, http.StatusPreconditionFailed, "printer_not_configured", "当前还没有配置 Memobird 服务。")
+	case errors.Is(err, printer.ErrNotFound):
+		writeError(w, requestID, http.StatusNotFound, "printer_resource_not_found", "指定的设备或打印任务不存在。")
+	case errors.Is(err, printer.ErrInvalidInput):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_printer_input", "请输入有效的设备或打印信息。")
+	case errors.Is(err, printer.ErrUnavailable):
+		writeError(w, requestID, http.StatusBadGateway, "printer_unavailable", "咕咕机服务暂时不可用，请稍后重试。")
+	default:
+		s.writeAuthError(w, requestID, err)
 	}
 }
 
