@@ -7,6 +7,16 @@ import AppRoot from "@/app/AppRoot.vue";
 import { createTestRouter } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
 
+type MatchMediaEventHandler = (
+  type: string,
+  listener: EventListenerOrEventListenerObject | null,
+) => void;
+type LegacyMediaQueryListenerHandler = (
+  listener: ((event: MediaQueryListEvent) => void) | null,
+) => void;
+type MatchMediaDispatchEventHandler = (event: Event) => boolean;
+type MatchMediaFactory = (query: string) => MediaQueryList;
+
 function createMatchMediaMock(initialMatches = false) {
   let matches = initialMatches;
   const listeners = new Set<EventListenerOrEventListenerObject>();
@@ -26,7 +36,7 @@ function createMatchMediaMock(initialMatches = false) {
     },
     media: "(prefers-color-scheme: dark)",
     onchange: null,
-    addEventListener: vi.fn(
+    addEventListener: vi.fn<MatchMediaEventHandler>(
       (_type: string, listener: EventListenerOrEventListenerObject | null) => {
         if (!listener) {
           return;
@@ -35,7 +45,7 @@ function createMatchMediaMock(initialMatches = false) {
         listeners.add(listener);
       },
     ),
-    removeEventListener: vi.fn(
+    removeEventListener: vi.fn<MatchMediaEventHandler>(
       (_type: string, listener: EventListenerOrEventListenerObject | null) => {
         if (!listener) {
           return;
@@ -44,26 +54,30 @@ function createMatchMediaMock(initialMatches = false) {
         listeners.delete(listener);
       },
     ),
-    addListener: vi.fn((listener: ((event: MediaQueryListEvent) => void) | null) => {
-      if (!listener) {
-        return;
-      }
+    addListener: vi.fn<LegacyMediaQueryListenerHandler>(
+      (listener: ((event: MediaQueryListEvent) => void) | null) => {
+        if (!listener) {
+          return;
+        }
 
-      listeners.add(listener as unknown as EventListener);
-    }),
-    removeListener: vi.fn((listener: ((event: MediaQueryListEvent) => void) | null) => {
-      if (!listener) {
-        return;
-      }
+        listeners.add(listener as unknown as EventListener);
+      },
+    ),
+    removeListener: vi.fn<LegacyMediaQueryListenerHandler>(
+      (listener: ((event: MediaQueryListEvent) => void) | null) => {
+        if (!listener) {
+          return;
+        }
 
-      listeners.delete(listener as unknown as EventListener);
-    }),
+        listeners.delete(listener as unknown as EventListener);
+      },
+    ),
     dispatch(nextMatches: boolean) {
       matches = nextMatches;
       const event = { matches: nextMatches, media: mediaQueryList.media } as MediaQueryListEvent;
       notify(event);
     },
-    dispatchEvent: vi.fn(),
+    dispatchEvent: vi.fn<MatchMediaDispatchEventHandler>(() => true),
   } satisfies MediaQueryList & { dispatch(nextMatches: boolean): void };
 
   return mediaQueryList;
@@ -73,7 +87,7 @@ let matchMediaMock = createMatchMediaMock();
 
 beforeEach(() => {
   matchMediaMock = createMatchMediaMock();
-  vi.stubGlobal("matchMedia", vi.fn(() => matchMediaMock));
+  vi.stubGlobal("matchMedia", vi.fn<MatchMediaFactory>(() => matchMediaMock));
 });
 
 async function mountAt(path: string, authenticated = true) {

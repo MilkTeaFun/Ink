@@ -1,6 +1,16 @@
 import { config } from "@vue/test-utils";
 import { beforeEach, vi } from "vitest";
 
+type MatchMediaEventHandler = (
+  type: string,
+  listener: EventListenerOrEventListenerObject | null,
+) => void;
+type LegacyMediaQueryListenerHandler = (
+  listener: ((event: MediaQueryListEvent) => void) | null,
+) => void;
+type MatchMediaDispatchEventHandler = (event: Event) => boolean;
+type MatchMediaFactory = (query: string) => MediaQueryList;
+
 config.global.stubs = {
   transition: false,
 };
@@ -65,15 +75,15 @@ beforeEach(() => {
 if (typeof window.matchMedia !== "function") {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
+    value: vi.fn<MatchMediaFactory>((query: string) => ({
       matches: false,
       media: query,
       onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
+      addEventListener: vi.fn<MatchMediaEventHandler>(() => undefined),
+      removeEventListener: vi.fn<MatchMediaEventHandler>(() => undefined),
+      addListener: vi.fn<LegacyMediaQueryListenerHandler>(() => undefined),
+      removeListener: vi.fn<LegacyMediaQueryListenerHandler>(() => undefined),
+      dispatchEvent: vi.fn<MatchMediaDispatchEventHandler>(() => true),
     })),
   });
 }
