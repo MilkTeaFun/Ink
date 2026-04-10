@@ -255,9 +255,9 @@ func stringFromValue(value any) string {
 	switch current := value.(type) {
 	case string:
 		return current
-	case fmt.Stringer:
-		return current.String()
 	case json.Number:
+		return current.String()
+	case fmt.Stringer:
 		return current.String()
 	case float64:
 		return strconv.FormatFloat(current, 'f', -1, 64)

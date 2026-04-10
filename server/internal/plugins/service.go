@@ -629,7 +629,7 @@ func (s *Service) runValidation(ctx context.Context, installation Installation, 
 }
 
 func (s *Service) installPlugin(ctx context.Context, pluginDir string, manifest Manifest) error {
-	command := []string{}
+	var command []string
 	switch manifest.Runtime.Type {
 	case "node":
 		command = []string{"pnpm", "install", "--frozen-lockfile"}
@@ -794,7 +794,9 @@ func unzipSecureWithLimit(zipPath string, destination string, maxUncompressedByt
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
+	defer func() {
+		_ = reader.Close()
+	}()
 
 	var totalUncompressed int64
 	destination = filepath.Clean(destination)

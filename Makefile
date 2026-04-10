@@ -1,4 +1,4 @@
-.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api check-api
+.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api lint-api check-api
 
 dev-web:
 	cd web && pnpm dev
@@ -40,6 +40,9 @@ test-api:
 
 build-api:
 	cd server && go build ./...
+
+lint-api:
+	cd server && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.0 run --default=none --enable=errcheck --enable=govet --enable=ineffassign --enable=staticcheck --disable=unused ./...
 
 check-api:
 	cd server && test -z "$$(gofmt -l .)" && go test ./... && go build ./...

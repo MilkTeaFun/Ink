@@ -96,7 +96,9 @@ func (c *OpenAIClient) CreateReply(ctx context.Context, cfg RuntimeConfig, messa
 	if err != nil {
 		return ReplyResult{}, fmt.Errorf("%w: %s", ErrProviderUnavailable, err.Error())
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
@@ -144,7 +146,7 @@ func ValidateBaseURL(raw string, allowInsecurePrivateURL bool) error {
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return ErrInvalidConfig
 	}
-	if parsed.Scheme != "https" && !(allowInsecurePrivateURL && parsed.Scheme == "http") {
+	if parsed.Scheme != "https" && (!allowInsecurePrivateURL || parsed.Scheme != "http") {
 		return ErrInvalidConfig
 	}
 

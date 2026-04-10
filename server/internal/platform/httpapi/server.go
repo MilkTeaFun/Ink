@@ -486,7 +486,9 @@ func (s *Server) handleUploadPlugin(w http.ResponseWriter, r *http.Request, requ
 		return
 	}
 	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
+		defer func() {
+			_ = r.MultipartForm.RemoveAll()
+		}()
 	}
 
 	file, header, err := r.FormFile("file")
@@ -494,7 +496,9 @@ func (s *Server) handleUploadPlugin(w http.ResponseWriter, r *http.Request, requ
 		writeError(w, requestID, http.StatusBadRequest, "missing_file", "请上传 ZIP 插件包。")
 		return
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	details, err := s.plugins.UploadPlugin(r.Context(), accessToken, header.Filename, file)
 	if err != nil {
