@@ -265,6 +265,14 @@ func TestRenderPrintableTextKeepsTitleAndBodyStructure(t *testing.T) {
 	}
 }
 
+func TestRenderPrintableTextNormalizesEmojiAndListMarkers(t *testing.T) {
+	rendered := renderPrintableText("  手动打印  ", "你好！很高兴见到你！😊\n\n- 回答问题\n• 协助写作\n\t编程支持")
+
+	if rendered != "手动打印\n\n你好！很高兴见到你！\n\n回答问题\n协助写作\n编程支持" {
+		t.Fatalf("renderPrintableText() = %q", rendered)
+	}
+}
+
 func TestPrinterFontDataIsAvailable(t *testing.T) {
 	if len(printerFontData) == 0 {
 		t.Fatal("expected embedded printer font data")
