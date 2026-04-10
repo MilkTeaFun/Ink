@@ -4,7 +4,17 @@ import { useRouter } from "vue-router";
 
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PluginDetails, PluginFieldSpec } from "@/types/plugins";
-import { getThemeDescription } from "@/utils/workspace";
+import { getPluginFieldDefaultValue } from "@/utils/plugins";
+import {
+  getPluginBindingStatusBadgeClass,
+  getPluginBindingStatusLabel,
+  getPluginInstallationStatusBadgeClass,
+  getPluginInstallationStatusLabel,
+  getServiceBindingStatusBadgeClass,
+  getThemeDescription,
+  getUserRoleBadgeClass,
+  getUserRoleLabel,
+} from "@/utils/workspace";
 
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
@@ -59,19 +69,6 @@ function handleDefaultDeviceChange(event: Event) {
   workspaceStore.setDefaultDevice(target?.value ?? workspaceStore.defaultDeviceId);
 }
 
-function defaultValueForField(field: PluginFieldSpec) {
-  if (field.defaultValue !== undefined) {
-    return field.defaultValue;
-  }
-
-  switch (field.type) {
-    case "checkbox":
-      return false;
-    default:
-      return "";
-  }
-}
-
 function createPluginDraftState(plugin: PluginDetails) {
   const config: Record<string, unknown> = {};
   const secrets: Record<string, string> = {};
@@ -82,7 +79,8 @@ function createPluginDraftState(plugin: PluginDetails) {
       continue;
     }
 
-    config[field.key] = plugin.binding?.config?.[field.key] ?? defaultValueForField(field);
+    config[field.key] =
+      plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
   }
 
   return {
@@ -108,7 +106,8 @@ function ensurePluginDraft(plugin: PluginDetails) {
     if (field.type === "secret" || field.key in nextDraft) {
       continue;
     }
-    nextDraft[field.key] = plugin.binding?.config?.[field.key] ?? defaultValueForField(field);
+    nextDraft[field.key] =
+      plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
   }
   pluginDrafts.value[plugin.installation.id] = nextDraft;
 
@@ -147,7 +146,8 @@ watch(
 function pluginDraftValue(plugin: PluginDetails, field: PluginFieldSpec) {
   return field.type === "secret"
     ? (pluginSecretDrafts.value[plugin.installation.id]?.[field.key] ?? "")
-    : (pluginDrafts.value[plugin.installation.id]?.[field.key] ?? defaultValueForField(field));
+    : (pluginDrafts.value[plugin.installation.id]?.[field.key] ??
+        getPluginFieldDefaultValue(field));
 }
 
 function updatePluginDraft(plugin: PluginDetails, field: PluginFieldSpec, value: unknown) {
@@ -247,56 +247,6 @@ async function handlePluginSave(plugin: PluginDetails) {
     pluginSecretDrafts.value[plugin.installation.id] = createPluginDraftState(plugin).secrets;
     pluginTestMessages.value[plugin.installation.id] = "配置已保存。";
   }
-}
-
-function pluginInstallationStatusLabel(status: PluginDetails["installation"]["status"]) {
-  switch (status) {
-    case "installing":
-      return "安装中";
-    case "ready":
-      return "可用";
-    case "failed":
-      return "异常";
-    case "disabled":
-      return "已停用";
-    default:
-      return status;
-  }
-}
-
-function pluginInstallationStatusClass(status: PluginDetails["installation"]["status"]) {
-  switch (status) {
-    case "ready":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
-    case "failed":
-      return "bg-rose-50 text-rose-700 ring-rose-600/20";
-    case "disabled":
-      return "bg-stone-100 text-stone-700 ring-stone-500/10";
-    default:
-      return "bg-amber-50 text-amber-700 ring-amber-600/20";
-  }
-}
-
-function pluginBindingStatusLabel(plugin: PluginDetails) {
-  if (plugin.installation.status === "disabled") {
-    return "已停用";
-  }
-
-  if (!plugin.binding?.enabled) {
-    return "未连接";
-  }
-
-  return workspaceStore.getSourceStatusLabel(plugin.binding.status);
-}
-
-function pluginBindingStatusClass(plugin: PluginDetails) {
-  if (plugin.installation.status === "disabled" || !plugin.binding?.enabled) {
-    return "bg-stone-100 text-stone-700 ring-stone-500/10";
-  }
-
-  return plugin.binding.status === "error"
-    ? "bg-rose-50 text-rose-700 ring-rose-600/20"
-    : "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
 }
 
 async function handleLogout() {
@@ -429,9 +379,10 @@ async function handleAIConfigSubmit() {
               </div>
               <div class="flex flex-wrap items-center gap-3">
                 <span
-                  class="inline-flex shrink-0 items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-stone-800"
+                  class="ui-status-badge"
+                  :class="getUserRoleBadgeClass(workspaceStore.isAdmin ? 'admin' : 'member')"
                 >
-                  {{ workspaceStore.isAdmin ? "管理员" : "成员" }}
+                  {{ getUserRoleLabel(workspaceStore.isAdmin ? "admin" : "member") }}
                 </span>
                 <button
                   type="button"
@@ -557,9 +508,10 @@ async function handleAIConfigSubmit() {
                   </p>
                 </div>
                 <span
-                  class="inline-flex shrink-0 self-start rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800"
+                  class="ui-status-badge self-start"
+                  :class="getUserRoleBadgeClass('admin')"
                 >
-                  管理员
+                  {{ getUserRoleLabel("admin") }}
                 </span>
               </div>
 
@@ -752,7 +704,8 @@ async function handleAIConfigSubmit() {
                   </p>
                 </div>
                 <span
-                  class="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-800"
+                  class="ui-status-badge"
+                  :class="getServiceBindingStatusBadgeClass(workspaceStore.aiConfigSummary.bound)"
                 >
                   {{ workspaceStore.aiConfigSummary.bound ? "已连接" : "未连接" }}
                 </span>
@@ -809,9 +762,10 @@ async function handleAIConfigSubmit() {
                   </p>
                 </div>
                 <span
-                  class="inline-flex shrink-0 self-start rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800"
+                  class="ui-status-badge self-start"
+                  :class="getUserRoleBadgeClass('admin')"
                 >
-                  管理员
+                  {{ getUserRoleLabel("admin") }}
                 </span>
               </div>
 
@@ -970,10 +924,10 @@ async function handleAIConfigSubmit() {
                       {{ plugin.installation.displayName }}
                     </p>
                     <span
-                      class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-                      :class="pluginInstallationStatusClass(plugin.installation.status)"
+                      class="ui-status-badge"
+                      :class="getPluginInstallationStatusBadgeClass(plugin.installation.status)"
                     >
-                      {{ pluginInstallationStatusLabel(plugin.installation.status) }}
+                      {{ getPluginInstallationStatusLabel(plugin.installation.status) }}
                     </span>
                     <span class="text-xs text-stone-500">
                       {{ plugin.installation.runtimeType === "node" ? "Node" : "Python" }}
@@ -1052,16 +1006,16 @@ async function handleAIConfigSubmit() {
                         {{ plugin.installation.displayName }}
                       </h4>
                       <span
-                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-                        :class="pluginInstallationStatusClass(plugin.installation.status)"
+                        class="ui-status-badge"
+                        :class="getPluginInstallationStatusBadgeClass(plugin.installation.status)"
                       >
-                        {{ pluginInstallationStatusLabel(plugin.installation.status) }}
+                        {{ getPluginInstallationStatusLabel(plugin.installation.status) }}
                       </span>
                       <span
-                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-                        :class="pluginBindingStatusClass(plugin)"
+                        class="ui-status-badge"
+                        :class="getPluginBindingStatusBadgeClass(plugin)"
                       >
-                        {{ pluginBindingStatusLabel(plugin) }}
+                        {{ getPluginBindingStatusLabel(plugin) }}
                       </span>
                     </div>
                     <p class="mt-1 text-sm text-stone-500">

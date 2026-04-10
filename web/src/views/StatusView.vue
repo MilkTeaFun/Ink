@@ -4,6 +4,11 @@ import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
+import {
+  getDeviceStatusBadgeClass,
+  getPrintStatusBadgeClass,
+  getSummaryProgressClass,
+} from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
 const addDeviceOpen = ref(false);
@@ -74,15 +79,7 @@ async function submitAddDevice() {
           <div class="mb-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-stone-100">
             <div
               class="h-full rounded-full transition-all duration-500"
-              :class="
-                item.tone === 'green'
-                  ? 'bg-emerald-500'
-                  : item.tone === 'amber'
-                    ? 'bg-amber-500'
-                    : item.tone === 'stone'
-                      ? 'bg-stone-400'
-                      : 'bg-stone-800'
-              "
+              :class="getSummaryProgressClass(item.tone)"
               :style="{ width: `${item.progress}%` }"
             />
           </div>
@@ -158,18 +155,12 @@ async function submitAddDevice() {
                     {{ device.note }}
                   </p>
                 </div>
-              </div>
+                </div>
 
               <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                 <span
-                  class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                  :class="
-                    device.status === 'connected'
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
-                      : device.status === 'pending'
-                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                        : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                  "
+                  class="ui-status-badge"
+                  :class="getDeviceStatusBadgeClass(device.status)"
                 >
                   {{ workspaceStore.getDeviceStatusLabel(device.status) }}
                 </span>
@@ -260,8 +251,8 @@ async function submitAddDevice() {
               :key="item.id"
               class="ui-timeline-item"
             >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
+              <div class="ui-timeline-row">
+                <div class="ui-timeline-copy">
                   <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
                   <p class="mt-0.5 text-sm text-stone-500">
                     {{ workspaceStore.getDeviceName(item.deviceId) }} ·
@@ -269,18 +260,8 @@ async function submitAddDevice() {
                   </p>
                 </div>
                 <span
-                  class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                  :class="
-                    item.status === 'completed'
-                      ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
-                      : item.status === 'queued'
-                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                        : item.status === 'cancelled'
-                          ? 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                          : item.status === 'failed'
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
-                            : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                  "
+                  class="ui-status-badge self-center"
+                  :class="getPrintStatusBadgeClass(item.status)"
                 >
                   {{ workspaceStore.getPrintStatusLabel(item.status) }}
                 </span>

@@ -5,6 +5,8 @@ import { RouterLink } from "vue-router";
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PluginFieldSpec } from "@/types/plugins";
+import { buildPluginFieldDefaults, getPluginFieldDefaultValue } from "@/utils/plugins";
+import { getPrintStatusBadgeClass, getSourceStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
 
@@ -57,26 +59,6 @@ const selectedSchedulePlugin = computed(
     ) ?? null,
 );
 
-function defaultValueForField(field: PluginFieldSpec) {
-  if (field.defaultValue !== undefined) {
-    return field.defaultValue;
-  }
-
-  switch (field.type) {
-    case "checkbox":
-      return false;
-    default:
-      return "";
-  }
-}
-
-function buildFieldDefaults(fields: PluginFieldSpec[]) {
-  return fields.reduce<Record<string, unknown>>((accumulator, field) => {
-    accumulator[field.key] = defaultValueForField(field);
-    return accumulator;
-  }, {});
-}
-
 watch(
   () => selectedSchedulePlugin.value?.installation.id ?? "",
   (pluginID, previousPluginID) => {
@@ -89,7 +71,7 @@ watch(
       return;
     }
 
-    scheduleConfigDraft.value = buildFieldDefaults(
+    scheduleConfigDraft.value = buildPluginFieldDefaults(
       selectedSchedulePlugin.value?.manifest.scheduleConfigSchema ?? [],
     );
   },
@@ -115,7 +97,7 @@ async function handleScheduleDelete(scheduleId: string) {
 }
 
 function scheduleFieldValue(field: PluginFieldSpec) {
-  return scheduleConfigDraft.value[field.key] ?? defaultValueForField(field);
+  return scheduleConfigDraft.value[field.key] ?? getPluginFieldDefaultValue(field);
 }
 
 function updateScheduleField(field: PluginFieldSpec, value: unknown) {
@@ -202,7 +184,7 @@ function openScheduleDialog() {
   scheduleHour.value = 19;
   scheduleMinute.value = 30;
   scheduleWeekdays.value = [];
-  scheduleConfigDraft.value = buildFieldDefaults(
+  scheduleConfigDraft.value = buildPluginFieldDefaults(
     connectedPlugins.value[0]?.manifest.scheduleConfigSchema ?? [],
   );
   scheduleDeviceId.value = workspaceStore.defaultDeviceId;
@@ -332,12 +314,8 @@ async function submitScheduleDialog() {
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="text-sm font-medium text-stone-900">{{ item.title }}</p>
                     <span
-                      class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      :class="
-                        item.status === 'pending'
-                          ? 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                          : 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                      "
+                      class="ui-status-badge"
+                      :class="getPrintStatusBadgeClass(item.status)"
                     >
                       {{ workspaceStore.getPrintStatusLabel(item.status) }}
                     </span>
@@ -493,10 +471,8 @@ async function submitScheduleDialog() {
                 :key="item.id"
                 class="ui-timeline-item"
               >
-                <div
-                  class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
-                >
-                  <div class="min-w-0">
+                <div class="ui-timeline-row">
+                  <div class="ui-timeline-copy">
                     <p class="truncate text-sm font-medium text-stone-900">{{ item.title }}</p>
                     <p class="mt-0.5 text-sm text-stone-500">
                       {{ workspaceStore.getDeviceName(item.deviceId) }} ·
@@ -504,18 +480,8 @@ async function submitScheduleDialog() {
                     </p>
                   </div>
                   <span
-                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                    :class="
-                      item.status === 'completed'
-                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 ring-inset'
-                        : item.status === 'queued'
-                          ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ring-inset'
-                          : item.status === 'cancelled'
-                            ? 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                            : item.status === 'failed'
-                              ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 ring-inset'
-                              : 'bg-stone-100 text-stone-700 ring-1 ring-stone-500/10 ring-inset'
-                    "
+                    class="ui-status-badge sm:self-center"
+                    :class="getPrintStatusBadgeClass(item.status)"
                   >
                     {{ workspaceStore.getPrintStatusLabel(item.status) }}
                   </span>
@@ -568,14 +534,8 @@ async function submitScheduleDialog() {
                   <p class="mt-0.5 text-sm text-stone-500">{{ source.type }} · {{ source.note }}</p>
                 </div>
                 <span
-                  class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-                  :class="
-                    source.status === 'connected'
-                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
-                      : source.status === 'error'
-                        ? 'bg-rose-50 text-rose-700 ring-rose-600/20'
-                        : 'bg-stone-100 text-stone-700 ring-stone-500/10'
-                  "
+                  class="ui-status-badge"
+                  :class="getSourceStatusBadgeClass(source.status)"
                 >
                   {{ workspaceStore.getSourceStatusLabel(source.status) }}
                 </span>

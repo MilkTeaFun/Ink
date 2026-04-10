@@ -67,7 +67,7 @@ async function handleLogout() {
               <span>{{ item.label }}</span>
               <span
                 v-if="item.name === 'prints' && pendingBadge"
-                class="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] text-white"
+                class="ml-2 inline-flex min-w-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] text-white"
               >
                 {{ pendingBadge }}
               </span>

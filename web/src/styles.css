@@ -216,31 +216,34 @@
   }
 
   .ui-timeline {
-    @apply relative space-y-1 pl-5;
+    --timeline-dot-size: 0.625rem;
+    --timeline-rail-x: 0.75rem;
+    @apply relative space-y-1;
   }
 
   .ui-timeline::before {
     content: "";
     position: absolute;
-    left: 0.55rem;
-    top: 0.9rem;
-    bottom: 0.9rem;
+    left: calc(var(--timeline-rail-x) - 0.5px);
+    top: 1rem;
+    bottom: 1rem;
     width: 1px;
     @apply bg-stone-200;
   }
 
   .ui-timeline-item {
-    @apply relative rounded-lg px-4 py-4 transition-colors duration-200;
+    @apply relative rounded-lg py-4 pr-4 pl-8 transition-colors duration-200;
   }
 
   .ui-timeline-item::before {
     content: "";
     position: absolute;
-    left: -1.05rem;
-    top: 1.45rem;
-    width: 0.5rem;
-    height: 0.5rem;
+    left: calc(var(--timeline-rail-x) - (var(--timeline-dot-size) / 2));
+    top: 50%;
+    width: var(--timeline-dot-size);
+    height: var(--timeline-dot-size);
     border-radius: 999px;
+    transform: translateY(-50%);
     @apply border-[1.5px] border-white bg-stone-300;
   }
 
@@ -250,6 +253,14 @@
 
   .ui-timeline-item:hover {
     @apply bg-stone-50;
+  }
+
+  .ui-timeline-row {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3;
+  }
+
+  .ui-timeline-copy {
+    @apply min-w-0;
   }
 
   .ui-tab-track {
@@ -286,6 +297,10 @@
 
   .ui-btn-secondary {
     @apply inline-flex items-center justify-center rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-900 shadow-sm transition-all hover:border-stone-300 hover:bg-stone-50 active:scale-[0.98];
+  }
+
+  .ui-status-badge {
+    @apply inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-center text-xs font-medium leading-none;
   }
 
   .ui-btn-primary:disabled,
