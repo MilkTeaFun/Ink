@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, vi } from "vitest";
 
@@ -11,6 +11,7 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type { submitFeedbackToAdmin } from "@/services/feedback";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -109,6 +110,10 @@ vi.mock("@/services/ai", () => ({
     model: payload.model,
     keyConfigured: true,
   })),
+}));
+
+vi.mock("@/services/feedback", () => ({
+  submitFeedbackToAdmin: vi.fn<typeof submitFeedbackToAdmin>(async () => undefined),
 }));
 
 vi.mock("@/services/printers", () => ({
@@ -284,6 +289,30 @@ describe("workspace views", () => {
       ?.trigger("click");
 
     expect(store.pendingPrintJobs.at(0)?.source).toBe("对话选中问答");
+  });
+
+  it("opens the feedback dialog and submits feedback from the conversations view", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/conversations");
+    const wrapper = mount(ConversationsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "反馈")
+      ?.trigger("click");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    const feedbackInput = wrapper.find("textarea[placeholder='反馈（功能 / 建议 / 吐槽）']");
+    expect(feedbackInput.exists()).toBe(true);
+
+    await feedbackInput.setValue("建议把反馈入口放到顶部");
+    await wrapper.findAll("form").at(-1)?.trigger("submit");
+    await flushPromises();
+
+    expect(store.flashMessage).toBe("反馈已发送，管理员会直接收到纸条。");
   });
 
   it("guides and supports the first message when there is no conversation history", async () => {

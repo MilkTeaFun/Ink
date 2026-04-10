@@ -9,6 +9,7 @@ import type {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import type { submitFeedbackToAdmin } from "@/services/feedback";
 import type {
   bindPrinter,
   cancelPrintJob,
@@ -101,6 +102,10 @@ vi.mock("@/services/ai", () => ({
     model: payload.model,
     keyConfigured: true,
   })),
+}));
+
+vi.mock("@/services/feedback", () => ({
+  submitFeedbackToAdmin: vi.fn<typeof submitFeedbackToAdmin>(async () => undefined),
 }));
 
 vi.mock("@/services/printers", () => ({
@@ -506,6 +511,23 @@ describe("workspace store", () => {
 
     await expect(store.createAccount("new-user", "New User", "demo-password")).resolves.toBe(true);
     expect(store.flashMessage).toBe("新账号已创建。");
+  });
+
+  it("submits feedback to the administrator printer for authenticated users", async () => {
+    const store = authenticateStore();
+
+    await expect(store.submitFeedback("希望补一个反馈按钮")).resolves.toBe(true);
+
+    expect(store.feedbackError).toBe("");
+    expect(store.flashMessage).toBe("反馈已发送，管理员会直接收到纸条。");
+  });
+
+  it("requires login before submitting feedback", async () => {
+    const store = useWorkspaceStore();
+
+    await expect(store.submitFeedback("hello")).resolves.toBe(false);
+
+    expect(store.feedbackError).toBe("请先登录后再反馈。");
   });
 
   it("keeps auth tokens out of the workspace snapshot and persists them when login protection is off", async () => {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/feedback"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/schedule"
@@ -40,6 +41,10 @@ type ScheduleService interface {
 	Delete(ctx context.Context, accessToken string, scheduleID string) error
 }
 
+type FeedbackService interface {
+	Submit(ctx context.Context, accessToken string, input feedback.SubmitInput) error
+}
+
 const pluginUploadMultipartMemory int64 = 32 << 10
 
 // Server exposes the HTTP handlers for authentication endpoints.
@@ -48,6 +53,7 @@ type Server struct {
 	workspace            workspace.WorkspaceService
 	ai                   ai.AIService
 	printer              printer.PrinterService
+	feedback             FeedbackService
 	plugins              PluginService
 	schedules            ScheduleService
 	logger               *slog.Logger
@@ -61,6 +67,7 @@ func NewServer(
 	workspaceService workspace.WorkspaceService,
 	aiService ai.AIService,
 	printerService printer.PrinterService,
+	feedbackService FeedbackService,
 	pluginService PluginService,
 	scheduleService ScheduleService,
 	logger *slog.Logger,
@@ -73,6 +80,7 @@ func NewServer(
 		workspace:            workspaceService,
 		ai:                   aiService,
 		printer:              printerService,
+		feedback:             feedbackService,
 		plugins:              pluginService,
 		schedules:            scheduleService,
 		logger:               logger,
@@ -106,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/printers", s.wrap(s.handleListPrinters))
 	mux.HandleFunc("POST /api/v1/printers/bind", s.wrap(s.handleBindPrinter))
 	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
+	mux.HandleFunc("POST /api/v1/feedback/print", s.wrap(s.handleSubmitFeedback))
 	mux.HandleFunc("GET /api/v1/print-jobs", s.wrap(s.handleListPrintJobs))
 	mux.HandleFunc("POST /api/v1/print-jobs", s.wrap(s.handleCreatePrintJob))
 	mux.HandleFunc("POST /api/v1/print-jobs/{jobID}/submit", s.wrap(s.handleSubmitPrintJob))
@@ -178,6 +187,10 @@ type createPrintJobRequest struct {
 
 type updatePrintJobDeviceRequest struct {
 	PrinterBindingID string `json:"printerBindingId"`
+}
+
+type submitFeedbackRequest struct {
+	Content string `json:"content"`
 }
 
 type pluginBindingRequest struct {
@@ -666,6 +679,29 @@ func (s *Server) handleDeletePrinter(w http.ResponseWriter, r *http.Request, req
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handleSubmitFeedback(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload submitFeedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+		return
+	}
+
+	if err := s.feedback.Submit(r.Context(), accessToken, feedback.SubmitInput{
+		Content: payload.Content,
+	}); err != nil {
+		s.writeFeedbackError(w, requestID, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleListPrintJobs(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
@@ -940,6 +976,21 @@ func (s *Server) writePrinterError(w http.ResponseWriter, requestID string, err 
 		writeError(w, requestID, http.StatusBadRequest, "invalid_printer_input", "请输入有效的设备或打印信息。")
 	case errors.Is(err, printer.ErrUnavailable):
 		writeError(w, requestID, http.StatusBadGateway, "printer_unavailable", "咕咕机服务暂时不可用，请稍后重试。")
+	default:
+		s.writeAuthError(w, requestID, err)
+	}
+}
+
+func (s *Server) writeFeedbackError(w http.ResponseWriter, requestID string, err error) {
+	switch {
+	case errors.Is(err, feedback.ErrInvalidInput):
+		writeError(w, requestID, http.StatusBadRequest, "invalid_feedback_input", "请输入反馈内容。")
+	case errors.Is(err, feedback.ErrNoAdminRecipient):
+		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_recipient_missing", "当前还没有可接收反馈的管理员账号。")
+	case errors.Is(err, feedback.ErrNoAdminDevice):
+		writeError(w, requestID, http.StatusPreconditionFailed, "feedback_printer_missing", "管理员当前还没有可接收反馈的默认咕咕机。")
+	case errors.Is(err, printer.ErrNotConfigured), errors.Is(err, printer.ErrNotFound), errors.Is(err, printer.ErrInvalidInput), errors.Is(err, printer.ErrUnavailable), errors.Is(err, printer.ErrForbidden):
+		s.writePrinterError(w, requestID, err)
 	default:
 		s.writeAuthError(w, requestID, err)
 	}

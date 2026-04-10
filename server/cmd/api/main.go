@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/feedback"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
@@ -92,6 +93,14 @@ func main() {
 		cfg.MemobirdBaseURL,
 		cfg.MemobirdTimeout,
 	)
+	feedbackService := feedback.NewService(
+		service,
+		store,
+		store,
+		store,
+		printerService,
+		clock.SystemClock{},
+	)
 	pluginService := plugins.NewService(
 		store,
 		service,
@@ -123,6 +132,7 @@ func main() {
 			workspaceService,
 			aiService,
 			printerService,
+			feedbackService,
 			pluginService,
 			scheduleService,
 			logger,

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -15,6 +16,9 @@ const emptyStateHint = computed(() =>
     ? "输入内容后即可开始新的对话。"
     : "还没有历史对话，直接输入第一条消息即可开始。",
 );
+const feedbackOpen = ref(false);
+const feedbackDraft = ref("");
+const feedbackFormError = ref("");
 
 function handleDraftInput(event: Event) {
   const target = event.target as HTMLTextAreaElement | null;
@@ -37,6 +41,35 @@ function handleDeleteCurrentConversation() {
   }
 
   workspaceStore.deleteConversation(current.id);
+}
+
+function openFeedbackDialog() {
+  feedbackOpen.value = true;
+  feedbackDraft.value = "";
+  feedbackFormError.value = "";
+}
+
+function closeFeedbackDialog() {
+  feedbackOpen.value = false;
+  feedbackFormError.value = "";
+}
+
+async function handleFeedbackSubmit() {
+  feedbackFormError.value = "";
+
+  if (!feedbackDraft.value.trim()) {
+    feedbackFormError.value = "请先输入反馈内容。";
+    return;
+  }
+
+  const success = await workspaceStore.submitFeedback(feedbackDraft.value);
+  if (!success) {
+    feedbackFormError.value = workspaceStore.feedbackError;
+    return;
+  }
+
+  feedbackDraft.value = "";
+  closeFeedbackDialog();
 }
 </script>
 
@@ -170,13 +203,22 @@ function handleDeleteCurrentConversation() {
               默认发往：{{ workspaceStore.activeDeviceLabel || "尚未设置" }}
             </p>
           </div>
-          <button
-            type="button"
-            class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
-            @click="handleDeleteCurrentConversation"
-          >
-            删除对话
-          </button>
+          <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
+              @click="openFeedbackDialog"
+            >
+              反馈
+            </button>
+            <button
+              type="button"
+              class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
+              @click="handleDeleteCurrentConversation"
+            >
+              删除对话
+            </button>
+          </div>
         </div>
 
         <div
@@ -339,5 +381,44 @@ function handleDeleteCurrentConversation() {
         </div>
       </div>
     </div>
+
+    <AppDialog
+      :open="feedbackOpen"
+      title="反馈"
+      description="写下功能、建议或吐槽，提交后会直接打印到管理员的咕咕机。"
+      @close="closeFeedbackDialog"
+    >
+      <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">反馈内容</span>
+          <textarea
+            v-model="feedbackDraft"
+            rows="6"
+            placeholder="反馈（功能 / 建议 / 吐槽）"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <p v-if="feedbackFormError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {{ feedbackFormError }}
+        </p>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2.5 text-sm"
+            @click="closeFeedbackDialog"
+          >
+            取消
+          </button>
+          <button
+            class="ui-btn-primary px-4 py-2.5 text-sm"
+            :disabled="workspaceStore.feedbackSubmitting"
+          >
+            {{ workspaceStore.feedbackSubmitting ? "发送中..." : "提交反馈" }}
+          </button>
+        </div>
+      </form>
+    </AppDialog>
   </section>
 </template>

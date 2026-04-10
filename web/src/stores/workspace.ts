@@ -11,6 +11,7 @@ import {
   logoutWithApi,
   refreshAuthSession,
 } from "@/services/auth";
+import { submitFeedbackToAdmin } from "@/services/feedback";
 import { generateReplyWithMockService } from "@/services/mockInk";
 import {
   createPrintSchedule,
@@ -471,6 +472,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const authError = ref("");
   const authBootstrapping = ref(false);
   const passwordChangeLoading = ref(false);
+  const feedbackSubmitting = ref(false);
+  const feedbackError = ref("");
   const workspaceLoading = ref(false);
   const workspaceSyncing = ref(false);
   const workspaceSyncError = ref("");
@@ -792,10 +795,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       return;
     }
 
-    remotePrintStatusTimer = window.setTimeout(() => {
-      remotePrintStatusTimer = 0;
-      void syncRemotePrintStatus();
-    }, immediate ? REMOTE_PRINT_STATUS_INITIAL_POLL_MS : REMOTE_PRINT_STATUS_POLL_MS);
+    remotePrintStatusTimer = window.setTimeout(
+      () => {
+        remotePrintStatusTimer = 0;
+        void syncRemotePrintStatus();
+      },
+      immediate ? REMOTE_PRINT_STATUS_INITIAL_POLL_MS : REMOTE_PRINT_STATUS_POLL_MS,
+    );
   }
 
   async function syncRemotePrintStatus() {
@@ -1948,6 +1954,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authUser.value = user;
     authSession.value = session;
     authError.value = "";
+    feedbackError.value = "";
     accountCreationError.value = "";
     aiConfigError.value = "";
   }
@@ -1961,6 +1968,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authUser.value = null;
     authSession.value = null;
     authError.value = "";
+    feedbackError.value = "";
     accountCreationError.value = "";
     aiConfigError.value = "";
     pluginError.value = "";
@@ -2100,6 +2108,37 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
   }
 
+  async function submitFeedback(content: string) {
+    const current = authSession.value;
+    const normalizedContent = content.trim();
+
+    if (!current) {
+      feedbackError.value = "请先登录后再反馈。";
+      showFlash(feedbackError.value, "error");
+      return false;
+    }
+
+    if (!normalizedContent) {
+      feedbackError.value = "请先输入反馈内容。";
+      return false;
+    }
+
+    feedbackSubmitting.value = true;
+    feedbackError.value = "";
+
+    try {
+      await submitFeedbackToAdmin(current.accessToken, normalizedContent);
+      showFlash("反馈已发送，管理员会直接收到纸条。", "success");
+      return true;
+    } catch (error) {
+      feedbackError.value = error instanceof Error ? error.message : "发送反馈失败，请稍后重试。";
+      showFlash(feedbackError.value, "error");
+      return false;
+    } finally {
+      feedbackSubmitting.value = false;
+    }
+  }
+
   async function logout() {
     const current = authSession.value;
 
@@ -2171,6 +2210,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authError,
     authBootstrapping,
     passwordChangeLoading,
+    feedbackSubmitting,
+    feedbackError,
     workspaceLoading,
     workspaceSyncing,
     workspaceSyncError,
@@ -2260,6 +2301,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     initializeAuth,
     refreshSessionIfNeeded,
     changePassword,
+    submitFeedback,
     createAccount,
     login,
     logout,

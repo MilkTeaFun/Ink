@@ -58,6 +58,19 @@ func (s *Store) FindUserByID(ctx context.Context, id string) (*user.User, error)
 	return scanUser(row)
 }
 
+// FindPrimaryAdmin loads the oldest active administrator account.
+func (s *Store) FindPrimaryAdmin(ctx context.Context) (*user.User, error) {
+	row := s.db.QueryRow(ctx, `
+		select id, email, password_hash, display_name, role, status, created_at, updated_at, last_login_at
+		from users
+		where role = 'admin' and status = 'active'
+		order by created_at asc
+		limit 1
+	`)
+
+	return scanUser(row)
+}
+
 // CreateUser inserts a new user record.
 func (s *Store) CreateUser(ctx context.Context, current user.User) error {
 	_, err := s.db.Exec(ctx, `
