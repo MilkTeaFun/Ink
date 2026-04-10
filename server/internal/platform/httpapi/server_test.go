@@ -217,14 +217,11 @@ func TestListPrintersReturnsDevices(t *testing.T) {
 }
 
 type fakeAuthService struct {
-	loginResult           auth.AuthResult
-	loginErr              error
-	changePasswordErr     error
-	createUserResult      auth.UserDTO
-	createUserErr         error
-	lastChangeAccessToken string
-	lastCurrentPassword   string
-	lastNewPassword       string
+	loginResult       auth.AuthResult
+	loginErr          error
+	changePasswordErr error
+	createUserResult  auth.UserDTO
+	createUserErr     error
 }
 
 func (f fakeAuthService) Login(_ context.Context, _ auth.LoginInput) (auth.AuthResult, error) {
@@ -250,14 +247,11 @@ func (f fakeAuthService) GetCurrentUser(_ context.Context, _ string) (auth.UserD
 
 func (f fakeAuthService) ChangePassword(
 	_ context.Context,
-	accessToken string,
-	currentPassword string,
-	newPassword string,
+	_ string,
+	_ string,
+	_ string,
 	_ auth.ClientMeta,
 ) error {
-	f.lastChangeAccessToken = accessToken
-	f.lastCurrentPassword = currentPassword
-	f.lastNewPassword = newPassword
 	return f.changePasswordErr
 }
 

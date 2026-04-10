@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -311,7 +310,7 @@ func normalizeMessages(messages []ChatMessage) ([]ChatMessage, error) {
 }
 
 func (s *Service) String() string {
-	return fmt.Sprintf("ai.Service")
+	return "ai.Service"
 }
 
 var _ AIService = (*Service)(nil)

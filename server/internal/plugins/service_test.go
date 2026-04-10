@@ -188,7 +188,9 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open zip: %v", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	uploaded, err := service.UploadPlugin(ctx, "admin-token", "node-hello-plugin.zip", file)
 	if err != nil {
@@ -339,17 +341,18 @@ func zipDirectory(sourceDir string, zipPath string, wrapTopLevel bool) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	writer := zip.NewWriter(file)
-	defer writer.Close()
 
 	basePrefix := ""
 	if wrapTopLevel {
 		basePrefix = filepath.Base(sourceDir)
 	}
 
-	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
+	if err := filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -387,11 +390,18 @@ func zipDirectory(sourceDir string, zipPath string, wrapTopLevel bool) error {
 		if err != nil {
 			return err
 		}
-		defer source.Close()
+		defer func() {
+			_ = source.Close()
+		}()
 
 		_, err = io.Copy(target, source)
 		return err
-	})
+	}); err != nil {
+		_ = writer.Close()
+		return err
+	}
+
+	return writer.Close()
 }
 
 func mustStat(path string) os.FileInfo {
