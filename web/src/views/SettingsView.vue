@@ -399,8 +399,8 @@ async function handleAIConfigSubmit() {
                 <p class="mt-0.5 text-sm text-stone-500">
                   {{
                     workspaceStore.loginProtectionEnabled
-                      ? "刷新后需要重新登录"
-                      : "刷新后保留登录状态"
+                      ? "关闭浏览器后需要重新登录"
+                      : "关闭浏览器后保留登录状态"
                   }}
                 </p>
               </div>

@@ -143,7 +143,7 @@ describe("AppRoot", () => {
     expect(router.currentRoute.value.fullPath).toBe("/status");
     expect(wrapper.find("header nav").exists()).toBe(true);
     expect(wrapper.find("nav.fixed").exists()).toBe(true);
-    expect(wrapper.text()).not.toContain("登录账号");
+    expect(wrapper.text()).toContain("登录");
     expect(wrapper.text()).not.toContain("退出");
   });
 

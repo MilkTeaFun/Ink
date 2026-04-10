@@ -157,12 +157,15 @@ describe("router configuration", () => {
 
     const pinia = createPinia();
     setActivePinia(pinia);
+    window.localStorage.setItem(
+      "ink.auth.session.v1",
+      JSON.stringify({
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    );
     const store = useWorkspaceStore();
-    store.authSession = {
-      accessToken: "access-token",
-      refreshToken: "refresh-token",
-      accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-    };
 
     const router = createAppRouter(createMemoryHistory(), pinia);
     router.push("/settings");

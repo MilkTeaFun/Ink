@@ -374,12 +374,8 @@ function isPersistedAuthSession(value: unknown): value is AuthSession {
   );
 }
 
-function readPersistedAuthSession() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+function readAuthSessionFromStorage(storage: Storage) {
+  const raw = storage.getItem(AUTH_SESSION_STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -392,17 +388,31 @@ function readPersistedAuthSession() {
   }
 }
 
-function writePersistedAuthSession(session: AuthSession | null, persist: boolean) {
+function readPersistedAuthSession() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (
+    readAuthSessionFromStorage(window.sessionStorage) ??
+    readAuthSessionFromStorage(window.localStorage)
+  );
+}
+
+function writePersistedAuthSession(session: AuthSession | null, persistAcrossRestarts: boolean) {
   if (typeof window === "undefined") {
     return;
   }
 
-  if (!persist || !session) {
-    window.sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  window.sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+
+  if (!session) {
     return;
   }
 
-  window.sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+  const storage = persistAcrossRestarts ? window.localStorage : window.sessionStorage;
+  storage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 function sortPrintJobsByUpdatedAt(printJobs: PrintJob[]) {
@@ -455,7 +465,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const persisted = readPersistedWorkspaceState();
   const persistedAuthSession = readPersistedAuthSession();
 
-  const authUser = ref<User | null>(persistedAuthSession ? persisted.authUser : null);
+  const authUser = ref<User | null>(persistedAuthSession ? null : persisted.authUser);
   const authSession = ref<AuthSession | null>(persistedAuthSession);
   const authLoading = ref(false);
   const authError = ref("");
@@ -1899,7 +1909,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function setLoginProtection(enabled: boolean) {
     loginProtectionEnabled.value = enabled;
-    showFlash(enabled ? "刷新后会要求重新登录。" : "刷新后将保留登录状态。");
+    showFlash(enabled ? "关闭浏览器后会要求重新登录。" : "关闭浏览器后将保留登录状态。");
   }
 
   async function saveAIServiceConfig(config: {

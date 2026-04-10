@@ -508,13 +508,26 @@ describe("workspace store", () => {
     expect(store.flashMessage).toBe("新账号已创建。");
   });
 
-  it("keeps auth tokens out of the workspace snapshot and stores them only for the tab session", async () => {
+  it("keeps auth tokens out of the workspace snapshot and persists them when login protection is off", async () => {
     authenticateStore();
 
     await Promise.resolve();
 
+    expect(window.localStorage.getItem("ink.auth.session.v1")).toContain("refresh-token");
+    expect(window.sessionStorage.getItem("ink.auth.session.v1")).toBeNull();
+    expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("refresh-token");
+    expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("access-token");
+  });
+
+  it("stores auth tokens only for the current tab when login protection is on", async () => {
+    const store = authenticateStore();
+
+    store.setLoginProtection(true);
+    await Promise.resolve();
+
     expect(window.sessionStorage.getItem("ink.auth.session.v1")).toContain("refresh-token");
-    expect(window.localStorage.getItem("ink.workspace.v1")).not.toContain("refresh-token");
-    expect(window.localStorage.getItem("ink.workspace.v1")).not.toContain("access-token");
+    expect(window.localStorage.getItem("ink.auth.session.v1")).toBeNull();
+    expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("refresh-token");
+    expect(window.localStorage.getItem("ink.workspace.v1") ?? "").not.toContain("access-token");
   });
 });

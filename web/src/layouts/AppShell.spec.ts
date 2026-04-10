@@ -65,8 +65,21 @@ describe("AppShell", () => {
   it("hides account controls for anonymous visitors", async () => {
     const { wrapper } = await mountShellAt("/status", false);
 
+    expect(wrapper.text()).toContain("登录");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
+  });
+
+  it("routes anonymous visitors to login from the header action", async () => {
+    const { wrapper, router } = await mountShellAt("/status", false);
+    const loginLink = wrapper.findAll("a").find((link) => link.text() === "登录");
+
+    expect(loginLink?.exists()).toBe(true);
+
+    await loginLink?.trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.fullPath).toBe("/login");
   });
 
   it("logs out and returns to status when the header logout action is used", async () => {

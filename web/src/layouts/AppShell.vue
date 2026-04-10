@@ -12,6 +12,10 @@ const workspaceStore = useWorkspaceStore();
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
 );
+const loginTarget = computed(() => ({
+  path: "/login",
+  query: route.fullPath === "/status" ? undefined : { redirect: route.fullPath },
+}));
 
 async function handleLogout() {
   await workspaceStore.logout();
@@ -43,6 +47,13 @@ async function handleLogout() {
         >
           退出
         </button>
+        <RouterLink
+          v-else
+          :to="loginTarget"
+          class="text-sm font-medium text-stone-600 hover:text-stone-900"
+        >
+          登录
+        </RouterLink>
       </div>
 
       <div class="mx-auto hidden max-w-7xl items-center justify-between lg:flex">
@@ -75,15 +86,24 @@ async function handleLogout() {
           </nav>
         </div>
 
-        <div v-if="workspaceStore.isAuthenticated" class="flex items-center gap-4">
-          <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
-          <button
-            type="button"
+        <div class="flex items-center gap-4">
+          <template v-if="workspaceStore.isAuthenticated">
+            <p class="text-sm text-stone-500">{{ workspaceStore.authUser?.email }}</p>
+            <button
+              type="button"
+              class="text-sm font-medium text-stone-600 hover:text-stone-900"
+              @click="handleLogout"
+            >
+              退出
+            </button>
+          </template>
+          <RouterLink
+            v-else
+            :to="loginTarget"
             class="text-sm font-medium text-stone-600 hover:text-stone-900"
-            @click="handleLogout"
           >
-            退出
-          </button>
+            登录
+          </RouterLink>
         </div>
       </div>
     </header>
