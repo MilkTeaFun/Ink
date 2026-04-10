@@ -247,11 +247,10 @@ describe("workspace views", () => {
       .find((article) => article.text().includes("书桌咕咕机"));
     await deskArticle
       ?.findAll("button")
-      .find((button) => button.text() === "解绑")
+      .find((button) => button.text() === "删除")
       ?.trigger("click");
 
-    expect(store.devices.find((device) => device.id === "device-desk")?.status).toBe("offline");
-    expect(store.devices.find((device) => device.id === "device-desk")?.note).toContain("已解绑");
+    expect(store.devices.some((device) => device.id === "device-desk")).toBe(false);
   });
 
   it("allows sending a message and selecting a reply for printing", async () => {

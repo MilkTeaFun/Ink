@@ -155,11 +155,7 @@ async function submitAddDevice() {
                   <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
                   <p class="mt-0.5 text-sm text-stone-500">
                     {{ device.id === workspaceStore.defaultDeviceId ? "默认设备 · " : "" }}
-                    {{
-                      device.status === "offline" && !device.note
-                        ? "已解绑，仅保留历史记录"
-                        : device.note
-                    }}
+                    {{ device.note }}
                   </p>
                 </div>
               </div>
@@ -191,7 +187,13 @@ async function submitAddDevice() {
                   class="ui-btn-secondary px-3 py-1.5 text-sm"
                   @click="workspaceStore.removeDevice(device.id)"
                 >
-                  {{ device.status === "pending" ? "移除" : "解绑" }}
+                  {{
+                    device.status === "pending"
+                      ? "移除"
+                      : workspaceStore.isAuthenticated
+                        ? "删除"
+                        : "解绑"
+                  }}
                 </button>
               </div>
             </article>
@@ -294,7 +296,7 @@ async function submitAddDevice() {
       title="添加设备"
       :description="
         workspaceStore.isAuthenticated
-          ? '登录后会把设备真实绑定到当前账号下，并可继续设为默认或解绑。'
+          ? '登录后会把设备真实绑定到当前账号下，并可继续设为默认或删除。'
           : '当前为演示模式，添加后只会保存在本地示例数据里。'
       "
       @close="closeAddDeviceDialog"

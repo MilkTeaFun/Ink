@@ -503,4 +503,64 @@ describe("workspace store plugin flows", () => {
     await expect(store.deleteSchedule("schedule-2")).resolves.toBe(true);
     expect(store.remoteSchedules.some((schedule) => schedule.id === "schedule-2")).toBe(false);
   });
+
+  it("removes authenticated devices together with related jobs and schedules", async () => {
+    const store = authenticateStore();
+    store.devices = [
+      {
+        id: "device-1",
+        name: "Desk Printer",
+        status: "connected",
+        note: "Primary device",
+      },
+      {
+        id: "device-2",
+        name: "Bedroom Printer",
+        status: "connected",
+        note: "Secondary device",
+      },
+    ];
+    store.defaultDeviceId = "device-1";
+    store.printJobs = [
+      {
+        id: "print-1",
+        title: "Desk Job",
+        source: "Manual",
+        deviceId: "device-1",
+        status: "pending",
+        createdAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        updatedAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        content: "hello",
+      },
+      {
+        id: "print-2",
+        title: "Bedroom Job",
+        source: "Manual",
+        deviceId: "device-2",
+        status: "pending",
+        createdAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        updatedAt: new Date("2026-04-10T00:00:00.000Z").toISOString(),
+        content: "world",
+      },
+    ];
+    store.remoteSchedules = [
+      createScheduleView({
+        id: "schedule-1",
+        deviceId: "device-1",
+      }),
+      createScheduleView({
+        id: "schedule-2",
+        deviceId: "device-2",
+      }),
+    ];
+
+    vi.mocked(printerService.deletePrinter).mockResolvedValueOnce(undefined);
+
+    await expect(store.removeDevice("device-1")).resolves.toBe(true);
+
+    expect(store.devices.map((device) => device.id)).toEqual(["device-2"]);
+    expect(store.defaultDeviceId).toBe("device-2");
+    expect(store.printJobs.map((job) => job.id)).toEqual(["print-2"]);
+    expect(store.remoteSchedules.map((schedule) => schedule.id)).toEqual(["schedule-2"]);
+  });
 });

@@ -933,7 +933,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         ]);
 
       applyAIConfig(aiSummary);
-      devices.value = printerResponse.devices;
+      devices.value = printerResponse.devices.filter((device) => device.status !== "offline");
       printJobs.value = printJobResponse.printJobs;
       availablePlugins.value = pluginResponse.plugins;
       remoteSchedules.value = scheduleResponse.schedules;
@@ -1480,31 +1480,23 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         await deletePrinter(authSession.value.accessToken, deviceId);
       } catch (error) {
-        showFlash(error instanceof Error ? error.message : "解绑设备失败，请稍后重试。", "error");
+        showFlash(error instanceof Error ? error.message : "删除设备失败，请稍后重试。", "error");
         return false;
       }
 
+      const remainingDevices = devices.value.filter((device) => device.id !== deviceId);
       const fallbackDeviceId =
         defaultDeviceId.value === deviceId
-          ? (devices.value.find((device) => device.id !== deviceId && device.status !== "offline")
-              ?.id ?? "")
+          ? (remainingDevices.find((device) => device.status !== "offline")?.id ?? "")
           : defaultDeviceId.value;
 
-      devices.value = devices.value.map((device) =>
-        device.id === deviceId
-          ? {
-              ...device,
-              note: device.note.includes("已解绑")
-                ? device.note
-                : device.note
-                  ? `${device.note} · 已解绑，仅保留历史记录`
-                  : "已解绑，仅保留历史记录",
-              status: "offline",
-            }
-          : device,
+      devices.value = remainingDevices;
+      printJobs.value = printJobs.value.filter((job) => job.deviceId !== deviceId);
+      remoteSchedules.value = remoteSchedules.value.filter(
+        (schedule) => schedule.deviceId !== deviceId,
       );
       defaultDeviceId.value = fallbackDeviceId;
-      showFlash("已解绑设备，历史记录会保留。", "success");
+      showFlash("设备已删除。", "success");
       return true;
     }
 
@@ -1531,7 +1523,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : schedule,
     );
-    showFlash(target.status === "pending" ? "已移除设备。" : "已解绑设备。", "success");
+    showFlash(target.status === "pending" ? "已移除设备。" : "已删除设备。", "success");
     return true;
   }
 
