@@ -75,7 +75,7 @@ func TestUpdatePrintJobDeviceRejectsQueuedJobs(t *testing.T) {
 	}
 }
 
-func TestDeleteDeviceMarksBindingOfflineInsteadOfRemovingHistory(t *testing.T) {
+func TestDeleteDeviceRemovesBinding(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 	repo := newFakePrinterRepo()
 	repo.bindings["device-1"] = Binding{
@@ -102,12 +102,51 @@ func TestDeleteDeviceMarksBindingOfflineInsteadOfRemovingHistory(t *testing.T) {
 		t.Fatalf("delete device failed: %v", err)
 	}
 
-	binding := repo.bindings["device-1"]
-	if binding.Status != workspace.DeviceStatusOffline {
-		t.Fatalf("expected device to be marked offline, got %s", binding.Status)
+	if _, exists := repo.bindings["device-1"]; exists {
+		t.Fatalf("expected device binding to be removed")
 	}
-	if !binding.UpdatedAt.Equal(now) {
-		t.Fatalf("expected updated_at to be refreshed")
+}
+
+func TestListDevicesOmitsOfflineBindings(t *testing.T) {
+	repo := newFakePrinterRepo()
+	repo.bindings["device-1"] = Binding{
+		ID:               "device-1",
+		UserID:           "user-1",
+		Name:             "书桌咕咕机",
+		DeviceIdentifier: "m1-1",
+		Status:           workspace.DeviceStatusConnected,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+	repo.bindings["device-2"] = Binding{
+		ID:               "device-2",
+		UserID:           "user-1",
+		Name:             "旧设备",
+		DeviceIdentifier: "m1-2",
+		Status:           workspace.DeviceStatusOffline,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+
+	service := NewService(
+		repo,
+		fakeAuthenticator{},
+		fakeIDGenerator{},
+		fakeClock{now: time.Now().UTC()},
+		"",
+		"",
+		time.Second,
+	)
+
+	devices, err := service.ListDevices(context.Background(), "access-token")
+	if err != nil {
+		t.Fatalf("list devices failed: %v", err)
+	}
+	if len(devices) != 1 {
+		t.Fatalf("expected only active devices, got %d", len(devices))
+	}
+	if devices[0].ID != "device-1" {
+		t.Fatalf("unexpected device list: %+v", devices)
 	}
 }
 

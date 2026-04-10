@@ -147,6 +147,10 @@ func (s *Service) ListDevices(ctx context.Context, accessToken string) ([]worksp
 
 	devices := make([]workspace.Device, 0, len(bindings))
 	for _, binding := range bindings {
+		if binding.Status == workspace.DeviceStatusOffline {
+			continue
+		}
+
 		devices = append(devices, workspace.Device{
 			ID:     binding.ID,
 			Name:   binding.Name,
@@ -250,14 +254,8 @@ func (s *Service) DeleteDevice(ctx context.Context, accessToken string, bindingI
 	if binding == nil {
 		return ErrNotFound
 	}
-	if binding.Status == workspace.DeviceStatusOffline {
-		return nil
-	}
 
-	binding.Status = workspace.DeviceStatusOffline
-	binding.Note = archivedBindingNote(binding.Note)
-	binding.UpdatedAt = s.clock.Now()
-	return s.repo.SaveBinding(ctx, *binding)
+	return s.repo.DeleteBinding(ctx, currentUser.ID, binding.ID)
 }
 
 func (s *Service) ListPrintJobs(ctx context.Context, accessToken string) ([]workspace.PrintJob, error) {
@@ -551,17 +549,6 @@ func chooseString(value string, fallback string) string {
 		return fallback
 	}
 	return value
-}
-
-func archivedBindingNote(note string) string {
-	trimmed := strings.TrimSpace(note)
-	if trimmed == "" {
-		return "已解绑，仅保留历史记录"
-	}
-	if strings.Contains(trimmed, "已解绑") {
-		return trimmed
-	}
-	return trimmed + " · 已解绑，仅保留历史记录"
 }
 
 var _ PrinterService = (*Service)(nil)
