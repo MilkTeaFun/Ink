@@ -66,8 +66,17 @@ describe("AppShell", () => {
     const { wrapper } = await mountShellAt("/status", false);
 
     expect(wrapper.text()).toContain("登录");
+    expect(wrapper.text()).toContain("当前状态、对话、打印页均为演示内容");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
+  });
+
+  it("shows the demo banner only on the first three tabs for anonymous visitors", async () => {
+    const { wrapper: statusWrapper } = await mountShellAt("/status", false);
+    const { wrapper: tutorialWrapper } = await mountShellAt("/tutorial", false);
+
+    expect(statusWrapper.text()).toContain("具体使用请登录后继续");
+    expect(tutorialWrapper.text()).not.toContain("具体使用请登录后继续");
   });
 
   it("routes anonymous visitors to login from the header action", async () => {

@@ -12,10 +12,16 @@ const workspaceStore = useWorkspaceStore();
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
 );
+const anonymousDemoRouteNames = new Set(["status", "conversations", "prints"]);
 const loginTarget = computed(() => ({
   path: "/login",
   query: route.fullPath === "/status" ? undefined : { redirect: route.fullPath },
 }));
+const showAnonymousDemoBanner = computed(
+  () =>
+    !workspaceStore.isAuthenticated &&
+    anonymousDemoRouteNames.has(String(route.name ?? "")),
+);
 
 async function handleLogout() {
   await workspaceStore.logout();
@@ -121,6 +127,23 @@ async function handleLogout() {
     >
       <div class="mx-auto max-w-7xl">
         {{ workspaceStore.flashMessage }}
+      </div>
+    </div>
+
+    <div
+      v-if="showAnonymousDemoBanner"
+      class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
+    >
+      <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p class="leading-6">
+          当前状态、对话、打印页均为演示内容，具体使用请登录后继续。
+        </p>
+        <RouterLink
+          :to="loginTarget"
+          class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-100"
+        >
+          去登录
+        </RouterLink>
       </div>
     </div>
 
