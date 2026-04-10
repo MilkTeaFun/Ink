@@ -1,5 +1,5 @@
 import { config } from "@vue/test-utils";
-import { beforeEach } from "vitest";
+import { beforeEach, vi } from "vitest";
 
 config.global.stubs = {
   transition: false,
@@ -58,4 +58,22 @@ beforeEach(() => {
   window.sessionStorage.clear();
   document.title = "Ink";
   delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.colorMode;
+  document.documentElement.style.colorScheme = "";
 });
+
+if (typeof window.matchMedia !== "function") {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}

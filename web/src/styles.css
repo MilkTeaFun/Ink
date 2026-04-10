@@ -10,21 +10,58 @@
   --divider-strong: rgba(53, 38, 28, 0.16);
   --app-bg: #fafaf9;
   --app-surface: #ffffff;
+  --app-surface-soft: #f5f5f4;
+  --app-surface-muted: #e7e5e4;
+  --app-surface-raised: #ffffff;
+  --app-surface-floating: rgba(255, 255, 255, 0.92);
   --app-text: #1c1917;
+  --app-text-strong: #0c0a09;
   --app-muted: #57534e;
+  --app-muted-soft: #78716c;
+  --app-border: #e7e5e4;
+  --app-border-strong: #d6d3d1;
+  --app-ring: rgba(28, 25, 23, 0.6);
+  --app-overlay: rgba(28, 25, 23, 0.35);
+  --app-emphasis-bg: #1c1917;
+  --app-emphasis-bg-hover: #292524;
+  --app-emphasis-text: #ffffff;
+  --app-surface-highlight: rgba(255, 255, 255, 0.72);
+  --app-shadow-card: 0 16px 38px rgba(28, 25, 23, 0.08);
+  --app-shadow-dialog: 0 24px 60px rgba(28, 25, 23, 0.18);
+  --app-bg-blend: white;
+  --app-glow-color: rgba(214, 188, 152, 0.12);
   --theme-color: #fafaf9;
 }
 
-:root[data-theme="soft"] {
-  --app-bg: #f7f1ea;
-  --app-surface: #fffaf5;
-  --app-text: #2f241c;
-  --app-muted: #6f6256;
-  --theme-color: #f7f1ea;
-}
-
-:root[data-theme="system"] {
-  color-scheme: light dark;
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-bg: rgba(28, 25, 23, 0.72);
+  --surface-border: rgba(255, 255, 255, 0.1);
+  --divider-strong: rgba(255, 255, 255, 0.12);
+  --app-bg: #14110f;
+  --app-surface: #1e1a17;
+  --app-surface-soft: #25201d;
+  --app-surface-muted: #302925;
+  --app-surface-raised: #231d1a;
+  --app-surface-floating: rgba(28, 24, 21, 0.92);
+  --app-text: #f5f5f4;
+  --app-text-strong: #fcfbfa;
+  --app-muted: #c3bcb6;
+  --app-muted-soft: #948882;
+  --app-border: #3b342f;
+  --app-border-strong: #514842;
+  --app-ring: rgba(251, 191, 36, 0.34);
+  --app-overlay: rgba(2, 1, 0, 0.58);
+  --app-emphasis-bg: #3a312c;
+  --app-emphasis-bg-hover: #4a3e38;
+  --app-emphasis-text: #fdfcfb;
+  --app-surface-highlight: rgba(255, 248, 240, 0.08);
+  --app-shadow-card: 0 20px 42px rgba(0, 0, 0, 0.28);
+  --app-shadow-dialog: 0 32px 84px rgba(0, 0, 0, 0.46);
+  --app-bg-blend: #020202;
+  --app-glow-color: rgba(251, 191, 36, 0.12);
+  --theme-color: #14110f;
 }
 
 @layer base {
@@ -55,8 +92,12 @@
       sans-serif;
     color: var(--app-text);
     background:
-      radial-gradient(circle at top left, rgba(214, 188, 152, 0.12), transparent 32%),
-      linear-gradient(180deg, color-mix(in srgb, var(--app-bg) 92%, white) 0%, var(--app-bg) 100%);
+      radial-gradient(circle at top left, var(--app-glow-color), transparent 32%),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--app-bg) 92%, var(--app-bg-blend)) 0%,
+        var(--app-bg) 100%
+      );
   }
 
   #app {
@@ -85,6 +126,31 @@
   img {
     display: block;
     max-width: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  input,
+  select,
+  textarea {
+    color: var(--app-text);
+    caret-color: var(--app-text);
+    --tw-ring-offset-color: var(--app-surface);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--app-muted-soft);
+    opacity: 1;
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--app-emphasis-bg);
   }
 }
 
@@ -309,4 +375,259 @@
     opacity: 1;
     transform: none;
   }
+}
+
+:root[data-color-mode="dark"] * {
+  --tw-ring-offset-color: var(--app-surface);
+}
+
+:root[data-color-mode="dark"] .ui-panel,
+:root[data-color-mode="dark"] .ui-list-card,
+:root[data-color-mode="dark"] .ui-btn-secondary {
+  background-color: var(--app-surface-raised);
+  border-color: var(--app-border);
+}
+
+:root[data-color-mode="dark"] .ui-settings-row,
+:root[data-color-mode="dark"] .ui-settings-choice-grid,
+:root[data-color-mode="dark"] .ui-tab-track {
+  background-color: var(--app-surface-soft);
+  border-color: var(--app-border);
+}
+
+:root[data-color-mode="dark"] .ui-list-row + .ui-list-row,
+:root[data-color-mode="dark"] .ui-timeline-item + .ui-timeline-item,
+:root[data-color-mode="dark"] .ui-timeline::before {
+  border-color: var(--app-border);
+  background-color: var(--app-border);
+}
+
+:root[data-color-mode="dark"] .ui-list-row:hover,
+:root[data-color-mode="dark"] .ui-timeline-item:hover,
+:root[data-color-mode="dark"] .ui-tab-link:hover,
+:root[data-color-mode="dark"] .ui-btn-secondary:hover,
+:root[data-color-mode="dark"] .ui-settings-row:hover {
+  background-color: var(--app-surface-muted);
+}
+
+:root[data-color-mode="dark"] .ui-list-row.is-active,
+:root[data-color-mode="dark"] .ui-tab-link.is-active {
+  background-color: var(--app-surface-muted);
+  color: var(--app-text-strong);
+}
+
+:root[data-color-mode="dark"] .ui-tab-link,
+:root[data-color-mode="dark"] .ui-tab-hint,
+:root[data-color-mode="dark"] .ui-btn-secondary {
+  color: var(--app-muted);
+}
+
+:root[data-color-mode="dark"] .ui-tab-link.is-active,
+:root[data-color-mode="dark"] .ui-tab-link.is-active .ui-tab-hint,
+:root[data-color-mode="dark"] .ui-btn-secondary:hover,
+:root[data-color-mode="dark"] .ui-btn-primary,
+:root[data-color-mode="dark"] .ui-btn-primary:hover {
+  color: var(--app-text-strong);
+}
+
+:root[data-color-mode="dark"] .ui-btn-primary,
+:root[data-color-mode="dark"] .ui-toggle.is-on {
+  background-color: var(--app-emphasis-bg);
+}
+
+:root[data-color-mode="dark"] .ui-btn-primary:hover {
+  background-color: var(--app-emphasis-bg-hover);
+}
+
+:root[data-color-mode="dark"] .ui-toggle {
+  background-color: var(--app-border-strong);
+}
+
+:root[data-color-mode="dark"] .ui-toggle-thumb,
+:root[data-color-mode="dark"] .ui-timeline-item::before {
+  background-color: var(--app-surface);
+}
+
+:root[data-color-mode="dark"] .ui-timeline-item::before {
+  border-color: var(--app-border-strong);
+}
+
+:root[data-color-mode="dark"] .ui-panel,
+:root[data-color-mode="dark"] .ui-list-card,
+:root[data-color-mode="dark"] .shadow-sm.bg-white,
+:root[data-color-mode="dark"] .shadow-sm.bg-white\/90,
+:root[data-color-mode="dark"] .shadow-sm.bg-white\/95 {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--app-surface-raised) 94%, var(--app-surface-highlight)) 0%,
+    var(--app-surface-raised) 100%
+  );
+  box-shadow: var(--app-shadow-card);
+}
+
+:root[data-color-mode="dark"] .shadow-2xl {
+  box-shadow: var(--app-shadow-dialog) !important;
+}
+
+:root[data-color-mode="dark"] header {
+  background-color: var(--app-surface-floating) !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 248, 240, 0.06);
+}
+
+:root[data-color-mode="dark"] nav.fixed {
+  background-color: var(--app-surface-floating) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 248, 240, 0.06);
+}
+
+:root[data-color-mode="dark"] .bg-white {
+  background-color: var(--app-surface-raised) !important;
+}
+
+:root[data-color-mode="dark"] .bg-white\/90 {
+  background-color: color-mix(in srgb, var(--app-surface-raised) 90%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-white\/95 {
+  background-color: color-mix(in srgb, var(--app-surface-raised) 95%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-50 {
+  background-color: var(--app-surface-soft) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-50\/50 {
+  background-color: color-mix(in srgb, var(--app-surface-soft) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-100 {
+  background-color: var(--app-surface-muted) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-100\/80 {
+  background-color: color-mix(in srgb, var(--app-surface-muted) 80%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-100\/50 {
+  background-color: color-mix(in srgb, var(--app-surface-muted) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-200 {
+  background-color: var(--app-border-strong) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-200\/50 {
+  background-color: color-mix(in srgb, var(--app-border-strong) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-300 {
+  background-color: #6c625b !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-400 {
+  background-color: #8a7d74 !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-800 {
+  background-color: var(--app-emphasis-bg-hover) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-900 {
+  background-color: var(--app-emphasis-bg) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-950\/35 {
+  background-color: var(--app-overlay) !important;
+}
+
+:root[data-color-mode="dark"] .text-stone-950,
+:root[data-color-mode="dark"] .text-stone-900,
+:root[data-color-mode="dark"] .text-stone-800 {
+  color: var(--app-text-strong) !important;
+}
+
+:root[data-color-mode="dark"] .text-stone-700,
+:root[data-color-mode="dark"] .text-stone-600 {
+  color: var(--app-muted) !important;
+}
+
+:root[data-color-mode="dark"] .text-stone-500 {
+  color: var(--app-muted) !important;
+}
+
+:root[data-color-mode="dark"] .text-stone-400 {
+  color: var(--app-muted-soft) !important;
+}
+
+:root[data-color-mode="dark"] .text-stone-300 {
+  color: #b8aea8 !important;
+}
+
+:root[data-color-mode="dark"] .border-white,
+:root[data-color-mode="dark"] .border-stone-100,
+:root[data-color-mode="dark"] .border-stone-200 {
+  border-color: var(--app-border) !important;
+}
+
+:root[data-color-mode="dark"] .border-stone-300,
+:root[data-color-mode="dark"] .border-stone-900 {
+  border-color: var(--app-border-strong) !important;
+}
+
+:root[data-color-mode="dark"] .ring-stone-900,
+:root[data-color-mode="dark"] .ring-stone-400 {
+  --tw-ring-color: var(--app-ring) !important;
+}
+
+:root[data-color-mode="dark"] .ring-stone-500\/10,
+:root[data-color-mode="dark"] .ring-stone-200,
+:root[data-color-mode="dark"] .ring-stone-200\/50,
+:root[data-color-mode="dark"] .ring-stone-200\/70 {
+  --tw-ring-color: rgba(245, 245, 244, 0.14) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:bg-white:hover {
+  background-color: var(--app-surface) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:bg-stone-50:hover {
+  background-color: var(--app-surface-soft) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:bg-stone-200\/50:hover {
+  background-color: color-mix(in srgb, var(--app-border-strong) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:bg-stone-800:hover {
+  background-color: var(--app-emphasis-bg-hover) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:border-stone-200:hover {
+  border-color: var(--app-border) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:border-stone-300:hover {
+  border-color: var(--app-border-strong) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:text-stone-900:hover {
+  color: var(--app-text-strong) !important;
+}
+
+:root[data-color-mode="dark"] .focus\:border-stone-900:focus,
+:root[data-color-mode="dark"] .focus-visible\:ring-stone-900:focus-visible {
+  border-color: var(--app-border-strong) !important;
+  --tw-ring-color: var(--app-ring) !important;
+}
+
+:root[data-color-mode="dark"] .focus\:ring-stone-900:focus,
+:root[data-color-mode="dark"] .focus-within\:ring-stone-900:focus-within {
+  --tw-ring-color: var(--app-ring) !important;
+}
+
+:root[data-color-mode="dark"] .placeholder\:text-stone-400::placeholder {
+  color: var(--app-muted-soft) !important;
+}
+
+:root[data-color-mode="dark"] .text-white {
+  color: var(--app-emphasis-text) !important;
 }

@@ -1,7 +1,7 @@
 export type DeviceStatus = "connected" | "pending" | "offline";
 export type PrintStatus = "pending" | "queued" | "completed" | "failed" | "cancelled";
 export type ConversationMessageRole = "user" | "assistant";
-export type ThemeMode = "soft" | "light" | "system";
+export type ThemeMode = "light" | "dark" | "system";
 export type SourceConnectionStatus = "connected" | "disconnected" | "error";
 export type UserRole = "admin" | "member";
 

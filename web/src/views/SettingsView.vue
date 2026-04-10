@@ -10,9 +10,9 @@ const router = useRouter();
 const workspaceStore = useWorkspaceStore();
 
 const themes = [
-  { label: "柔光", value: "soft" },
   { label: "浅色", value: "light" },
-  { label: "系统跟随", value: "system" },
+  { label: "深色", value: "dark" },
+  { label: "跟随系统", value: "system" },
 ] as const;
 
 const currentPassword = ref("");
@@ -717,6 +717,9 @@ async function handleAIConfigSubmit() {
           </div>
           <p class="mt-2 text-sm text-stone-500">
             当前主题：{{ getThemeDescription(workspaceStore.selectedTheme) }}
+          </p>
+          <p class="mt-1 text-sm text-stone-500">
+            选择“跟随系统”后，会自动根据设备当前的深浅色设置切换。
           </p>
         </div>
       </article>

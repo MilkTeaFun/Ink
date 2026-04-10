@@ -1,10 +1,80 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
+import { beforeEach, vi } from "vitest";
 
 import AppRoot from "@/app/AppRoot.vue";
 import { createTestRouter } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
+
+function createMatchMediaMock(initialMatches = false) {
+  let matches = initialMatches;
+  const listeners = new Set<EventListenerOrEventListenerObject>();
+  const notify = (event: MediaQueryListEvent) => {
+    for (const listener of listeners) {
+      if (typeof listener === "function") {
+        listener.call(mediaQueryList, event);
+        continue;
+      }
+
+      listener.handleEvent(event);
+    }
+  };
+  const mediaQueryList = {
+    get matches() {
+      return matches;
+    },
+    media: "(prefers-color-scheme: dark)",
+    onchange: null,
+    addEventListener: vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject | null) => {
+        if (!listener) {
+          return;
+        }
+
+        listeners.add(listener);
+      },
+    ),
+    removeEventListener: vi.fn(
+      (_type: string, listener: EventListenerOrEventListenerObject | null) => {
+        if (!listener) {
+          return;
+        }
+
+        listeners.delete(listener);
+      },
+    ),
+    addListener: vi.fn((listener: ((event: MediaQueryListEvent) => void) | null) => {
+      if (!listener) {
+        return;
+      }
+
+      listeners.add(listener as unknown as EventListener);
+    }),
+    removeListener: vi.fn((listener: ((event: MediaQueryListEvent) => void) | null) => {
+      if (!listener) {
+        return;
+      }
+
+      listeners.delete(listener as unknown as EventListener);
+    }),
+    dispatch(nextMatches: boolean) {
+      matches = nextMatches;
+      const event = { matches: nextMatches, media: mediaQueryList.media } as MediaQueryListEvent;
+      notify(event);
+    },
+    dispatchEvent: vi.fn(),
+  } satisfies MediaQueryList & { dispatch(nextMatches: boolean): void };
+
+  return mediaQueryList;
+}
+
+let matchMediaMock = createMatchMediaMock();
+
+beforeEach(() => {
+  matchMediaMock = createMatchMediaMock();
+  vi.stubGlobal("matchMedia", vi.fn(() => matchMediaMock));
+});
 
 async function mountAt(path: string, authenticated = true) {
   const pinia = createPinia();
@@ -82,10 +152,27 @@ describe("AppRoot", () => {
     themeMeta.setAttribute("content", "#000000");
 
     const { store } = await mountAt("/status");
-    store.selectedTheme = "soft";
+    store.selectedTheme = "dark";
     await nextTick();
 
-    expect(document.documentElement.dataset.theme).toBe("soft");
-    expect(themeMeta.getAttribute("content")).toBe("#f7f1ea");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.colorMode).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
+    expect(themeMeta.getAttribute("content")).toBe("#14110f");
+  });
+
+  it("reacts to system color-scheme changes when the theme follows the system", async () => {
+    const { store } = await mountAt("/status");
+    store.selectedTheme = "system";
+    await nextTick();
+
+    expect(document.documentElement.dataset.theme).toBe("system");
+    expect(document.documentElement.dataset.colorMode).toBe("light");
+
+    matchMediaMock.dispatch(true);
+    await nextTick();
+
+    expect(document.documentElement.dataset.colorMode).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
   });
 });

@@ -5,6 +5,8 @@ import type {
   ThemeMode,
 } from "@/types/workspace";
 
+export type ResolvedThemeMode = Exclude<ThemeMode, "system">;
+
 export function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -100,13 +102,36 @@ export function getSourceStatusLabel(status: SourceConnectionStatus) {
   return "未连接";
 }
 
-export function getThemeDescription(theme: ThemeMode) {
+export function normalizeThemeMode(theme: unknown): ThemeMode {
+  if (theme === "dark" || theme === "light" || theme === "system") {
+    return theme;
+  }
+
   if (theme === "soft") {
-    return "柔光";
+    return "light";
+  }
+
+  return "light";
+}
+
+export function resolveThemeMode(
+  theme: ThemeMode,
+  prefersDark: boolean,
+): ResolvedThemeMode {
+  if (theme === "system") {
+    return prefersDark ? "dark" : "light";
+  }
+
+  return theme;
+}
+
+export function getThemeDescription(theme: ThemeMode) {
+  if (theme === "dark") {
+    return "深色";
   }
 
   if (theme === "system") {
-    return "系统跟随";
+    return "跟随系统";
   }
 
   return "浅色";

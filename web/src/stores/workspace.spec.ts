@@ -339,7 +339,7 @@ describe("workspace store", () => {
     await store.confirmPrint(pendingJob!.id);
     store.updateScheduleDevice(schedule.id, "device-bedroom");
     store.toggleSourceConnection(source.id);
-    store.setTheme("soft");
+    store.setTheme("dark");
     store.setLoginProtection(false);
     await store.logout();
 
@@ -348,9 +348,38 @@ describe("workspace store", () => {
       "device-bedroom",
     );
     expect(store.sources.find((item) => item.id === source.id)?.status).toBe("disconnected");
-    expect(store.selectedTheme).toBe("soft");
+    expect(store.selectedTheme).toBe("dark");
     expect(store.loginProtectionEnabled).toBe(false);
     expect(store.isAuthenticated).toBe(false);
+  });
+
+  it("maps the legacy soft theme to light when hydrating persisted state", () => {
+    window.localStorage.setItem(
+      "ink.workspace.v1",
+      JSON.stringify({
+        devices: [],
+        conversations: [],
+        activeConversationId: "",
+        printJobs: [],
+        schedules: [],
+        sources: [],
+        preferences: {
+          loginProtectionEnabled: false,
+          sendConfirmationEnabled: true,
+          theme: "soft",
+          defaultDeviceId: "",
+        },
+        serviceBinding: {
+          providerName: null,
+          modelName: "Ink AI",
+          bound: false,
+        },
+      }),
+    );
+
+    const store = useWorkspaceStore();
+
+    expect(store.selectedTheme).toBe("light");
   });
 
   it("clears the local auth state after a successful password change", async () => {

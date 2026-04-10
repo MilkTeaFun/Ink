@@ -62,6 +62,7 @@ import {
   getDeviceStatusLabel,
   getPrintStatusLabel,
   getSourceStatusLabel,
+  normalizeThemeMode,
 } from "@/utils/workspace";
 
 const STORAGE_KEY = "ink.workspace.v1";
@@ -326,7 +327,7 @@ function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState
         state.preferences?.loginProtectionEnabled ?? seed.preferences.loginProtectionEnabled,
       sendConfirmationEnabled:
         state.preferences?.sendConfirmationEnabled ?? seed.preferences.sendConfirmationEnabled,
-      theme: state.preferences?.theme ?? seed.preferences.theme,
+      theme: normalizeThemeMode(state.preferences?.theme ?? seed.preferences.theme),
       defaultDeviceId: state.preferences?.defaultDeviceId ?? seed.preferences.defaultDeviceId,
     },
     serviceBinding: {
