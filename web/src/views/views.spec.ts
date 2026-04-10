@@ -451,9 +451,14 @@ describe("workspace views", () => {
     });
 
     expect(router.currentRoute.value.fullPath).toBe("/tutorial");
-    expect(wrapper.text()).toContain("绑定咕咕机并打印第一张纸条");
-    expect(wrapper.text()).toContain("步骤 1");
+    expect(wrapper.text()).toContain("把纸条上的 Device ID");
+    expect(wrapper.text()).toContain("三步完成绑定并打印第一张纸条");
     expect(wrapper.text()).toContain("添加到 iPhone 主屏幕");
+    expect(wrapper.text()).toContain("双击开机键");
+    expect(wrapper.text()).toContain("Device ID");
+    expect(wrapper.text()).toContain("咕咕机设备编号");
+    expect(wrapper.text()).toContain("不要填错");
+    expect(wrapper.find("img[alt='咕咕机连接 Wi-Fi 后打印出的状态纸条示例']").exists()).toBe(true);
     expect(wrapper.text()).toContain("去设置 AI");
   });
 
