@@ -149,7 +149,7 @@ async function handleLogout() {
               : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
           "
         >
-          <span class="block text-[11px] leading-tight font-medium">
+          <span class="block text-xs leading-tight font-medium">
             {{ item.label }}
             <span v-if="item.name === 'prints' && pendingBadge">· {{ pendingBadge }}</span>
           </span>
