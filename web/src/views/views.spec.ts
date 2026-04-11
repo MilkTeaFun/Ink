@@ -486,7 +486,6 @@ describe("workspace views", () => {
     expect(wrapper.text()).toContain("双击开机键");
     expect(wrapper.text()).toContain("Device ID");
     expect(wrapper.text()).toContain("咕咕机设备编号");
-    expect(wrapper.text()).toContain("不要填错");
     expect(wrapper.find("img[alt='咕咕机连接 Wi-Fi 后打印出的状态纸条示例']").exists()).toBe(true);
     expect(wrapper.text()).toContain("去设置 AI");
   });

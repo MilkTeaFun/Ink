@@ -16,27 +16,6 @@ const quickChecks = [
   },
 ] as const;
 
-const fieldGuides = [
-  {
-    label: "要填的内容",
-    value: "Device ID",
-    detail: "把冒号后的一长串字符完整填进“咕咕机设备编号”。",
-    positive: true,
-  },
-  {
-    label: "不要填错",
-    value: "MAC Address",
-    detail: "这是设备网卡地址，不是 Ink 用来绑定的编号。",
-    positive: false,
-  },
-  {
-    label: "也不用扫码",
-    value: "底部二维码",
-    detail: "Ink 走设备编号绑定，不需要扫描状态纸条上的二维码。",
-    positive: false,
-  },
-] as const;
-
 const steps = [
   {
     number: "01",
@@ -176,76 +155,6 @@ const faqs = [
           </figcaption>
         </figure>
       </div>
-    </div>
-
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px]">
-      <article class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
-        <div class="max-w-2xl">
-          <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">读取规则</p>
-          <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">
-            你在 Ink 里应该填什么，不该填什么
-          </h3>
-          <p class="mt-3 text-sm leading-7 text-stone-600">
-            状态纸条的信息不少，但 Ink 真正需要的只有
-            <span class="font-medium text-stone-900"> Device ID </span>
-            。下面这三项最容易看错，第一次绑定时建议对着纸条逐项核对。
-          </p>
-        </div>
-
-        <div class="mt-6 grid gap-4 md:grid-cols-3">
-          <article
-            v-for="item in fieldGuides"
-            :key="item.value"
-            class="rounded-[1.4rem] border px-4 py-5"
-            :class="
-              item.positive ? 'border-emerald-200 bg-emerald-50' : 'border-stone-200 bg-stone-50'
-            "
-          >
-            <p
-              class="text-xs font-medium tracking-[0.16em] uppercase"
-              :class="item.positive ? 'text-emerald-700' : 'text-stone-500'"
-            >
-              {{ item.label }}
-            </p>
-            <p
-              class="mt-3 text-lg font-semibold"
-              :class="item.positive ? 'text-emerald-950' : 'text-stone-900'"
-            >
-              {{ item.value }}
-            </p>
-            <p
-              class="mt-2 text-sm leading-6"
-              :class="item.positive ? 'text-emerald-800' : 'text-stone-600'"
-            >
-              {{ item.detail }}
-            </p>
-          </article>
-        </div>
-      </article>
-
-      <aside class="rounded-[1.8rem] border border-stone-200 bg-stone-900 p-6 shadow-sm sm:p-7">
-        <p class="text-sm font-medium tracking-[0.18em] text-stone-400 uppercase">绑定前检查</p>
-        <h3 class="mt-3 text-2xl font-semibold tracking-tight text-white">开始前只核对这 3 件事</h3>
-        <div class="mt-6 space-y-4">
-          <article
-            v-for="(item, index) in quickChecks"
-            :key="item.title"
-            class="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
-          >
-            <div class="flex items-start gap-3">
-              <span
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white"
-              >
-                {{ index + 1 }}
-              </span>
-              <div>
-                <p class="text-sm font-semibold text-white">{{ item.title }}</p>
-                <p class="mt-1 text-sm leading-6 text-stone-300">{{ item.detail }}</p>
-              </div>
-            </div>
-          </article>
-        </div>
-      </aside>
     </div>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_0.85fr]">
