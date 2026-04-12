@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { resolveLoginRedirect } from "@/router/authRedirect";
+import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const router = useRouter();
@@ -27,7 +27,7 @@ function handleBack() {
     return;
   }
 
-  void router.replace("/status");
+  void router.replace(DEFAULT_LOGIN_REDIRECT);
 }
 
 async function handleSubmit() {

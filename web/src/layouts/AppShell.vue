@@ -2,12 +2,28 @@
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import AppDialog from "@/components/AppDialog.vue";
+import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
 import { navigationItems } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
+const postLoginTutorialSteps = [
+  {
+    title: "双击开机键，先打印状态纸条",
+    detail: "只看 Device ID 那一行，别把 WiFi Name 或 MAC Address 填进设备编号。",
+  },
+  {
+    title: "回到 Ink，把 Device ID 完整填进添加设备",
+    detail: "设备名称和备注按习惯填写，真正决定能否绑定成功的是那串 Device ID。",
+  },
+  {
+    title: "绑定后设为默认，再去试打一张",
+    detail: "之后你在对话页生成的新内容，就会按当前默认设置直接进入打印队列。",
+  },
+] as const;
 
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
@@ -15,7 +31,7 @@ const pendingBadge = computed(() =>
 const anonymousDemoRouteNames = new Set(["status", "conversations", "prints"]);
 const loginTarget = computed(() => ({
   path: "/login",
-  query: route.fullPath === "/status" ? undefined : { redirect: route.fullPath },
+  query: route.fullPath === DEFAULT_LOGIN_REDIRECT ? undefined : { redirect: route.fullPath },
 }));
 const showAnonymousDemoBanner = computed(
   () =>
@@ -23,14 +39,61 @@ const showAnonymousDemoBanner = computed(
     anonymousDemoRouteNames.has(String(route.name ?? "")),
 );
 
+function closePostLoginTutorial() {
+  workspaceStore.closePostLoginTutorial();
+}
+
+async function handlePostLoginTutorialNavigate(path: string) {
+  closePostLoginTutorial();
+  await router.push(path);
+}
+
 async function handleLogout() {
   await workspaceStore.logout();
-  await router.replace("/status");
+  await router.replace(DEFAULT_LOGIN_REDIRECT);
 }
 </script>
 
 <template>
   <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
+    <AppDialog
+      :open="workspaceStore.postLoginTutorialOpen"
+      title="登录成功后先绑定设备"
+      description="绑定教程现在统一放在这里。先按下面三步完成咕咕机绑定，之后你在对话页生成的内容就能直接发往默认设备。"
+      @close="closePostLoginTutorial"
+    >
+      <div class="space-y-4">
+        <article
+          v-for="(step, index) in postLoginTutorialSteps"
+          :key="step.title"
+          class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3"
+        >
+          <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+            步骤 {{ index + 1 }}
+          </p>
+          <p class="mt-1 text-sm font-medium text-stone-900">{{ step.title }}</p>
+          <p class="mt-1 text-sm leading-6 text-stone-600">{{ step.detail }}</p>
+        </article>
+
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2 text-sm"
+            @click="closePostLoginTutorial"
+          >
+            稍后再看
+          </button>
+          <button
+            type="button"
+            class="ui-btn-primary px-4 py-2 text-sm"
+            @click="handlePostLoginTutorialNavigate('/status')"
+          >
+            去绑定设备
+          </button>
+        </div>
+      </div>
+    </AppDialog>
+
     <header
       class="sticky top-0 z-40 border-b border-stone-200 bg-white/90 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 backdrop-blur sm:px-5 lg:bg-white lg:px-8 lg:py-3"
     >

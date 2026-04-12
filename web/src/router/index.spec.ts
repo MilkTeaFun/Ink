@@ -37,21 +37,21 @@ describe("router configuration", () => {
 
     expect(navigationItems).toHaveLength(shellChildren.length);
     expect(navigationItems.map((item) => item.path)).toEqual([
-      "/status",
       "/conversations",
+      "/status",
       "/prints",
       "/settings",
     ]);
   });
 
-  it("redirects anonymous visitors from the root route to the public status page", async () => {
+  it("redirects anonymous visitors from the root route to the public conversations page", async () => {
     const pinia = createPinia();
     const router = createAppRouter(createMemoryHistory(), pinia);
 
     router.push("/");
     await router.isReady();
 
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/conversations");
   });
 
   it.each(["/status", "/conversations", "/prints"])(
@@ -112,7 +112,7 @@ describe("router configuration", () => {
             sources: [],
             preferences: {
               loginProtectionEnabled: false,
-              sendConfirmationEnabled: true,
+              sendConfirmationEnabled: false,
               theme: "light",
               defaultDeviceId: "",
             },
@@ -176,10 +176,10 @@ describe("router configuration", () => {
   });
 
   it.each([
-    ["/login", "/status"],
+    ["/login", "/conversations"],
     ["/login?redirect=/settings", "/settings"],
-    ["/login?redirect=/missing", "/status"],
-    ["/login?redirect=/login", "/status"],
+    ["/login?redirect=/missing", "/conversations"],
+    ["/login?redirect=/login", "/conversations"],
   ])("redirects authenticated visitors from %s to %s", async (source, destination) => {
     const router = createAuthenticatedRouter();
 

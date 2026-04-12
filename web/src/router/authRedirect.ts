@@ -1,6 +1,6 @@
 import type { Router } from "vue-router";
 
-export const DEFAULT_LOGIN_REDIRECT = "/status";
+export const DEFAULT_LOGIN_REDIRECT = "/conversations";
 
 export function resolveLoginRedirect(router: Router, redirect: unknown) {
   if (typeof redirect !== "string" || !redirect.startsWith("/") || redirect.startsWith("//")) {

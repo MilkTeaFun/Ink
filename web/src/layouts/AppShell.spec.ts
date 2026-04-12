@@ -88,10 +88,10 @@ describe("AppShell", () => {
     await loginLink?.trigger("click");
     await flushPromises();
 
-    expect(router.currentRoute.value.fullPath).toBe("/login");
+    expect(router.currentRoute.value.fullPath).toBe("/login?redirect=/status");
   });
 
-  it("logs out and returns to status when the header logout action is used", async () => {
+  it("logs out and returns to conversations when the header logout action is used", async () => {
     const { wrapper, router, store } = await mountShellAt("/prints");
     const logoutButton = wrapper.findAll("button").find((button) => button.text() === "退出");
 
@@ -101,6 +101,24 @@ describe("AppShell", () => {
     await flushPromises();
 
     expect(store.isAuthenticated).toBe(false);
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/conversations");
+  });
+
+  it("shows and dismisses the post-login binding tutorial dialog", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations");
+
+    store.postLoginTutorialOpen = true;
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("登录成功后先绑定设备");
+    expect(wrapper.text()).toContain("双击开机键，先打印状态纸条");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "稍后再看")
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(store.postLoginTutorialOpen).toBe(false);
   });
 });

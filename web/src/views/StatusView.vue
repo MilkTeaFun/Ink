@@ -99,11 +99,8 @@ async function submitAddDevice() {
           </div>
 
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-wrap items-center gap-3">
+            <div>
               <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
-              <RouterLink to="/tutorial" class="text-sm text-stone-500 hover:text-stone-900">
-                查看教程
-              </RouterLink>
             </div>
             <div class="flex items-center gap-2">
               <button
@@ -124,16 +121,10 @@ async function submitAddDevice() {
             <p class="mt-2 text-sm text-stone-500">
               {{
                 workspaceStore.isAuthenticated
-                  ? "先去教程页看一眼，再回来填写设备编号完成真实绑定。"
+                  ? "登录成功后会弹出绑定说明，按提示填写设备编号就能完成真实绑定。"
                   : "当前未登录时展示的是演示工作区；登录后，这里会切到你账号自己的真实设备列表。"
               }}
             </p>
-            <RouterLink
-              to="/tutorial"
-              class="ui-btn-secondary mt-4 inline-flex px-3 py-1.5 text-sm"
-            >
-              打开教程
-            </RouterLink>
           </div>
 
           <div v-else class="ui-list-card">

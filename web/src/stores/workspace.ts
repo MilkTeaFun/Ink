@@ -286,7 +286,7 @@ function createSeedState(): PersistedWorkspaceState {
   ];
   const preferences: Preferences = {
     loginProtectionEnabled: false,
-    sendConfirmationEnabled: true,
+    sendConfirmationEnabled: false,
     theme: "light",
     defaultDeviceId: "device-desk",
   };
@@ -525,6 +525,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const isCreatingPrint = ref(false);
   const flashMessage = ref("");
   const flashTone = ref<"success" | "error" | "info">("info");
+  const postLoginTutorialOpen = ref(false);
   let flashTimer = 0;
   let remoteSaveTimer = 0;
   let remoteSavePromise: Promise<boolean> | null = null;
@@ -2068,9 +2069,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       }
 
       showFlash("登录成功。", "success");
+      postLoginTutorialOpen.value = devices.value.length === 0;
       return true;
     } catch (error) {
       authError.value = error instanceof Error ? error.message : "登录失败，请稍后重试。";
+      postLoginTutorialOpen.value = false;
       showFlash(authError.value, "error");
       return false;
     } finally {
@@ -2157,7 +2160,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     clearAuthState();
     restoreAnonymousWorkspace();
+    postLoginTutorialOpen.value = false;
     showFlash("已退出当前账号。");
+  }
+
+  function closePostLoginTutorial() {
+    postLoginTutorialOpen.value = false;
   }
 
   async function createAccount(email: string, name: string, password: string) {
@@ -2250,6 +2258,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     isCreatingPrint,
     flashMessage,
     flashTone,
+    postLoginTutorialOpen,
     activeConversation,
     conversationMessages,
     selectedConversationMessages,
@@ -2305,6 +2314,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     createAccount,
     login,
     logout,
+    closePostLoginTutorial,
     formatPrintTime,
     getDeviceName,
     getDeviceStatusLabel,

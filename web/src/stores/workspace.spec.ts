@@ -65,7 +65,7 @@ vi.mock("@/services/workspace", () => ({
     sources: [],
     preferences: {
       loginProtectionEnabled: false,
-      sendConfirmationEnabled: true,
+      sendConfirmationEnabled: false,
       theme: "light",
       defaultDeviceId: "",
     },
@@ -204,6 +204,7 @@ describe("workspace store", () => {
       expect(store.welcomeLabel).toBe("整理内容，准备打印");
       expect(store.isConfigured).toBe(true);
       expect(store.loginProtectionEnabled).toBe(false);
+      expect(store.sendConfirmationEnabled).toBe(false);
       expect(store.pendingConfirmationCount).toBe(1);
       expect(store.enabledSchedulesCount).toBe(2);
     } finally {
@@ -267,7 +268,7 @@ describe("workspace store", () => {
     ).toBe(true);
   });
 
-  it("can generate a reply and create a pending print from the active conversation", async () => {
+  it("can generate a reply and create a queued print by default from the active conversation", async () => {
     const store = useWorkspaceStore();
     const previousCount = store.pendingPrintJobs.length;
 
@@ -281,7 +282,7 @@ describe("workspace store", () => {
       "请帮我整理一句适合明早看的提醒",
     );
     expect(store.pendingPrintJobs).toHaveLength(previousCount + 1);
-    expect(printJob?.status).toBe("pending");
+    expect(printJob?.status).toBe("queued");
     expect(printJob?.source).toBe("对话选中问答");
   });
 
@@ -370,7 +371,7 @@ describe("workspace store", () => {
         sources: [],
         preferences: {
           loginProtectionEnabled: false,
-          sendConfirmationEnabled: true,
+          sendConfirmationEnabled: false,
           theme: "soft",
           defaultDeviceId: "",
         },
@@ -406,6 +407,8 @@ describe("workspace store", () => {
     expect(store.activeConversation?.title).toBe("新对话");
     expect(store.activeConversation?.messages).toEqual([]);
     expect(store.aiConfigSummary.bound).toBe(false);
+    expect(store.sendConfirmationEnabled).toBe(false);
+    expect(store.postLoginTutorialOpen).toBe(true);
   });
 
   it("can send the first message after loading an empty remote workspace", async () => {
@@ -450,6 +453,7 @@ describe("workspace store", () => {
 
   it("binds devices and creates print jobs through the authenticated printer API", async () => {
     const store = authenticateStore();
+    store.setSendConfirmation(true);
 
     const device = await store.addDevice({
       name: "我的咕咕机",
@@ -477,6 +481,7 @@ describe("workspace store", () => {
       const store = useWorkspaceStore();
       store.printJobs = store.printJobs.filter((job) => job.status !== "queued");
       authenticateStore();
+      store.setSendConfirmation(true);
 
       const job = await store.createManualPrint({
         title: "真实打印",

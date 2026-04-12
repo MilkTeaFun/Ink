@@ -73,7 +73,7 @@ vi.mock("@/services/workspace", () => ({
     sources: [],
     preferences: {
       loginProtectionEnabled: false,
-      sendConfirmationEnabled: true,
+      sendConfirmationEnabled: false,
       theme: "light",
       defaultDeviceId: "",
     },
@@ -299,9 +299,12 @@ describe("workspace views", () => {
       },
     });
 
+    expect(wrapper.text()).toContain("问题 / 建议 / 吐槽反馈");
+    expect(wrapper.text()).toContain("这里的反馈会提醒管理员");
+
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "反馈")
+      .find((button) => button.text() === "反馈给管理员")
       ?.trigger("click");
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
@@ -328,7 +331,7 @@ describe("workspace views", () => {
         sources: [],
         preferences: {
           loginProtectionEnabled: false,
-          sendConfirmationEnabled: true,
+          sendConfirmationEnabled: false,
           theme: "light",
           defaultDeviceId: "",
         },
@@ -418,7 +421,7 @@ describe("workspace views", () => {
     await wrapper.find("form").trigger("submit");
     await new Promise((resolve) => window.setTimeout(resolve, 120));
 
-    expect(router.currentRoute.value.fullPath).toBe("/status");
+    expect(router.currentRoute.value.fullPath).toBe("/conversations");
   });
 
   it("renders the login title as two lines without welcome-back copy", async () => {

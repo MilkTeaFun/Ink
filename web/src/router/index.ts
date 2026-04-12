@@ -30,17 +30,6 @@ declare module "vue-router" {
 
 const shellChildren: RouteRecordRaw[] = [
   {
-    path: "status",
-    name: "status",
-    component: StatusView,
-    meta: {
-      label: "状态",
-      title: "状态",
-      description: "查看设备绑定情况、定时任务和最近的打印记录。",
-      navHint: "设备与任务",
-    },
-  },
-  {
     path: "conversations",
     name: "conversations",
     component: ConversationsView,
@@ -49,6 +38,17 @@ const shellChildren: RouteRecordRaw[] = [
       title: "内容对话",
       description: "像聊天一样整理内容，确认满意后，再把它发去打印。",
       navHint: "整理内容",
+    },
+  },
+  {
+    path: "status",
+    name: "status",
+    component: StatusView,
+    meta: {
+      label: "状态",
+      title: "状态",
+      description: "查看设备绑定情况、定时任务和最近的打印记录。",
+      navHint: "设备与任务",
     },
   },
   {
@@ -99,7 +99,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: "/",
     component: AppShell,
-    redirect: "/status",
+    redirect: "/conversations",
     children: shellChildren,
   },
   {

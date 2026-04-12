@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
+import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
 import { useWorkspaceStore } from "@/stores/workspace";
 import type { PluginDetails, PluginFieldSpec } from "@/types/plugins";
 import { getPluginFieldDefaultValue } from "@/utils/plugins";
@@ -251,7 +252,7 @@ async function handlePluginSave(plugin: PluginDetails) {
 
 async function handleLogout() {
   await workspaceStore.logout();
-  await router.replace("/status");
+  await router.replace(DEFAULT_LOGIN_REDIRECT);
 }
 
 async function handlePasswordSubmit() {

@@ -80,6 +80,24 @@ async function handleFeedbackSubmit() {
     </div>
 
     <section class="space-y-4 lg:hidden">
+      <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+        <div class="flex flex-col gap-3">
+          <div>
+            <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
+            <p class="mt-1 text-sm leading-6 text-stone-500">
+              这里的反馈会提醒管理员，适合提交使用中遇到的问题、建议或吐槽。
+            </p>
+          </div>
+          <button
+            type="button"
+            class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
+            @click="openFeedbackDialog"
+          >
+            反馈给管理员
+          </button>
+        </div>
+      </div>
+
       <div class="flex items-center justify-between gap-3">
         <div>
           <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
@@ -139,6 +157,24 @@ async function handleFeedbackSubmit() {
 
     <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
       <aside class="hidden min-w-0 space-y-4 lg:block">
+        <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+          <div class="flex flex-col gap-3">
+            <div>
+              <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
+              <p class="mt-1 text-sm leading-6 text-stone-500">
+                这里的反馈会提醒管理员，适合提交使用中遇到的问题、建议或吐槽。
+              </p>
+            </div>
+            <button
+              type="button"
+              class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
+              @click="openFeedbackDialog"
+            >
+              反馈给管理员
+            </button>
+          </div>
+        </div>
+
         <div class="flex items-center justify-between">
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
@@ -203,14 +239,7 @@ async function handleFeedbackSubmit() {
               默认发往：{{ workspaceStore.activeDeviceLabel || "尚未设置" }}
             </p>
           </div>
-          <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <button
-              type="button"
-              class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
-              @click="openFeedbackDialog"
-            >
-              反馈
-            </button>
+          <div class="flex w-full sm:w-auto">
             <button
               type="button"
               class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
@@ -385,7 +414,7 @@ async function handleFeedbackSubmit() {
     <AppDialog
       :open="feedbackOpen"
       title="反馈"
-      description="写下功能、建议或吐槽，提交后会直接打印到管理员的咕咕机。"
+      description="这里适合提交问题、建议或吐槽；提交后会提醒管理员。"
       @close="closeFeedbackDialog"
     >
       <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
