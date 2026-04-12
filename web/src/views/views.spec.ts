@@ -74,6 +74,7 @@ vi.mock("@/services/workspace", () => ({
     preferences: {
       loginProtectionEnabled: false,
       sendConfirmationEnabled: false,
+      tutorialTabEnabled: true,
       theme: "light",
       defaultDeviceId: "",
     },
@@ -300,11 +301,11 @@ describe("workspace views", () => {
     });
 
     expect(wrapper.text()).toContain("问题 / 建议 / 吐槽反馈");
-    expect(wrapper.text()).toContain("这里的反馈会提醒管理员");
+    expect(wrapper.text()).toContain("这里的反馈会提醒作者");
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "反馈给管理员")
+      .find((button) => button.text() === "反馈给作者")
       ?.trigger("click");
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
@@ -315,7 +316,7 @@ describe("workspace views", () => {
     await wrapper.findAll("form").at(-1)?.trigger("submit");
     await flushPromises();
 
-    expect(store.flashMessage).toBe("反馈已发送，管理员会直接收到纸条。");
+    expect(store.flashMessage).toBe("反馈已发送，作者会直接收到纸条。");
   });
 
   it("guides and supports the first message when there is no conversation history", async () => {
@@ -332,6 +333,7 @@ describe("workspace views", () => {
         preferences: {
           loginProtectionEnabled: false,
           sendConfirmationEnabled: false,
+          tutorialTabEnabled: true,
           theme: "light",
           defaultDeviceId: "",
         },
@@ -565,6 +567,23 @@ describe("workspace views", () => {
     expect(selects).toHaveLength(1);
     expect(wrapper.text()).toContain("AI 服务");
     expect(wrapper.text()).toContain("仅管理员可修改");
+  });
+
+  it("toggles the tutorial tab from settings", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/settings");
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    const toggle = wrapper
+      .findAll("button")
+      .find((button) => button.attributes("aria-label") === "关闭教程标签");
+
+    await toggle?.trigger("click");
+
+    expect(store.tutorialTabEnabled).toBe(false);
   });
 
   it("lets administrators submit the real AI config form", async () => {

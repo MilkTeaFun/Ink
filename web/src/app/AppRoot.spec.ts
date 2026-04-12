@@ -125,10 +125,11 @@ async function mountAt(path: string, authenticated = true) {
 
 describe("AppRoot", () => {
   it.each([
-    ["/status", "状态"],
+    ["/status", "设备"],
     ["/conversations", "对话"],
     ["/prints", "打印"],
     ["/settings", "设置"],
+    ["/tutorial", "教程"],
   ])("renders the workspace shell for %s when authenticated", async (path, heading) => {
     const { wrapper } = await mountAt(path, true);
 
@@ -144,7 +145,7 @@ describe("AppRoot", () => {
     expect(wrapper.find("header nav").exists()).toBe(true);
     expect(wrapper.find("nav.fixed").exists()).toBe(true);
     expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).toContain("当前状态、对话、打印页均为演示内容");
+    expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
     expect(wrapper.text()).not.toContain("退出");
   });
 

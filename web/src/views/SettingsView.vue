@@ -620,22 +620,22 @@ async function handleAIConfigSubmit() {
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">发送前确认</p>
+                <p class="text-sm font-medium text-stone-900">教程标签</p>
                 <p class="mt-0.5 text-sm text-stone-500">
                   {{
-                    workspaceStore.sendConfirmationEnabled
-                      ? "生成的新内容会先进入待确认列表。"
-                      : "生成的新内容会直接进入打印队列。"
+                    workspaceStore.tutorialTabEnabled
+                      ? "顶部和底部导航会显示“教程”标签。"
+                      : "顶部和底部导航会隐藏“教程”标签。"
                   }}
                 </p>
               </div>
               <button
                 type="button"
                 class="ui-toggle"
-                :class="{ 'is-on': workspaceStore.sendConfirmationEnabled }"
-                :aria-label="`${workspaceStore.sendConfirmationEnabled ? '关闭' : '开启'}发送前确认`"
-                :aria-pressed="workspaceStore.sendConfirmationEnabled"
-                @click="workspaceStore.setSendConfirmation(!workspaceStore.sendConfirmationEnabled)"
+                :class="{ 'is-on': workspaceStore.tutorialTabEnabled }"
+                :aria-label="`${workspaceStore.tutorialTabEnabled ? '关闭' : '开启'}教程标签`"
+                :aria-pressed="workspaceStore.tutorialTabEnabled"
+                @click="workspaceStore.setTutorialTabEnabled(!workspaceStore.tutorialTabEnabled)"
               >
                 <span class="ui-toggle-thumb" />
               </button>

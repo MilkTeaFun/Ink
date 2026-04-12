@@ -22,7 +22,6 @@ const weekdayOptions = [
 
 const defaultSettings = computed(() => [
   { label: "默认设备", value: workspaceStore.activeDeviceLabel || "暂未设置" },
-  { label: "发送前确认", value: workspaceStore.sendConfirmationEnabled ? "已开启" : "已关闭" },
 ]);
 
 const printDialogOpen = ref(false);
@@ -510,7 +509,7 @@ async function submitScheduleDialog() {
             </div>
           </div>
           <p class="mt-3 text-sm text-stone-500">
-            如果你还没绑定咕咕机，先去教程页拿到设备编号，再回到状态页完成绑定。
+            如果你还没绑定咕咕机，先去教程页拿到设备编号，再回到设备页完成绑定。
           </p>
         </section>
 

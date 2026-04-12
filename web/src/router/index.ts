@@ -45,8 +45,8 @@ const shellChildren: RouteRecordRaw[] = [
     name: "status",
     component: StatusView,
     meta: {
-      label: "状态",
-      title: "状态",
+      label: "设备",
+      title: "设备",
       description: "查看设备绑定情况、定时任务和最近的打印记录。",
       navHint: "设备与任务",
     },
@@ -63,6 +63,17 @@ const shellChildren: RouteRecordRaw[] = [
     },
   },
   {
+    path: "tutorial",
+    name: "tutorial",
+    component: TutorialView,
+    meta: {
+      label: "教程",
+      title: "教程",
+      description: "了解如何绑定咕咕机、配置 AI，并打印第一张纸条。",
+      navHint: "使用指南",
+    },
+  },
+  {
     path: "settings",
     name: "settings",
     component: SettingsView,
@@ -72,16 +83,6 @@ const shellChildren: RouteRecordRaw[] = [
       description: "调整默认设备、助手风格和打印习惯，让每次使用都更顺手。",
       navHint: "习惯与偏好",
       requiresAuth: true,
-    },
-  },
-  {
-    path: "tutorial",
-    name: "tutorial",
-    component: TutorialView,
-    meta: {
-      title: "使用教程",
-      description: "了解如何绑定咕咕机、配置 AI，并打印第一张纸条。",
-      showInNav: false,
     },
   },
 ];

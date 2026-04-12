@@ -66,6 +66,7 @@ vi.mock("@/services/workspace", () => ({
     preferences: {
       loginProtectionEnabled: false,
       sendConfirmationEnabled: false,
+      tutorialTabEnabled: true,
       theme: "light",
       defaultDeviceId: "",
     },
@@ -205,6 +206,7 @@ describe("workspace store", () => {
       expect(store.isConfigured).toBe(true);
       expect(store.loginProtectionEnabled).toBe(false);
       expect(store.sendConfirmationEnabled).toBe(false);
+      expect(store.tutorialTabEnabled).toBe(true);
       expect(store.pendingConfirmationCount).toBe(1);
       expect(store.enabledSchedulesCount).toBe(2);
     } finally {
@@ -216,11 +218,13 @@ describe("workspace store", () => {
     const store = useWorkspaceStore();
 
     store.setDefaultDevice("device-bedroom");
+    store.setTutorialTabEnabled(false);
 
     expect(store.activeDeviceLabel).toBe("卧室咕咕机");
     expect(store.isConfigured).toBe(true);
     expect(store.activeModelLabel).toBe("Ink AI");
     expect(store.welcomeLabel).toBe("整理内容，准备打印");
+    expect(store.tutorialTabEnabled).toBe(false);
   });
 
   it("adds devices and removes the default device in anonymous mode", async () => {
@@ -313,7 +317,6 @@ describe("workspace store", () => {
     expect(store.printJobs.find((job) => job.id === pendingJob!.id)?.status).toBe("cancelled");
 
     store.updateCurrentDraft("请整理一条准备直接排队的纸条");
-    store.setSendConfirmation(false);
     await store.sendCurrentDraft();
     store.toggleConversationMessageSelection(store.activeConversation!.messages.at(-1)!.id);
     const queuedJob = await store.createPrintFromSelectedMessages();
@@ -372,6 +375,7 @@ describe("workspace store", () => {
         preferences: {
           loginProtectionEnabled: false,
           sendConfirmationEnabled: false,
+          tutorialTabEnabled: true,
           theme: "soft",
           defaultDeviceId: "",
         },
@@ -453,7 +457,6 @@ describe("workspace store", () => {
 
   it("binds devices and creates print jobs through the authenticated printer API", async () => {
     const store = authenticateStore();
-    store.setSendConfirmation(true);
 
     const device = await store.addDevice({
       name: "我的咕咕机",
@@ -469,8 +472,6 @@ describe("workspace store", () => {
     expect(device?.status).toBe("connected");
     expect(store.defaultDeviceId).toBe(device?.id);
     expect(job?.deviceId).toBe(device?.id);
-
-    await expect(store.confirmPrint(job!.id)).resolves.toBe(true);
     expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
   });
 
@@ -481,7 +482,6 @@ describe("workspace store", () => {
       const store = useWorkspaceStore();
       store.printJobs = store.printJobs.filter((job) => job.status !== "queued");
       authenticateStore();
-      store.setSendConfirmation(true);
 
       const job = await store.createManualPrint({
         title: "真实打印",
@@ -500,7 +500,6 @@ describe("workspace store", () => {
         ),
       });
 
-      await expect(store.confirmPrint(job!.id)).resolves.toBe(true);
       expect(store.printJobs.find((item) => item.id === job!.id)?.status).toBe("queued");
 
       await vi.advanceTimersByTimeAsync(1500);
@@ -524,7 +523,7 @@ describe("workspace store", () => {
     await expect(store.submitFeedback("希望补一个反馈按钮")).resolves.toBe(true);
 
     expect(store.feedbackError).toBe("");
-    expect(store.flashMessage).toBe("反馈已发送，管理员会直接收到纸条。");
+    expect(store.flashMessage).toBe("反馈已发送，作者会直接收到纸条。");
   });
 
   it("requires login before submitting feedback", async () => {

@@ -72,6 +72,7 @@ export interface SourceConnection {
 export interface Preferences {
   loginProtectionEnabled: boolean;
   sendConfirmationEnabled: boolean;
+  tutorialTabEnabled: boolean;
   theme: ThemeMode;
   defaultDeviceId: string;
 }

@@ -38,6 +38,9 @@ const showAnonymousDemoBanner = computed(
     !workspaceStore.isAuthenticated &&
     anonymousDemoRouteNames.has(String(route.name ?? "")),
 );
+const visibleNavigationItems = computed(() =>
+  navigationItems.filter((item) => item.name !== "tutorial" || workspaceStore.tutorialTabEnabled),
+);
 
 function closePostLoginTutorial() {
   workspaceStore.closePostLoginTutorial();
@@ -86,9 +89,9 @@ async function handleLogout() {
           <button
             type="button"
             class="ui-btn-primary px-4 py-2 text-sm"
-            @click="handlePostLoginTutorialNavigate('/status')"
+            @click="handlePostLoginTutorialNavigate('/tutorial')"
           >
-            去绑定设备
+            去看教程
           </button>
         </div>
       </div>
@@ -134,7 +137,7 @@ async function handleLogout() {
 
           <nav class="flex items-center gap-1">
             <RouterLink
-              v-for="item in navigationItems"
+              v-for="item in visibleNavigationItems"
               :key="item.name"
               :to="item.path"
               class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
@@ -199,7 +202,7 @@ async function handleLogout() {
     >
       <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p class="leading-6">
-          当前状态、对话、打印页均为演示内容，具体使用请登录后继续。
+          当前设备、对话、打印页均为演示内容，具体使用请登录后继续。
         </p>
         <RouterLink
           :to="loginTarget"
@@ -223,9 +226,12 @@ async function handleLogout() {
     <nav
       class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/95 px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden"
     >
-      <div class="mx-auto grid max-w-lg grid-cols-4 gap-1">
+      <div
+        class="mx-auto grid max-w-lg gap-1"
+        :style="{ gridTemplateColumns: `repeat(${visibleNavigationItems.length}, minmax(0, 1fr))` }"
+      >
         <RouterLink
-          v-for="item in navigationItems"
+          v-for="item in visibleNavigationItems"
           :key="item.name"
           :to="item.path"
           class="flex min-h-12 flex-col items-center justify-center rounded-xl px-2 py-2.5 text-center transition-colors"

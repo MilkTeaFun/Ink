@@ -4,11 +4,7 @@ import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
-import {
-  getDeviceStatusBadgeClass,
-  getPrintStatusBadgeClass,
-  getSummaryProgressClass,
-} from "@/utils/workspace";
+import { getDeviceStatusBadgeClass, getPrintStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
 const addDeviceOpen = ref(false);
@@ -62,28 +58,17 @@ async function submitAddDevice() {
 <template>
   <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
     <div>
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">状态</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设备</h2>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="rounded-2xl border border-stone-200 bg-white shadow-sm">
       <article
         v-for="item in workspaceStore.summaryCards"
         :key="item.label"
-        class="rounded-xl border border-stone-200 bg-white p-5 shadow-sm"
+        class="flex items-center justify-between gap-4 border-b border-stone-100 px-5 py-4 last:border-b-0"
       >
-        <p class="text-xs font-medium text-stone-500">{{ item.label }}</p>
-        <div class="mt-3 flex items-end justify-between gap-3">
-          <p class="text-2xl font-semibold text-stone-900">
-            {{ item.value }}
-          </p>
-          <div class="mb-1.5 h-1.5 w-16 overflow-hidden rounded-full bg-stone-100">
-            <div
-              class="h-full rounded-full transition-all duration-500"
-              :class="getSummaryProgressClass(item.tone)"
-              :style="{ width: `${item.progress}%` }"
-            />
-          </div>
-        </div>
+        <p class="text-sm text-stone-500">{{ item.label }}</p>
+        <p class="text-sm font-medium text-stone-900">{{ item.value }}</p>
       </article>
     </div>
 
@@ -231,7 +216,7 @@ async function submitAddDevice() {
       <aside>
         <div class="mb-4">
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">最近状态</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">最近打印</h3>
           </div>
         </div>
 

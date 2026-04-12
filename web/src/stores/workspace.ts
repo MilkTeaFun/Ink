@@ -287,6 +287,7 @@ function createSeedState(): PersistedWorkspaceState {
   const preferences: Preferences = {
     loginProtectionEnabled: false,
     sendConfirmationEnabled: false,
+    tutorialTabEnabled: true,
     theme: "light",
     defaultDeviceId: "device-desk",
   };
@@ -326,8 +327,9 @@ function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState
     preferences: {
       loginProtectionEnabled:
         state.preferences?.loginProtectionEnabled ?? seed.preferences.loginProtectionEnabled,
-      sendConfirmationEnabled:
-        state.preferences?.sendConfirmationEnabled ?? seed.preferences.sendConfirmationEnabled,
+      sendConfirmationEnabled: false,
+      tutorialTabEnabled:
+        state.preferences?.tutorialTabEnabled ?? seed.preferences.tutorialTabEnabled,
       theme: normalizeThemeMode(state.preferences?.theme ?? seed.preferences.theme),
       defaultDeviceId: state.preferences?.defaultDeviceId ?? seed.preferences.defaultDeviceId,
     },
@@ -506,6 +508,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   const loginProtectionEnabled = ref(persisted.preferences.loginProtectionEnabled);
   const sendConfirmationEnabled = ref(persisted.preferences.sendConfirmationEnabled);
+  const tutorialTabEnabled = ref(persisted.preferences.tutorialTabEnabled);
   const selectedTheme = ref<ThemeMode>(persisted.preferences.theme);
   const defaultDeviceId = ref(persisted.preferences.defaultDeviceId);
 
@@ -634,30 +637,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     {
       label: "已绑定设备",
       value: `${devices.value.length} 台`,
-      tone: "neutral",
-      progress: devices.value.length > 0 ? Math.min(100, connectedDevicesCount.value * 50) : 10,
     },
     {
       label: "已启用任务",
       value: `${enabledSchedulesCount.value} 条`,
-      tone: "amber",
-      progress: activeSchedules.value.length
-        ? Math.round((enabledSchedulesCount.value / activeSchedules.value.length) * 100)
-        : 0,
-    },
-    {
-      label: "待确认打印",
-      value: `${pendingConfirmationCount.value} 条`,
-      tone: "stone",
-      progress: pendingConfirmationCount.value
-        ? Math.min(100, pendingConfirmationCount.value * 25)
-        : 8,
     },
     {
       label: "今日完成",
       value: `${todayCompletedCount.value} 条`,
-      tone: "green",
-      progress: todayCompletedCount.value ? Math.min(100, todayCompletedCount.value * 20) : 10,
     },
   ]);
 
@@ -671,6 +658,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     preferences: {
       loginProtectionEnabled: loginProtectionEnabled.value,
       sendConfirmationEnabled: sendConfirmationEnabled.value,
+      tutorialTabEnabled: tutorialTabEnabled.value,
       theme: selectedTheme.value,
       defaultDeviceId: defaultDeviceId.value,
     },
@@ -749,6 +737,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sources.value = normalized.sources;
     loginProtectionEnabled.value = normalized.preferences.loginProtectionEnabled;
     sendConfirmationEnabled.value = normalized.preferences.sendConfirmationEnabled;
+    tutorialTabEnabled.value = normalized.preferences.tutorialTabEnabled;
     selectedTheme.value = normalized.preferences.theme;
     defaultDeviceId.value = normalized.preferences.defaultDeviceId;
     serviceBinding.value = normalized.serviceBinding;
@@ -1235,7 +1224,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       title,
       source,
       deviceId: defaultDeviceId.value,
-      status: sendConfirmationEnabled.value ? "pending" : "queued",
+      status: "queued",
       createdAt: now,
       updatedAt: now,
       content,
@@ -1280,25 +1269,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           source,
           content,
           printerBindingId: defaultDeviceId.value,
-          submitImmediately: !sendConfirmationEnabled.value,
+          submitImmediately: true,
         });
         upsertPrintJob(job);
-        showFlash(
-          sendConfirmationEnabled.value ? "已加入待确认打印。" : "内容已直接加入打印队列。",
-          "success",
-        );
+        showFlash("内容已直接加入打印队列。", "success");
         return job;
       }
 
       const job = buildPrintJob(title, content, source);
       printJobs.value = [job, ...printJobs.value];
 
-      if (job.status === "queued") {
-        showFlash("内容已直接加入打印队列。", "success");
-        await maybeCompleteQueuedJob(job.id);
-      } else {
-        showFlash("已加入待确认打印。", "success");
-      }
+      showFlash("内容已直接加入打印队列。", "success");
+      await maybeCompleteQueuedJob(job.id);
 
       return job;
     } catch (error) {
@@ -1910,8 +1892,15 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function setSendConfirmation(enabled: boolean) {
-    sendConfirmationEnabled.value = enabled;
-    showFlash(enabled ? "已开启发送前确认。" : "新内容会直接进入打印队列。");
+    sendConfirmationEnabled.value = false;
+    if (enabled) {
+      showFlash("新内容会直接进入打印队列。");
+    }
+  }
+
+  function setTutorialTabEnabled(enabled: boolean) {
+    tutorialTabEnabled.value = enabled;
+    showFlash(enabled ? "教程标签页已显示。" : "教程标签页已隐藏。");
   }
 
   function setLoginProtection(enabled: boolean) {
@@ -2131,7 +2120,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     try {
       await submitFeedbackToAdmin(current.accessToken, normalizedContent);
-      showFlash("反馈已发送，管理员会直接收到纸条。", "success");
+      showFlash("反馈已发送，作者会直接收到纸条。", "success");
       return true;
     } catch (error) {
       feedbackError.value = error instanceof Error ? error.message : "发送反馈失败，请稍后重试。";
@@ -2249,6 +2238,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     remoteSchedules,
     loginProtectionEnabled,
     sendConfirmationEnabled,
+    tutorialTabEnabled,
     selectedTheme,
     defaultDeviceId,
     serviceBinding,
@@ -2305,6 +2295,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     setDefaultDevice,
     setTheme,
     setSendConfirmation,
+    setTutorialTabEnabled,
     setLoginProtection,
     saveAIServiceConfig,
     initializeAuth,

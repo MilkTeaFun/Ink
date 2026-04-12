@@ -26,14 +26,14 @@ const steps = [
   {
     number: "02",
     title: "把 Device ID 填进添加设备",
-    body: "登录 Ink 后进入状态页，点击“添加设备”。设备名称和备注按你的习惯填写，关键是把 Device ID 后面那一长串字符完整填进“咕咕机设备编号”。",
+    body: "登录 Ink 后进入设备页，点击“添加设备”。设备名称和备注按你的习惯填写，关键是把 Device ID 后面那一长串字符完整填进“咕咕机设备编号”。",
     note: "真正决定能否绑定成功的是 Device ID，不是 WiFi Name，也不是 MAC Address。",
   },
   {
     number: "03",
     title: "绑定后设为默认并试打一张",
     body: "绑定成功后，可以把常用设备设为默认。接着去对话页或打印页试发一张短纸条，确认这台咕咕机已经能正常接收 Ink 的任务。",
-    note: "如果开启了发送前确认，任务会先进入待确认列表，再由你手动提交。",
+    note: "新生成的内容会直接进入打印队列，确认设备可用后就能正常出纸。",
   },
 ] as const;
 
@@ -105,7 +105,7 @@ const faqs = [
 
           <div class="flex flex-col gap-3 sm:flex-row">
             <RouterLink to="/status" class="ui-btn-primary px-4 py-2.5 text-center text-sm">
-              去状态页添加设备
+              去设备页添加设备
             </RouterLink>
             <RouterLink to="/prints" class="ui-btn-secondary px-4 py-2.5 text-center text-sm">
               绑定完后去试打印

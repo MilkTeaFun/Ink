@@ -40,6 +40,7 @@ describe("router configuration", () => {
       "/conversations",
       "/status",
       "/prints",
+      "/tutorial",
       "/settings",
     ]);
   });
@@ -54,7 +55,7 @@ describe("router configuration", () => {
     expect(router.currentRoute.value.fullPath).toBe("/conversations");
   });
 
-  it.each(["/status", "/conversations", "/prints"])(
+  it.each(["/status", "/conversations", "/prints", "/tutorial"])(
     "allows anonymous visitors to reach %s",
     async (path) => {
       const pinia = createPinia();
@@ -113,6 +114,7 @@ describe("router configuration", () => {
             preferences: {
               loginProtectionEnabled: false,
               sendConfirmationEnabled: false,
+              tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
             },

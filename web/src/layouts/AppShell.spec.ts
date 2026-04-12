@@ -66,7 +66,7 @@ describe("AppShell", () => {
     const { wrapper } = await mountShellAt("/status", false);
 
     expect(wrapper.text()).toContain("登录");
-    expect(wrapper.text()).toContain("当前状态、对话、打印页均为演示内容");
+    expect(wrapper.text()).toContain("当前设备、对话、打印页均为演示内容");
     expect(wrapper.text()).not.toContain("name@example.com");
     expect(wrapper.text()).not.toContain("退出");
   });
@@ -120,5 +120,15 @@ describe("AppShell", () => {
     await flushPromises();
 
     expect(store.postLoginTutorialOpen).toBe(false);
+  });
+
+  it("hides the tutorial tab when the preference is disabled", async () => {
+    const { wrapper, store } = await mountShellAt("/conversations");
+
+    store.tutorialTabEnabled = false;
+    await flushPromises();
+
+    expect(wrapper.findAll("header nav a").some((link) => link.text().includes("教程"))).toBe(false);
+    expect(wrapper.findAll("nav.fixed a").some((link) => link.text().includes("教程"))).toBe(false);
   });
 });

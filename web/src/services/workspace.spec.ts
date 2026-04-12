@@ -32,6 +32,7 @@ describe("workspace service", () => {
             preferences: {
               loginProtectionEnabled: false,
               sendConfirmationEnabled: true,
+              tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
             },
@@ -56,6 +57,7 @@ describe("workspace service", () => {
             preferences: {
               loginProtectionEnabled: false,
               sendConfirmationEnabled: true,
+              tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
             },
@@ -86,6 +88,7 @@ describe("workspace service", () => {
         preferences: {
           loginProtectionEnabled: false,
           sendConfirmationEnabled: true,
+          tutorialTabEnabled: true,
           theme: "light",
           defaultDeviceId: "",
         },

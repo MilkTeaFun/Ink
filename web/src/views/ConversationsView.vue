@@ -85,7 +85,7 @@ async function handleFeedbackSubmit() {
           <div>
             <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
             <p class="mt-1 text-sm leading-6 text-stone-500">
-              这里的反馈会提醒管理员，适合提交使用中遇到的问题、建议或吐槽。
+              这里的反馈会提醒作者，适合提交使用中遇到的问题、建议或吐槽。
             </p>
           </div>
           <button
@@ -93,7 +93,7 @@ async function handleFeedbackSubmit() {
             class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
             @click="openFeedbackDialog"
           >
-            反馈给管理员
+            反馈给作者
           </button>
         </div>
       </div>
@@ -162,7 +162,7 @@ async function handleFeedbackSubmit() {
             <div>
               <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
               <p class="mt-1 text-sm leading-6 text-stone-500">
-                这里的反馈会提醒管理员，适合提交使用中遇到的问题、建议或吐槽。
+                这里的反馈会提醒作者，适合提交使用中遇到的问题、建议或吐槽。
               </p>
             </div>
             <button
@@ -170,7 +170,7 @@ async function handleFeedbackSubmit() {
               class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
               @click="openFeedbackDialog"
             >
-              反馈给管理员
+              反馈给作者
             </button>
           </div>
         </div>
@@ -375,11 +375,6 @@ async function handleFeedbackSubmit() {
             >
               <div class="flex flex-wrap items-center gap-2 text-xs text-stone-500">
                 <span>已选中 {{ workspaceStore.selectedConversationMessageIds.length }} 条</span>
-                <span
-                  >发送前确认：{{
-                    workspaceStore.sendConfirmationEnabled ? "已开启" : "已关闭"
-                  }}</span
-                >
               </div>
               <div class="flex gap-2">
                 <button
@@ -414,7 +409,7 @@ async function handleFeedbackSubmit() {
     <AppDialog
       :open="feedbackOpen"
       title="反馈"
-      description="这里适合提交问题、建议或吐槽；提交后会提醒管理员。"
+      description="这里适合提交问题、建议或吐槽；提交后会提醒作者。"
       @close="closeFeedbackDialog"
     >
       <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">

@@ -202,6 +202,7 @@ function createWorkspaceState() {
     preferences: {
       loginProtectionEnabled: false,
       sendConfirmationEnabled: true,
+      tutorialTabEnabled: true,
       theme: "light" as const,
       defaultDeviceId: "device-1",
     },
