@@ -124,15 +124,15 @@ async function handleFeedbackSubmit() {
     </AppDialog>
 
     <div
-      class="relative overflow-hidden rounded-[2rem] border border-stone-200 bg-[linear-gradient(135deg,rgba(250,250,249,0.95),rgba(245,245,244,0.92))] px-5 py-6 shadow-sm sm:px-7 sm:py-8 lg:px-10"
+      class="tutorial-hero relative overflow-hidden rounded-[2rem] border border-stone-200 px-5 py-6 shadow-sm sm:px-7 sm:py-8 lg:px-10"
     >
       <div
         aria-hidden="true"
-        class="absolute top-0 right-0 h-40 w-40 rounded-full bg-amber-100/70 blur-3xl"
+        class="tutorial-hero-glow tutorial-hero-glow-primary absolute top-0 right-0 h-40 w-40 rounded-full blur-3xl"
       />
       <div
         aria-hidden="true"
-        class="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-stone-200/70 blur-3xl"
+        class="tutorial-hero-glow tutorial-hero-glow-secondary absolute bottom-0 left-0 h-32 w-32 rounded-full blur-3xl"
       />
 
       <div class="relative space-y-6">
@@ -151,21 +151,21 @@ async function handleFeedbackSubmit() {
         <div class="grid gap-3 sm:grid-cols-3">
           <RouterLink
             to="/conversations"
-            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
             <p class="text-sm font-semibold text-stone-900">对话页</p>
             <p class="mt-2 text-sm leading-6 text-stone-600">边聊边整理内容，再直接发去打印。</p>
           </RouterLink>
           <RouterLink
             to="/prints"
-            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
             <p class="text-sm font-semibold text-stone-900">打印页</p>
             <p class="mt-2 text-sm leading-6 text-stone-600">手动新建纸条，适合快速直接出纸。</p>
           </RouterLink>
           <RouterLink
             to="/prints"
-            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+            class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
             <p class="text-sm font-semibold text-stone-900">定时打印</p>
             <p class="mt-2 text-sm leading-6 text-stone-600">设置固定时间，按计划自动发送内容。</p>
@@ -198,7 +198,9 @@ async function handleFeedbackSubmit() {
             :key="step.number"
             class="rounded-[1.5rem] border px-5 py-5"
             :class="
-              index === 0 ? 'border-amber-200 bg-amber-50/80' : 'border-stone-200 bg-stone-50/70'
+              index === 0
+                ? 'tutorial-step-highlight border-amber-200 bg-amber-50/80'
+                : 'border-stone-200 bg-stone-50/70'
             "
           >
             <div class="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-start">

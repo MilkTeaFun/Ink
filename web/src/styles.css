@@ -307,6 +307,29 @@
   .ui-btn-secondary:disabled {
     @apply cursor-not-allowed opacity-60 shadow-none;
   }
+
+  .tutorial-hero {
+    background:
+      linear-gradient(135deg, rgba(250, 250, 249, 0.95), rgba(245, 245, 244, 0.92)),
+      var(--app-surface);
+  }
+
+  .tutorial-hero-glow-primary {
+    background-color: rgba(251, 191, 36, 0.2);
+  }
+
+  .tutorial-hero-glow-secondary {
+    background-color: rgba(214, 211, 209, 0.7);
+  }
+
+  .tutorial-feature-card {
+    border-color: rgba(255, 255, 255, 0.7);
+    background-color: rgba(255, 255, 255, 0.85);
+  }
+
+  .tutorial-feature-card:hover {
+    background-color: white;
+  }
 }
 
 @layer utilities {
@@ -506,12 +529,20 @@
   background-color: color-mix(in srgb, var(--app-surface-raised) 95%, transparent) !important;
 }
 
+:root[data-color-mode="dark"] .bg-white\/85 {
+  background-color: color-mix(in srgb, var(--app-surface-raised) 85%, transparent) !important;
+}
+
 :root[data-color-mode="dark"] .bg-stone-50 {
   background-color: var(--app-surface-soft) !important;
 }
 
 :root[data-color-mode="dark"] .bg-stone-50\/50 {
   background-color: color-mix(in srgb, var(--app-surface-soft) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-stone-50\/70 {
+  background-color: color-mix(in srgb, var(--app-surface-soft) 70%, transparent) !important;
 }
 
 :root[data-color-mode="dark"] .bg-stone-100 {
@@ -524,6 +555,42 @@
 
 :root[data-color-mode="dark"] .bg-stone-100\/50 {
   background-color: color-mix(in srgb, var(--app-surface-muted) 50%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-amber-50 {
+  background-color: color-mix(in srgb, #6b4d1f 22%, var(--app-surface-soft)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-amber-50\/80 {
+  background-color: color-mix(in srgb, #6b4d1f 28%, var(--app-surface-soft)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-amber-100 {
+  background-color: color-mix(in srgb, #8a6328 34%, var(--app-surface-muted)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-amber-100\/70 {
+  background-color: color-mix(in srgb, #8a6328 24%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .bg-amber-500 {
+  background-color: #c2892f !important;
+}
+
+:root[data-color-mode="dark"] .bg-emerald-50 {
+  background-color: color-mix(in srgb, #1d4f45 26%, var(--app-surface-soft)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-emerald-100 {
+  background-color: color-mix(in srgb, #2b6c5f 34%, var(--app-surface-muted)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-rose-50 {
+  background-color: color-mix(in srgb, #5f2430 28%, var(--app-surface-soft)) !important;
+}
+
+:root[data-color-mode="dark"] .bg-rose-100 {
+  background-color: color-mix(in srgb, #7a3140 34%, var(--app-surface-muted)) !important;
 }
 
 :root[data-color-mode="dark"] .bg-stone-200 {
@@ -577,6 +644,23 @@
   color: #b8aea8 !important;
 }
 
+:root[data-color-mode="dark"] .text-amber-900,
+:root[data-color-mode="dark"] .text-amber-800,
+:root[data-color-mode="dark"] .text-amber-700 {
+  color: #f1d7a4 !important;
+}
+
+:root[data-color-mode="dark"] .text-emerald-900,
+:root[data-color-mode="dark"] .text-emerald-800,
+:root[data-color-mode="dark"] .text-emerald-700 {
+  color: #a8e0d2 !important;
+}
+
+:root[data-color-mode="dark"] .text-rose-700,
+:root[data-color-mode="dark"] .text-rose-500 {
+  color: #f2b7c0 !important;
+}
+
 :root[data-color-mode="dark"] .border-white,
 :root[data-color-mode="dark"] .border-stone-100,
 :root[data-color-mode="dark"] .border-stone-200 {
@@ -586,6 +670,24 @@
 :root[data-color-mode="dark"] .border-stone-300,
 :root[data-color-mode="dark"] .border-stone-900 {
   border-color: var(--app-border-strong) !important;
+}
+
+:root[data-color-mode="dark"] .border-white\/70,
+:root[data-color-mode="dark"] .border-amber-200,
+:root[data-color-mode="dark"] .border-amber-300,
+:root[data-color-mode="dark"] .border-amber-400,
+:root[data-color-mode="dark"] .border-amber-500 {
+  border-color: color-mix(in srgb, #c2892f 42%, var(--app-border)) !important;
+}
+
+:root[data-color-mode="dark"] .border-emerald-100,
+:root[data-color-mode="dark"] .border-emerald-200 {
+  border-color: color-mix(in srgb, #2b6c5f 42%, var(--app-border)) !important;
+}
+
+:root[data-color-mode="dark"] .border-rose-100,
+:root[data-color-mode="dark"] .border-rose-200 {
+  border-color: color-mix(in srgb, #7a3140 42%, var(--app-border)) !important;
 }
 
 :root[data-color-mode="dark"] .ring-stone-900,
@@ -600,8 +702,48 @@
   --tw-ring-color: rgba(245, 245, 244, 0.14) !important;
 }
 
+:root[data-color-mode="dark"] .ring-amber-200 {
+  --tw-ring-color: rgba(194, 137, 47, 0.35) !important;
+}
+
 :root[data-color-mode="dark"] .hover\:bg-white:hover {
   background-color: var(--app-surface) !important;
+}
+
+:root[data-color-mode="dark"] .hover\:bg-amber-100:hover {
+  background-color: color-mix(in srgb, #8a6328 34%, var(--app-surface-muted)) !important;
+}
+
+:root[data-color-mode="dark"] .tutorial-hero {
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--app-surface-raised) 92%, #2c241f) 0%,
+      color-mix(in srgb, var(--app-surface-soft) 96%, #181311) 100%
+    ),
+    var(--app-surface);
+  border-color: var(--app-border) !important;
+}
+
+:root[data-color-mode="dark"] .tutorial-hero-glow-primary {
+  background-color: rgba(194, 137, 47, 0.2);
+}
+
+:root[data-color-mode="dark"] .tutorial-hero-glow-secondary {
+  background-color: rgba(81, 72, 66, 0.5);
+}
+
+:root[data-color-mode="dark"] .tutorial-feature-card {
+  border-color: var(--app-border) !important;
+  background-color: color-mix(in srgb, var(--app-surface-raised) 84%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .tutorial-feature-card:hover {
+  background-color: color-mix(in srgb, var(--app-surface-raised) 94%, transparent) !important;
+}
+
+:root[data-color-mode="dark"] .tutorial-step-highlight {
+  background-color: color-mix(in srgb, #4c3415 34%, var(--app-surface-soft)) !important;
 }
 
 :root[data-color-mode="dark"] .hover\:bg-stone-50:hover {
