@@ -476,7 +476,7 @@ describe("workspace views", () => {
     expect(router.currentRoute.value.fullPath).toBe("/settings");
   });
 
-  it("renders the tutorial page with binding and printing guidance", async () => {
+  it("renders the tutorial page with conversation and print guidance", async () => {
     const { pinia, router } = await createWorkspaceContext("/tutorial", false);
     const wrapper = mount(TutorialView, {
       global: {
@@ -485,14 +485,12 @@ describe("workspace views", () => {
     });
 
     expect(router.currentRoute.value.fullPath).toBe("/tutorial");
-    expect(wrapper.text()).toContain("把纸条上的 Device ID");
-    expect(wrapper.text()).toContain("三步完成绑定并打印第一张纸条");
+    expect(wrapper.text()).toContain("Ink 里最常用的三种打印方式");
+    expect(wrapper.text()).toContain("三种常用使用方式");
     expect(wrapper.text()).toContain("添加到 iPhone 主屏幕");
-    expect(wrapper.text()).toContain("双击开机键");
-    expect(wrapper.text()).toContain("Device ID");
-    expect(wrapper.text()).toContain("咕咕机设备编号");
-    expect(wrapper.find("img[alt='咕咕机连接 Wi-Fi 后打印出的状态纸条示例']").exists()).toBe(true);
-    expect(wrapper.text()).toContain("去设置 AI");
+    expect(wrapper.text()).toContain("对话打印、直接打印、定时打印");
+    expect(wrapper.text()).toContain("没找到问题？");
+    expect(wrapper.text()).toContain("反馈给作者");
   });
 
   it("confirms pending prints and reflects shared defaults", async () => {

@@ -62,6 +62,16 @@ describe("AppShell", () => {
     expect(wrapper.text()).toContain("退出");
   });
 
+  it("shows the author credit link next to the product name", async () => {
+    const { wrapper } = await mountShellAt("/status");
+
+    const creditLink = wrapper
+      .findAll("a")
+      .find((link) => link.text().includes("Powered by ruhuang2001"));
+
+    expect(creditLink?.attributes("href")).toBe("https://github.com/ruhuang2001");
+  });
+
   it("hides account controls for anonymous visitors", async () => {
     const { wrapper } = await mountShellAt("/status", false);
 

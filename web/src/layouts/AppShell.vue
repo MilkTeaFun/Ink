@@ -103,8 +103,18 @@ async function handleLogout() {
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 lg:hidden">
         <div class="flex items-center gap-3">
           <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
-          <div>
+          <div class="flex items-center gap-2">
             <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <a
+              href="https://github.com/ruhuang2001"
+              target="_blank"
+              rel="noreferrer"
+              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
+            >
+              Powered by ruhuang2001
+            </a>
+          </div>
+          <div class="hidden sm:block">
             <p class="text-xs text-stone-500">
               {{ route.meta.navHint ?? route.meta.title ?? "纸条工作区" }}
             </p>
@@ -133,6 +143,14 @@ async function handleLogout() {
           <div class="flex items-center gap-3">
             <img src="/icon.jpg" alt="Ink Icon" class="h-8 w-8 rounded-lg object-contain" />
             <p class="text-sm font-semibold text-stone-950">Ink</p>
+            <a
+              href="https://github.com/ruhuang2001"
+              target="_blank"
+              rel="noreferrer"
+              class="text-xs text-stone-400 transition-colors hover:text-stone-700"
+            >
+              Powered by ruhuang2001
+            </a>
           </div>
 
           <nav class="flex items-center gap-1">

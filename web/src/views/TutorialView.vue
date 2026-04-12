@@ -1,68 +1,128 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { RouterLink } from "vue-router";
 
-const quickChecks = [
-  {
-    title: "原咕咕机 App 已可用",
-    detail: "先确认这台设备已经在手机原来的咕咕机 App 里绑定成功。",
-  },
-  {
-    title: "设备已经连上 Wi-Fi",
-    detail: "状态纸条顶部应显示 WiFi Connected，说明设备当前在线。",
-  },
-  {
-    title: "双击开机键吐出纸条",
-    detail: "这张纸条会打印出 Device ID，Ink 绑定就靠这一串编号。",
-  },
-] as const;
+import AppDialog from "@/components/AppDialog.vue";
+import { useWorkspaceStore } from "@/stores/workspace";
+
+const workspaceStore = useWorkspaceStore();
 
 const steps = [
   {
     number: "01",
-    title: "先拿到状态纸条",
-    body: "确保设备已经在手机原有的咕咕机 App 里可用，并且已经连上 Wi-Fi。然后双击开机键，设备会打印一张当前状态纸条。",
-    note: "你应该看到类似右侧示例里的 WiFi Connected、Device ID 和 MAC Address。",
+    title: "在对话页通过聊天整理后打印",
+    body: "想到什么就直接输入，Ink 会把内容整理成更适合打印的小纸条。你可以边聊边改，满意后直接发去打印。",
+    note: "适合提醒、留言、鼓励语和临时清单。",
   },
   {
     number: "02",
-    title: "把 Device ID 填进添加设备",
-    body: "登录 Ink 后进入设备页，点击“添加设备”。设备名称和备注按你的习惯填写，关键是把 Device ID 后面那一长串字符完整填进“咕咕机设备编号”。",
-    note: "真正决定能否绑定成功的是 Device ID，不是 WiFi Name，也不是 MAC Address。",
+    title: "在打印页直接新建并打印",
+    body: "如果你已经想好内容，可以直接去打印页手动创建纸条，不需要先走对话流程。",
+    note: "适合快速打印一句固定文案或临时通知。",
   },
   {
     number: "03",
-    title: "绑定后设为默认并试打一张",
-    body: "绑定成功后，可以把常用设备设为默认。接着去对话页或打印页试发一张短纸条，确认这台咕咕机已经能正常接收 Ink 的任务。",
-    note: "新生成的内容会直接进入打印队列，确认设备可用后就能正常出纸。",
+    title: "用定时打印安排固定内容",
+    body: "你可以在打印页设置自动任务，让某些内容按固定时间发送到设备，比如晨间提醒、晚安便签或周期性通知。",
+    note: "适合重复出现、想稳定出纸的内容。",
   },
 ] as const;
 
 const faqs = [
   {
-    question: "纸条上哪一项最重要？",
+    question: "我应该先用对话页还是打印页？",
     answer:
-      "只看 Device ID 那一行。Ink 绑定时需要的是 Device ID 后面的长串字符，别把 MAC Address 或 WiFi Name 填进去。",
+      "如果你还在想内容、想让 Ink 帮你润色，就先去对话页；如果内容已经确定，只想立刻出纸，就直接去打印页。",
   },
   {
-    question: "为什么双击开机键后没出状态纸条？",
-    answer:
-      "先检查设备是否开机、有纸、并且已经连接电源或电量足够。确认后再双击一次，通常会重新打印状态纸条。",
+    question: "定时打印适合拿来做什么？",
+    answer: "适合每天、每周都要重复发送的内容，比如固定提醒、待办摘要或周期性问候。",
   },
   {
-    question: "绑定失败怎么办？",
-    answer:
-      "先重新核对 Device ID 是否完整，再确认服务器已经配置了 Memobird 访问密钥。若仍失败，可以重新打印状态纸条后再试一次。",
+    question: "对话里的内容会不会太长，不适合打印？",
+    answer: "可以直接继续追问，让 Ink 帮你压缩成更短、更适合出纸的小段内容，再发送打印。",
   },
   {
-    question: "还没配置 AI 会影响绑定吗？",
-    answer:
-      "不会影响绑定设备本身，但管理员仍需要在设置页配置 OpenAI 兼容服务，后续对话整理和自动生成内容才会真正启用。",
+    question: "为什么纸条没有马上打印出来？",
+    answer: "先去打印页看看任务状态；如果是定时任务，就等到设定时间；如果是手动任务，通常会很快进入打印队列。",
   },
 ] as const;
+
+const feedbackOpen = ref(false);
+const feedbackDraft = ref("");
+const feedbackFormError = ref("");
+
+function openFeedbackDialog() {
+  feedbackOpen.value = true;
+  feedbackDraft.value = "";
+  feedbackFormError.value = "";
+}
+
+function closeFeedbackDialog() {
+  feedbackOpen.value = false;
+  feedbackFormError.value = "";
+}
+
+async function handleFeedbackSubmit() {
+  feedbackFormError.value = "";
+
+  if (!feedbackDraft.value.trim()) {
+    feedbackFormError.value = "请先输入反馈内容。";
+    return;
+  }
+
+  const success = await workspaceStore.submitFeedback(feedbackDraft.value);
+  if (!success) {
+    feedbackFormError.value = workspaceStore.feedbackError;
+    return;
+  }
+
+  feedbackDraft.value = "";
+  closeFeedbackDialog();
+}
 </script>
 
 <template>
   <section class="mx-auto max-w-6xl space-y-6 pt-4 sm:space-y-8 lg:space-y-10">
+    <AppDialog
+      :open="feedbackOpen"
+      title="反馈"
+      description="这里适合提交问题、建议或吐槽；提交后会提醒作者。"
+      @close="closeFeedbackDialog"
+    >
+      <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
+        <label class="block">
+          <span class="mb-2 block text-sm font-medium text-stone-900">反馈内容</span>
+          <textarea
+            v-model="feedbackDraft"
+            rows="6"
+            placeholder="反馈（功能 / 建议 / 吐槽）"
+            class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+          />
+        </label>
+
+        <p v-if="feedbackFormError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {{ feedbackFormError }}
+        </p>
+
+        <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            class="ui-btn-secondary px-4 py-2.5 text-sm"
+            @click="closeFeedbackDialog"
+          >
+            取消
+          </button>
+          <button
+            class="ui-btn-primary px-4 py-2.5 text-sm"
+            :disabled="workspaceStore.feedbackSubmitting"
+          >
+            {{ workspaceStore.feedbackSubmitting ? "发送中..." : "提交反馈" }}
+          </button>
+        </div>
+      </form>
+    </AppDialog>
+
     <div
       class="relative overflow-hidden rounded-[2rem] border border-stone-200 bg-[linear-gradient(135deg,rgba(250,250,249,0.95),rgba(245,245,244,0.92))] px-5 py-6 shadow-sm sm:px-7 sm:py-8 lg:px-10"
     >
@@ -75,85 +135,51 @@ const faqs = [
         class="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-stone-200/70 blur-3xl"
       />
 
-      <div class="relative grid gap-8 xl:grid-cols-[minmax(0,1.05fr)_420px] xl:items-center">
-        <div class="space-y-6">
-          <div class="space-y-4">
-            <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">绑定教程</p>
-            <div class="space-y-3">
-              <h2
-                class="max-w-3xl text-[clamp(2rem,4.8vw,3.5rem)] font-semibold tracking-tight text-stone-900"
-              >
-                把纸条上的 Device ID
-                <span class="block text-stone-600">准确填进 Ink 的设备编号</span>
-              </h2>
-              <p class="max-w-2xl text-base leading-7 text-stone-600 sm:text-[15px]">
-                这页只解决一件事：让你第一次绑定咕咕机时，不用猜、不用试错，直接知道该看哪张纸、该抄哪一行、该填到哪里。
-              </p>
-            </div>
-          </div>
-
-          <div class="grid gap-3 sm:grid-cols-3">
-            <article
-              v-for="item in quickChecks"
-              :key="item.title"
-              class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur"
+      <div class="relative space-y-6">
+        <div class="space-y-4">
+          <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">使用教程</p>
+          <div class="space-y-3">
+            <h2
+              class="max-w-4xl text-[clamp(2rem,4.8vw,3.5rem)] font-semibold tracking-tight text-stone-900"
             >
-              <p class="text-sm font-semibold text-stone-900">{{ item.title }}</p>
-              <p class="mt-2 text-sm leading-6 text-stone-600">{{ item.detail }}</p>
-            </article>
-          </div>
-
-          <div class="flex flex-col gap-3 sm:flex-row">
-            <RouterLink to="/status" class="ui-btn-primary px-4 py-2.5 text-center text-sm">
-              去设备页添加设备
-            </RouterLink>
-            <RouterLink to="/prints" class="ui-btn-secondary px-4 py-2.5 text-center text-sm">
-              绑定完后去试打印
-            </RouterLink>
+              Ink 里最常用的三种打印方式
+              <span class="block text-stone-600">对话打印、直接打印、定时打印</span>
+            </h2>
           </div>
         </div>
 
-        <figure
-          class="rounded-[1.8rem] border border-stone-200 bg-white p-4 shadow-xl shadow-stone-900/5"
-        >
-          <div class="flex items-center justify-between gap-3 px-1 pb-3">
-            <div>
-              <p class="text-sm font-medium text-stone-500">示例纸条</p>
-              <p class="mt-1 text-base font-semibold text-stone-900">你会拿到一张这样的状态纸条</p>
-            </div>
-            <span
-              class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800"
-            >
-              重点看 Device ID
-            </span>
-          </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <RouterLink
+            to="/conversations"
+            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+          >
+            <p class="text-sm font-semibold text-stone-900">对话页</p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">边聊边整理内容，再直接发去打印。</p>
+          </RouterLink>
+          <RouterLink
+            to="/prints"
+            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+          >
+            <p class="text-sm font-semibold text-stone-900">打印页</p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">手动新建纸条，适合快速直接出纸。</p>
+          </RouterLink>
+          <RouterLink
+            to="/prints"
+            class="rounded-2xl border border-white/70 bg-white/85 px-4 py-4 shadow-sm backdrop-blur transition-colors hover:border-stone-300 hover:bg-white"
+          >
+            <p class="text-sm font-semibold text-stone-900">定时打印</p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">设置固定时间，按计划自动发送内容。</p>
+          </RouterLink>
+        </div>
 
-          <div class="overflow-hidden rounded-[1.35rem] border border-stone-200 bg-stone-100">
-            <img
-              src="/tutorial-device-id.jpg"
-              alt="咕咕机连接 Wi-Fi 后打印出的状态纸条示例"
-              class="h-full w-full object-cover"
-              loading="lazy"
-            />
-          </div>
-
-          <figcaption class="mt-4 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <p class="text-sm font-semibold text-amber-900">先确认纸条顶部</p>
-              <p class="mt-1 text-sm leading-6 text-amber-800">
-                看到 <span class="font-medium">WiFi Connected</span>，说明设备当前已经联网。
-              </p>
-            </div>
-            <div class="rounded-2xl border border-stone-200 bg-stone-900 px-4 py-3">
-              <p class="text-sm font-semibold text-white">真正要抄的只有一行</p>
-              <p class="mt-1 text-sm leading-6 text-stone-300">
-                抄
-                <span class="font-medium text-white">Device ID：</span>
-                后面那一长串字符，不要抄错成 MAC Address。
-              </p>
-            </div>
-          </figcaption>
-        </figure>
+        <div class="flex flex-col gap-3 sm:flex-row">
+          <RouterLink to="/conversations" class="ui-btn-primary px-4 py-2.5 text-center text-sm">
+            去对话页
+          </RouterLink>
+          <RouterLink to="/prints" class="ui-btn-secondary px-4 py-2.5 text-center text-sm">
+            去打印页
+          </RouterLink>
+        </div>
       </div>
     </div>
 
@@ -162,7 +188,7 @@ const faqs = [
         <div class="max-w-2xl">
           <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">操作步骤</p>
           <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">
-            三步完成绑定并打印第一张纸条
+            三种常用使用方式
           </h3>
         </div>
 
@@ -223,28 +249,36 @@ const faqs = [
               <p class="mt-2 text-sm leading-7 text-stone-600">{{ item.answer }}</p>
             </article>
           </div>
+
+          <div class="mt-6 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+            <p class="text-sm font-semibold text-stone-900">没找到问题？</p>
+            <p class="mt-2 text-sm leading-7 text-stone-600">
+              可以直接把你的问题、建议或吐槽发给作者。
+            </p>
+            <button
+              type="button"
+              class="ui-btn-secondary mt-4 w-full px-4 py-2.5 text-sm sm:w-auto"
+              @click="openFeedbackDialog"
+            >
+              反馈给作者
+            </button>
+          </div>
         </article>
 
         <aside class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
           <h3 class="text-xl font-semibold text-stone-900">开始使用</h3>
           <div class="mt-5 space-y-3">
             <RouterLink
-              to="/status"
+              to="/conversations"
               class="ui-btn-primary block w-full px-4 py-2.5 text-center text-sm"
             >
-              去绑定设备
+              去对话页
             </RouterLink>
             <RouterLink
               to="/prints"
               class="ui-btn-secondary block w-full px-4 py-2.5 text-center text-sm"
             >
               去打印页
-            </RouterLink>
-            <RouterLink
-              to="/settings"
-              class="ui-btn-secondary block w-full px-4 py-2.5 text-center text-sm"
-            >
-              去设置 AI
             </RouterLink>
           </div>
         </aside>
