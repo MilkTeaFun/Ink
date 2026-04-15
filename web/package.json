@@ -51,6 +51,7 @@
       "pnpm exec oxfmt -c .oxfmtrc.json --no-error-on-unmatched-pattern"
     ]
   },
+  "packageManager": "pnpm@10.28.0",
   "pnpm": {
     "overrides": {
       "brace-expansion": "2.0.3",
