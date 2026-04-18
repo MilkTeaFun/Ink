@@ -3,8 +3,8 @@ import { computed } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
-import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
 import { navigationItems } from "@/router";
+import { DEFAULT_LOGIN_REDIRECT } from "@/router/authRedirect";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const route = useRoute();
@@ -34,9 +34,7 @@ const loginTarget = computed(() => ({
   query: route.fullPath === DEFAULT_LOGIN_REDIRECT ? undefined : { redirect: route.fullPath },
 }));
 const showAnonymousDemoBanner = computed(
-  () =>
-    !workspaceStore.isAuthenticated &&
-    anonymousDemoRouteNames.has(String(route.name ?? "")),
+  () => !workspaceStore.isAuthenticated && anonymousDemoRouteNames.has(String(route.name ?? "")),
 );
 const visibleNavigationItems = computed(() =>
   navigationItems.filter((item) => item.name !== "tutorial" || workspaceStore.tutorialTabEnabled),
@@ -168,7 +166,7 @@ async function handleLogout() {
               <span>{{ item.label }}</span>
               <span
                 v-if="item.name === 'prints' && pendingBadge"
-                class="ml-2 inline-flex min-w-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] text-white"
+                class="ml-2 inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white"
               >
                 {{ pendingBadge }}
               </span>
@@ -218,10 +216,10 @@ async function handleLogout() {
       v-if="showAnonymousDemoBanner"
       class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 lg:px-8"
     >
-      <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p class="leading-6">
-          当前设备、对话、打印页均为演示内容，具体使用请登录后继续。
-        </p>
+      <div
+        class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <p class="leading-6">当前设备、对话、打印页均为演示内容，具体使用请登录后继续。</p>
         <RouterLink
           :to="loginTarget"
           class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-100"

@@ -131,13 +131,10 @@ async function submitAddDevice() {
                     {{ device.note }}
                   </p>
                 </div>
-                </div>
+              </div>
 
               <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                <span
-                  class="ui-status-badge"
-                  :class="getDeviceStatusBadgeClass(device.status)"
-                >
+                <span class="ui-status-badge" :class="getDeviceStatusBadgeClass(device.status)">
                   {{ workspaceStore.getDeviceStatusLabel(device.status) }}
                 </span>
                 <button
