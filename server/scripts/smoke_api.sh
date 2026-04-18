@@ -2,9 +2,9 @@
 
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-SERVER_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-REPO_DIR=$(CDPATH= cd -- "$SERVER_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+SERVER_DIR=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
+REPO_DIR=$(CDPATH='' cd -- "$SERVER_DIR/.." && pwd)
 
 SMOKE_PORT="${SMOKE_PORT:-18080}"
 SMOKE_BASE_URL="${SMOKE_BASE_URL:-http://127.0.0.1:${SMOKE_PORT}}"
