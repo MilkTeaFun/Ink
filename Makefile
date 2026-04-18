@@ -1,4 +1,4 @@
-.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api lint-api check-api
+.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api lint-api check-api smoke-api
 
 dev-web:
 	cd web && pnpm dev
@@ -46,3 +46,6 @@ lint-api:
 
 check-api:
 	cd server && test -z "$$(gofmt -l .)" && go test ./... && go build ./...
+
+smoke-api:
+	./server/scripts/smoke_api.sh
