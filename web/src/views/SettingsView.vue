@@ -80,8 +80,7 @@ function createPluginDraftState(plugin: PluginDetails) {
       continue;
     }
 
-    config[field.key] =
-      plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
+    config[field.key] = plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
   }
 
   return {
@@ -107,8 +106,7 @@ function ensurePluginDraft(plugin: PluginDetails) {
     if (field.type === "secret" || field.key in nextDraft) {
       continue;
     }
-    nextDraft[field.key] =
-      plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
+    nextDraft[field.key] = plugin.binding?.config?.[field.key] ?? getPluginFieldDefaultValue(field);
   }
   pluginDrafts.value[plugin.installation.id] = nextDraft;
 
@@ -508,10 +506,7 @@ async function handleAIConfigSubmit() {
                     为成员创建独立账号，登录后会加载各自的工作区。
                   </p>
                 </div>
-                <span
-                  class="ui-status-badge self-start"
-                  :class="getUserRoleBadgeClass('admin')"
-                >
+                <span class="ui-status-badge self-start" :class="getUserRoleBadgeClass('admin')">
                   {{ getUserRoleLabel("admin") }}
                 </span>
               </div>
@@ -762,10 +757,7 @@ async function handleAIConfigSubmit() {
                     保存供应商、API URL、模型和服务端密钥。已保存的 Key 不会回显。
                   </p>
                 </div>
-                <span
-                  class="ui-status-badge self-start"
-                  :class="getUserRoleBadgeClass('admin')"
-                >
+                <span class="ui-status-badge self-start" :class="getUserRoleBadgeClass('admin')">
                   {{ getUserRoleLabel("admin") }}
                 </span>
               </div>

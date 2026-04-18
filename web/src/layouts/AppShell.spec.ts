@@ -138,7 +138,9 @@ describe("AppShell", () => {
     store.tutorialTabEnabled = false;
     await flushPromises();
 
-    expect(wrapper.findAll("header nav a").some((link) => link.text().includes("教程"))).toBe(false);
+    expect(wrapper.findAll("header nav a").some((link) => link.text().includes("教程"))).toBe(
+      false,
+    );
     expect(wrapper.findAll("nav.fixed a").some((link) => link.text().includes("教程"))).toBe(false);
   });
 });

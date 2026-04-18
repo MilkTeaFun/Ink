@@ -1,3 +1,4 @@
+import type { PluginDetails, PluginInstallationStatus } from "@/types/plugins";
 import type {
   DeviceStatus,
   PrintStatus,
@@ -5,7 +6,6 @@ import type {
   ThemeMode,
   UserRole,
 } from "@/types/workspace";
-import type { PluginDetails, PluginInstallationStatus } from "@/types/plugins";
 
 export type ResolvedThemeMode = Exclude<ThemeMode, "system">;
 type BadgeTone = "success" | "warning" | "danger" | "neutral";
@@ -254,10 +254,7 @@ export function normalizeThemeMode(theme: unknown): ThemeMode {
   return "light";
 }
 
-export function resolveThemeMode(
-  theme: ThemeMode,
-  prefersDark: boolean,
-): ResolvedThemeMode {
+export function resolveThemeMode(theme: ThemeMode, prefersDark: boolean): ResolvedThemeMode {
   if (theme === "system") {
     return prefersDark ? "dark" : "light";
   }

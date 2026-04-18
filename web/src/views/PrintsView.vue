@@ -312,10 +312,7 @@ async function submitScheduleDialog() {
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="text-sm font-medium text-stone-900">{{ item.title }}</p>
-                    <span
-                      class="ui-status-badge"
-                      :class="getPrintStatusBadgeClass(item.status)"
-                    >
+                    <span class="ui-status-badge" :class="getPrintStatusBadgeClass(item.status)">
                       {{ workspaceStore.getPrintStatusLabel(item.status) }}
                     </span>
                   </div>
@@ -532,10 +529,7 @@ async function submitScheduleDialog() {
                   <p class="text-sm font-medium text-stone-900">{{ source.name }}</p>
                   <p class="mt-0.5 text-sm text-stone-500">{{ source.type }} · {{ source.note }}</p>
                 </div>
-                <span
-                  class="ui-status-badge"
-                  :class="getSourceStatusBadgeClass(source.status)"
-                >
+                <span class="ui-status-badge" :class="getSourceStatusBadgeClass(source.status)">
                   {{ workspaceStore.getSourceStatusLabel(source.status) }}
                 </span>
               </div>
