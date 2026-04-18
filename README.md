@@ -4,46 +4,73 @@
 
 # Ink
 
-A management tool for Memobird thermal printers. The current repository primarily contains the early web console for device management and content delivery workflows.
+Ink is an open source management workspace for Memobird thermal printers. The repository currently contains a Vue web console, a Go API, local PostgreSQL tooling, and the maintenance scaffolding needed for long-term development.
 
-> This project is in early development. The current focus is the web console, and the technical stack and implementation details may still change significantly.
+> Ink is still in early development. The product direction is stable enough for contribution, but APIs, schemas, and workflows may continue to evolve during the `0.x` cycle.
 
-## Overview
+## Repository layout
 
-Ink is an early-stage management experience for Memobird (咕咕机) thermal printers. The current codebase focuses on a Vue-based web shell for exploring device status, conversations, connections, and settings flows before deeper backend and device integration lands.
+- [`web/`](web): Vue 3, TypeScript, Vite, Pinia, Tailwind CSS, and Vitest frontend.
+- [`server/`](server): Go API for auth, workspace state, printers, plugins, schedules, and feedback.
+- [`Makefile`](Makefile): top-level developer entrypoints for local setup and quality checks.
 
-### Key Capabilities
+## Quick start
 
-- **Web Console**: A Vue 3 dashboard shell for the Ink workspace
-- **Device Status Views**: Early UI for device state, tasks, and print history
-- **Conversation Flow**: UI for drafting and preparing printable content
-- **Settings and Connections**: Early management surfaces for preferences and integrations
+### Prerequisites
 
-## Roadmap
+- Node.js 22
+- pnpm 10
+- Go 1.25
+- Docker or another local PostgreSQL 16-compatible environment
 
-### Current Focus
+### Install dependencies
 
-- [x] **Web-based Dashboard Shell**: Initial frontend workspace under [`web/`](web/)
-- [x] **Backend Authentication Service**: Initial Go account service under [`server/`](server/)
-- [ ] **Backend and Device Integration**: Connect the web console to real services and Memobird APIs
-- [ ] **Print Workflows**: Move from static UI exploration to end-to-end printable actions
+```bash
+pnpm install
+cd web && pnpm install
+```
 
-## Local backend
+The root install sets up repository Git hooks. The frontend install provides the web toolchain used by local checks.
 
-For the current auth backend, the shortest local setup is:
+### Start the full local stack
 
-1. `make dev-db`
-2. `make migrate-up`
-3. `make seed-dev`
-4. `make dev-api`
-5. `make dev-web`
+```bash
+make dev-db
+make migrate-up
+make seed-dev
+make dev-api
+make dev-web
+```
 
-If you prefer a one-command bootstrap for the API, `make dev-api` will automatically prepare `.env`, ensure PostgreSQL is running, apply migrations, and create the development admin account before starting the server. The initial password is generated once and saved to `server/.dev-admin-password`.
+If you only need the backend, `make dev-api` bootstraps `.env`, ensures the database is ready, applies migrations, seeds the development admin account, and starts the API server.
+
+The development admin credentials are saved to `server/.dev-admin-password` on first bootstrap.
+
+## Quality commands
+
+- `make check-web`: lint, format check, unit tests, and production build for the frontend
+- `make check-api`: `gofmt`, Go tests, and backend build
+- `make smoke-api`: login + workspace load/save/restore smoke test against a real API process
+- `make build-web`: production frontend build
+- `make test-api`: backend unit tests only
+
+## Documentation
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Server guide](server/README.md)
+- [Security policy](SECURITY.md)
+
+## Current capabilities
+
+- Web dashboard for conversations, status views, prints, settings, and tutorial flows
+- Account authentication and per-user workspace persistence
+- Printer bindings, print jobs, plugin installation, schedules, and feedback endpoints
+- CI for web quality, server quality, dependency review, CodeQL, release automation, and Scorecard scanning
 
 ## Contributing
 
-Contributions and suggestions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
+Contributions and suggestions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
