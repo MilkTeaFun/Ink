@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
-import { nextTick } from "vue";
 import { beforeEach, vi } from "vitest";
+import { nextTick } from "vue";
 
 import AppRoot from "@/app/AppRoot.vue";
 import { createTestRouter } from "@/router";
@@ -87,7 +87,10 @@ let matchMediaMock = createMatchMediaMock();
 
 beforeEach(() => {
   matchMediaMock = createMatchMediaMock();
-  vi.stubGlobal("matchMedia", vi.fn<MatchMediaFactory>(() => matchMediaMock));
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn<MatchMediaFactory>(() => matchMediaMock),
+  );
 });
 
 async function mountAt(path: string, authenticated = true) {
