@@ -46,7 +46,9 @@ type Repository interface {
 	SaveInstallation(ctx context.Context, installation Installation) error
 	ListPluginBindingsByUserID(ctx context.Context, userID string) ([]Binding, error)
 	FindPluginBindingByInstallationAndUserID(ctx context.Context, installationID string, userID string) (*Binding, error)
+	FindPluginBindingByID(ctx context.Context, bindingID string) (*Binding, error)
 	SavePluginBinding(ctx context.Context, binding Binding) error
+	UpdatePluginBindingCursor(ctx context.Context, bindingID string, cursor *string, updatedAt time.Time) error
 }
 
 type Authenticator interface {
@@ -91,6 +93,7 @@ type fetchPayload struct {
 	WorkspaceConfig map[string]any    `json:"workspaceConfig"`
 	Secrets         map[string]string `json:"secrets"`
 	ScheduleConfig  map[string]any    `json:"scheduleConfig"`
+	Cursor          *string           `json:"cursor"`
 	Trigger         FetchTrigger      `json:"trigger"`
 }
 
@@ -556,21 +559,24 @@ func (s *Service) GetBindingForUser(ctx context.Context, installationID string, 
 	return *binding, secrets, nil
 }
 
-func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, binding Binding, secrets map[string]string, scheduleConfig map[string]any, trigger FetchTrigger) (FetchResult, error) {
+// ExecuteFetch invokes the plugin's fetch entrypoint and returns a normalised
+// list of items. The caller is responsible for persisting items and the cursor.
+func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, binding Binding, secrets map[string]string, scheduleConfig map[string]any, trigger FetchTrigger) (FetchOutput, error) {
 	manifest, err := ParseManifest(installation.ManifestJSON)
 	if err != nil {
-		return FetchResult{}, err
+		return FetchOutput{}, err
 	}
 
 	payload := fetchPayload{
 		WorkspaceConfig: cloneMap(binding.Config),
 		Secrets:         secrets,
 		ScheduleConfig:  cloneMap(scheduleConfig),
+		Cursor:          binding.Cursor,
 		Trigger:         trigger,
 	}
 	input, err := json.Marshal(payload)
 	if err != nil {
-		return FetchResult{}, err
+		return FetchOutput{}, err
 	}
 
 	execCtx, cancel := context.WithTimeout(ctx, s.execTimeout)
@@ -578,21 +584,47 @@ func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, b
 
 	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Fetch.Command, input)
 	if err != nil {
-		return FetchResult{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
+		return FetchOutput{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
 	}
 
-	var result FetchResult
+	var result FetchOutput
 	if err := json.Unmarshal(stdout, &result); err != nil {
-		return FetchResult{}, fmt.Errorf("%w: invalid fetch output", ErrExecutionFailed)
+		return FetchOutput{}, fmt.Errorf("%w: invalid fetch output", ErrExecutionFailed)
 	}
-	if strings.TrimSpace(result.Title) == "" || strings.TrimSpace(result.Content) == "" {
-		return FetchResult{}, fmt.Errorf("%w: fetch output must include title and content", ErrExecutionFailed)
-	}
-	if strings.TrimSpace(result.SourceLabel) == "" {
-		result.SourceLabel = installation.DisplayName
+
+	for index := range result.Items {
+		if strings.TrimSpace(result.Items[index].SourceLabel) == "" {
+			result.Items[index].SourceLabel = installation.DisplayName
+		}
 	}
 
 	return result, nil
+}
+
+// UpdateBindingCursor persists the cursor returned by the last fetch so the
+// next invocation can pass it back to the plugin verbatim.
+func (s *Service) UpdateBindingCursor(ctx context.Context, bindingID string, cursor *string) error {
+	return s.repo.UpdatePluginBindingCursor(ctx, bindingID, cursor, s.clock.Now())
+}
+
+// GetBindingByID loads a binding (plus decrypted secrets) without requiring a
+// user access token. It is intended for background flows such as scheduled
+// runs where the caller has already authorised access via a schedule record.
+func (s *Service) GetBindingByID(ctx context.Context, bindingID string) (Binding, map[string]string, error) {
+	binding, err := s.repo.FindPluginBindingByID(ctx, bindingID)
+	if err != nil {
+		return Binding{}, nil, err
+	}
+	if binding == nil {
+		return Binding{}, nil, ErrNotFound
+	}
+
+	secrets, err := s.decryptSecrets(*binding)
+	if err != nil {
+		return Binding{}, nil, err
+	}
+
+	return *binding, secrets, nil
 }
 
 func (s *Service) runValidation(ctx context.Context, installation Installation, config map[string]any, secrets map[string]string, manifest Manifest) (ValidationResult, error) {

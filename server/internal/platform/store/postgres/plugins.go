@@ -12,6 +12,10 @@ import (
 
 var _ plugins.Repository = (*Store)(nil)
 
+const pluginBindingColumns = `id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
+			secret_nonce, cursor_json, max_prints_per_run, max_prints_per_day,
+			status, last_validated_at, last_error, created_at, updated_at`
+
 func (s *Store) ListInstallations(ctx context.Context) ([]plugins.Installation, error) {
 	rows, err := s.db.Query(ctx, `
 		select id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
@@ -95,8 +99,7 @@ func (s *Store) SaveInstallation(ctx context.Context, installation plugins.Insta
 
 func (s *Store) ListPluginBindingsByUserID(ctx context.Context, userID string) ([]plugins.Binding, error) {
 	rows, err := s.db.Query(ctx, `
-		select id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
-			secret_nonce, status, last_validated_at, last_error, created_at, updated_at
+		select `+pluginBindingColumns+`
 		from plugin_bindings
 		where user_id = $1
 		order by updated_at desc, created_at desc
@@ -120,11 +123,19 @@ func (s *Store) ListPluginBindingsByUserID(ctx context.Context, userID string) (
 
 func (s *Store) FindPluginBindingByInstallationAndUserID(ctx context.Context, installationID string, userID string) (*plugins.Binding, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
-			secret_nonce, status, last_validated_at, last_error, created_at, updated_at
+		select `+pluginBindingColumns+`
 		from plugin_bindings
 		where plugin_installation_id = $1 and user_id = $2
 	`, installationID, userID)
+	return scanPluginBinding(row)
+}
+
+func (s *Store) FindPluginBindingByID(ctx context.Context, bindingID string) (*plugins.Binding, error) {
+	row := s.db.QueryRow(ctx, `
+		select `+pluginBindingColumns+`
+		from plugin_bindings
+		where id = $1
+	`, bindingID)
 	return scanPluginBinding(row)
 }
 
@@ -133,12 +144,17 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 	if err != nil {
 		return err
 	}
+	cursorJSON, err := json.Marshal(binding.Cursor)
+	if err != nil {
+		return err
+	}
 
 	_, err = s.db.Exec(ctx, `
 		insert into plugin_bindings (
 			id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
-			secret_nonce, status, last_validated_at, last_error, created_at, updated_at
-		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			secret_nonce, cursor_json, max_prints_per_run, max_prints_per_day,
+			status, last_validated_at, last_error, created_at, updated_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		on conflict (id)
 		do update set
 			plugin_installation_id = excluded.plugin_installation_id,
@@ -147,6 +163,8 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 			config_json = excluded.config_json,
 			secret_ciphertext = excluded.secret_ciphertext,
 			secret_nonce = excluded.secret_nonce,
+			max_prints_per_run = excluded.max_prints_per_run,
+			max_prints_per_day = excluded.max_prints_per_day,
 			status = excluded.status,
 			last_validated_at = excluded.last_validated_at,
 			last_error = excluded.last_error,
@@ -159,12 +177,28 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 		configJSON,
 		nullableBytes(binding.Ciphertext),
 		nullableBytes(binding.Nonce),
+		cursorJSON,
+		binding.MaxPrintsPerRun,
+		binding.MaxPrintsPerDay,
 		binding.Status,
 		binding.LastValidatedAt,
 		binding.LastError,
 		binding.CreatedAt,
 		binding.UpdatedAt,
 	)
+	return err
+}
+
+func (s *Store) UpdatePluginBindingCursor(ctx context.Context, bindingID string, cursor *string, updatedAt time.Time) error {
+	cursorJSON, err := json.Marshal(cursor)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `
+		update plugin_bindings
+		set cursor_json = $2, updated_at = $3
+		where id = $1
+	`, bindingID, cursorJSON, updatedAt)
 	return err
 }
 
@@ -201,6 +235,7 @@ func scanPluginInstallation(row pgx.Row) (*plugins.Installation, error) {
 func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 	var current plugins.Binding
 	var configJSON []byte
+	var cursorJSON []byte
 	var lastValidatedAt *time.Time
 	var lastError *string
 	var ciphertext []byte
@@ -213,6 +248,9 @@ func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 		&configJSON,
 		&ciphertext,
 		&nonce,
+		&cursorJSON,
+		&current.MaxPrintsPerRun,
+		&current.MaxPrintsPerDay,
 		&current.Status,
 		&lastValidatedAt,
 		&lastError,
@@ -232,6 +270,11 @@ func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 	}
 	if current.Config == nil {
 		current.Config = map[string]any{}
+	}
+	if len(cursorJSON) > 0 {
+		if err := json.Unmarshal(cursorJSON, &current.Cursor); err != nil {
+			return nil, err
+		}
 	}
 	current.Ciphertext = ciphertext
 	current.Nonce = nonce

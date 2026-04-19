@@ -445,6 +445,10 @@ func (f fakeScheduleService) Toggle(_ context.Context, _ string, _ string) (sche
 	return f.item, f.err
 }
 
+func (f fakeScheduleService) RunManual(_ context.Context, _ string, _ string, _ schedule.ManualRunInput) (schedule.ManualRunResult, error) {
+	return schedule.ManualRunResult{}, nil
+}
+
 func (f fakeScheduleService) Delete(_ context.Context, _ string, _ string) error {
 	return f.err
 }

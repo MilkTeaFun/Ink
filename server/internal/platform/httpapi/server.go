@@ -39,6 +39,7 @@ type ScheduleService interface {
 	Update(ctx context.Context, accessToken string, scheduleID string, input schedule.UpsertInput) (schedule.ScheduleView, error)
 	Toggle(ctx context.Context, accessToken string, scheduleID string) (schedule.ScheduleView, error)
 	Delete(ctx context.Context, accessToken string, scheduleID string) error
+	RunManual(ctx context.Context, accessToken string, installationID string, input schedule.ManualRunInput) (schedule.ManualRunResult, error)
 }
 
 type FeedbackService interface {
@@ -111,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/plugins/{installationID}", s.wrap(s.handleGetPlugin))
 	mux.HandleFunc("PUT /api/v1/plugins/{installationID}/binding", s.wrap(s.handleSavePluginBinding))
 	mux.HandleFunc("POST /api/v1/plugins/{installationID}/test", s.wrap(s.handleTestPluginBinding))
+	mux.HandleFunc("POST /api/v1/plugins/{installationID}/run", s.wrap(s.handleRunPlugin))
 	mux.HandleFunc("GET /api/v1/printers", s.wrap(s.handleListPrinters))
 	mux.HandleFunc("POST /api/v1/printers/bind", s.wrap(s.handleBindPrinter))
 	mux.HandleFunc("DELETE /api/v1/printers/{printerID}", s.wrap(s.handleDeletePrinter))
@@ -620,6 +622,38 @@ func (s *Server) handleTestPluginBinding(w http.ResponseWriter, r *http.Request,
 	}
 
 	writeJSON(w, http.StatusOK, map[string]plugins.ValidationResult{"result": result})
+}
+
+type pluginRunRequest struct {
+	DeviceID       string         `json:"deviceId"`
+	ScheduleConfig map[string]any `json:"scheduleConfig"`
+}
+
+func (s *Server) handleRunPlugin(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var payload pluginRunRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+			return
+		}
+	}
+
+	result, err := s.schedules.RunManual(r.Context(), accessToken, r.PathValue("installationID"), schedule.ManualRunInput{
+		DeviceID:       payload.DeviceID,
+		ScheduleConfig: payload.ScheduleConfig,
+	})
+	if err != nil {
+		s.writeScheduleError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]schedule.ManualRunResult{"result": result})
 }
 
 func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requestID string) {

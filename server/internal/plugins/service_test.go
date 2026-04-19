@@ -98,11 +98,37 @@ func (r *memoryRepo) FindPluginBindingByInstallationAndUserID(_ context.Context,
 	return nil, nil
 }
 
+func (r *memoryRepo) FindPluginBindingByID(_ context.Context, bindingID string) (*Binding, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	binding, exists := r.bindings[bindingID]
+	if !exists {
+		return nil, nil
+	}
+	copy := binding
+	return &copy, nil
+}
+
 func (r *memoryRepo) SavePluginBinding(_ context.Context, binding Binding) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.bindings[binding.ID] = binding
+	return nil
+}
+
+func (r *memoryRepo) UpdatePluginBindingCursor(_ context.Context, bindingID string, cursor *string, updatedAt time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	binding, exists := r.bindings[bindingID]
+	if !exists {
+		return nil
+	}
+	binding.Cursor = cursor
+	binding.UpdatedAt = updatedAt
+	r.bindings[bindingID] = binding
 	return nil
 }
 
@@ -258,6 +284,7 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		"tone":    "verbose",
 		"repeat":  2,
 	}, FetchTrigger{
+		Kind:         TriggerKindSchedule,
 		ScheduledFor: "2026-04-10T10:00:00+08:00",
 		TriggeredAt:  "2026-04-10T02:00:00Z",
 		Timezone:     "Asia/Shanghai",
@@ -265,14 +292,37 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute fetch: %v", err)
 	}
-	if result.Title != "Fixture Source Digest" {
-		t.Fatalf("unexpected title: %s", result.Title)
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
 	}
-	if !strings.Contains(result.Content, "Hello plugin\nHello plugin") {
-		t.Fatalf("unexpected content: %s", result.Content)
+	item := result.Items[0]
+	if item.Title != "Fixture Source Digest" {
+		t.Fatalf("unexpected title: %s", item.Title)
 	}
-	if !strings.Contains(result.Content, "Triggered at: 2026-04-10T02:00:00Z") {
-		t.Fatalf("expected triggered time in content: %s", result.Content)
+	if item.SourceLabel != "Fixture Source" {
+		t.Fatalf("unexpected source label: %s", item.SourceLabel)
+	}
+	if len(item.Blocks) < 2 {
+		t.Fatalf("expected heading + paragraphs, got %d blocks", len(item.Blocks))
+	}
+	paragraphs := 0
+	var triggeredParagraph string
+	for _, block := range item.Blocks {
+		if block.Type == BlockParagraph {
+			paragraphs++
+			if strings.HasPrefix(block.Text, "Triggered at:") {
+				triggeredParagraph = block.Text
+			}
+		}
+	}
+	if paragraphs < 2 {
+		t.Fatalf("expected at least 2 paragraph blocks, got %d", paragraphs)
+	}
+	if triggeredParagraph != "Triggered at: 2026-04-10T02:00:00Z" {
+		t.Fatalf("expected triggered-at paragraph, got %q", triggeredParagraph)
+	}
+	if result.Cursor == nil || *result.Cursor != "2026-04-10T02:00:00Z" {
+		t.Fatalf("unexpected cursor: %v", result.Cursor)
 	}
 }
 
