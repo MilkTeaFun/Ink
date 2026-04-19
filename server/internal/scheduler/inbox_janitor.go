@@ -1,0 +1,72 @@
+package scheduler
+
+import (
+	"context"
+	"log/slog"
+	"time"
+)
+
+// Clock abstracts the time source so tests do not need a real ticker.
+type Clock interface {
+	Now() time.Time
+}
+
+// InboxPurger deletes printed inbox items older than a cutoff.
+type InboxPurger interface {
+	PurgePrinted(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+// InboxJanitor purges printed items older than Retention on a fixed cadence.
+type InboxJanitor struct {
+	purger    InboxPurger
+	clock     Clock
+	logger    *slog.Logger
+	interval  time.Duration
+	retention time.Duration
+}
+
+func NewInboxJanitor(purger InboxPurger, clock Clock, logger *slog.Logger, interval time.Duration, retention time.Duration) *InboxJanitor {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &InboxJanitor{
+		purger:    purger,
+		clock:     clock,
+		logger:    logger,
+		interval:  interval,
+		retention: retention,
+	}
+}
+
+func (j *InboxJanitor) Start(ctx context.Context) {
+	if j.purger == nil || j.interval <= 0 || j.retention <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(j.interval)
+	go func() {
+		defer ticker.Stop()
+
+		j.runOnce(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				j.runOnce(ctx)
+			}
+		}
+	}()
+}
+
+func (j *InboxJanitor) runOnce(ctx context.Context) {
+	cutoff := j.clock.Now().Add(-j.retention)
+	removed, err := j.purger.PurgePrinted(ctx, cutoff)
+	if err != nil {
+		j.logger.Error("inbox janitor failed", "error", err)
+		return
+	}
+	if removed > 0 {
+		j.logger.Info("purged printed inbox items", "count", removed, "cutoff", cutoff)
+	}
+}

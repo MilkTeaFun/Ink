@@ -13,7 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/dispatch"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/inbox"
 	"github.com/ruhuang/ink/server/internal/platform/clock"
 	"github.com/ruhuang/ink/server/internal/platform/config"
 	"github.com/ruhuang/ink/server/internal/platform/httpapi"
@@ -112,18 +114,33 @@ func main() {
 		cfg.PluginExecTimeout,
 		cfg.PluginInstallTimeout,
 	)
+	inboxService := inbox.NewService(store, idgen.Generator{}, clock.SystemClock{})
+	dispatchService := dispatch.NewService(
+		inboxService,
+		pluginService,
+		printerService,
+		store,
+		store,
+		clock.SystemClock{},
+	)
 	scheduleService := schedule.NewService(
 		store,
 		service,
 		pluginService,
 		store,
-		printerService,
-		store,
+		inboxService,
+		dispatchService,
 		idgen.Generator{},
 		clock.SystemClock{},
 	)
 	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
 	schedulerRunner.Start(ctx)
+
+	dispatchRunner := scheduler.NewDispatchRunner(dispatchService, logger, cfg.DispatchRetryInterval, cfg.DispatchRetryBatch)
+	dispatchRunner.Start(ctx)
+
+	inboxJanitor := scheduler.NewInboxJanitor(inboxService, clock.SystemClock{}, logger, cfg.InboxJanitorInterval, cfg.InboxRetention)
+	inboxJanitor.Start(ctx)
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
