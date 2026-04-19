@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ruhuang/ink/server/internal/auth"
+	"github.com/ruhuang/ink/server/internal/dispatch"
+	"github.com/ruhuang/ink/server/internal/inbox"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -73,10 +75,12 @@ func (fakeScheduleAuth) GetCurrentUser(_ context.Context, accessToken string) (a
 }
 
 type fakePluginRuntime struct {
-	fetchResult plugins.FetchResult
+	output      plugins.FetchOutput
+	lastCursor  *string
+	lastBinding string
 }
 
-func (r fakePluginRuntime) GetInstallation(_ context.Context, installationID string) (plugins.Installation, plugins.Manifest, error) {
+func (r *fakePluginRuntime) GetInstallation(_ context.Context, installationID string) (plugins.Installation, plugins.Manifest, error) {
 	manifest := plugins.Manifest{
 		SchemaVersion: 1,
 		Kind:          "source",
@@ -125,7 +129,7 @@ func (r fakePluginRuntime) GetInstallation(_ context.Context, installationID str
 	}, manifest, nil
 }
 
-func (fakePluginRuntime) GetBindingForUser(_ context.Context, installationID string, userID string) (plugins.Binding, map[string]string, error) {
+func (r *fakePluginRuntime) GetBindingForUser(_ context.Context, installationID string, userID string) (plugins.Binding, map[string]string, error) {
 	return plugins.Binding{
 		ID:                   "binding-1",
 		PluginInstallationID: installationID,
@@ -138,12 +142,49 @@ func (fakePluginRuntime) GetBindingForUser(_ context.Context, installationID str
 	}, map[string]string{}, nil
 }
 
-func (r fakePluginRuntime) ExecuteFetch(_ context.Context, _ plugins.Installation, _ plugins.Binding, _ map[string]string, scheduleConfig map[string]any, _ plugins.FetchTrigger) (plugins.FetchResult, error) {
-	result := r.fetchResult
+func (r *fakePluginRuntime) ExecuteFetch(_ context.Context, _ plugins.Installation, _ plugins.Binding, _ map[string]string, scheduleConfig map[string]any, _ plugins.FetchTrigger) (plugins.FetchOutput, error) {
+	output := r.output
 	if message, ok := scheduleConfig["message"].(string); ok {
-		result.Content = message
+		for index := range output.Items {
+			if len(output.Items[index].Blocks) > 0 {
+				output.Items[index].Blocks[len(output.Items[index].Blocks)-1].Text = message
+			}
+		}
 	}
-	return result, nil
+	return output, nil
+}
+
+func (r *fakePluginRuntime) UpdateBindingCursor(_ context.Context, bindingID string, cursor *string) error {
+	r.lastBinding = bindingID
+	r.lastCursor = cursor
+	return nil
+}
+
+type capturedInbox struct {
+	inputs []inbox.IngestInput
+}
+
+func (c *capturedInbox) Ingest(_ context.Context, input inbox.IngestInput) (inbox.IngestResult, error) {
+	c.inputs = append(c.inputs, input)
+	itemIDs := make([]string, len(input.Items))
+	for index := range input.Items {
+		itemIDs[index] = input.Items[index].ExternalID
+	}
+	return inbox.IngestResult{Inserted: len(input.Items), ItemIDs: itemIDs}, nil
+}
+
+type capturedDispatcher struct {
+	calls []dispatchCall
+}
+
+type dispatchCall struct {
+	bindingID string
+	deviceID  string
+}
+
+func (d *capturedDispatcher) FlushBinding(_ context.Context, bindingID string, deviceID string) (dispatch.FlushResult, error) {
+	d.calls = append(d.calls, dispatchCall{bindingID: bindingID, deviceID: deviceID})
+	return dispatch.FlushResult{Printed: 1, PrintJobIDs: []string{"print-job-1"}}, nil
 }
 
 type fakePrinterRepo struct{}
@@ -157,38 +198,6 @@ func (fakePrinterRepo) FindBindingByID(_ context.Context, userID string, binding
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}, nil
-}
-
-type capturedPrinter struct {
-	inputs []printer.CreateJobInput
-}
-
-func (p *capturedPrinter) CreatePrintJobForUser(_ context.Context, userID string, input printer.CreateJobInput) (workspace.PrintJob, error) {
-	p.inputs = append(p.inputs, input)
-
-	status := workspace.PrintStatusPending
-	if input.SubmitImmediately {
-		status = workspace.PrintStatusQueued
-	}
-
-	return workspace.PrintJob{
-		ID:        "print-job-1",
-		Title:     input.Title,
-		Source:    input.Source,
-		DeviceID:  input.PrinterBindingID,
-		Status:    status,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-		Content:   input.Content,
-	}, nil
-}
-
-type fakeWorkspaceRepo struct {
-	state *workspace.State
-}
-
-func (r fakeWorkspaceRepo) FindByUserID(_ context.Context, _ string) (*workspace.State, error) {
-	return r.state, nil
 }
 
 type fakeScheduleIDs struct{}
@@ -209,27 +218,33 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 	t.Parallel()
 
 	repo := newScheduleRepo()
-	printerCreator := &capturedPrinter{}
+	cursor := "cursor-v1"
+	runtime := &fakePluginRuntime{
+		output: plugins.FetchOutput{
+			Items: []plugins.Item{
+				{
+					ExternalID:  "item-1",
+					Title:       "Fixture Source Digest",
+					SourceLabel: "Fixture Source",
+					Blocks: []plugins.ContentBlock{
+						{Type: plugins.BlockHeading, Level: 1, Text: "Fixture Source Digest"},
+						{Type: plugins.BlockParagraph, Text: "fallback"},
+					},
+				},
+			},
+			Cursor: &cursor,
+		},
+	}
+	inboxCapture := &capturedInbox{}
+	dispatcher := &capturedDispatcher{}
 	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	service := NewService(
 		repo,
 		fakeScheduleAuth{},
-		fakePluginRuntime{
-			fetchResult: plugins.FetchResult{
-				Title:       "Fixture Source Digest",
-				Content:     "fallback",
-				SourceLabel: "Fixture Source",
-			},
-		},
+		runtime,
 		fakePrinterRepo{},
-		printerCreator,
-		fakeWorkspaceRepo{
-			state: &workspace.State{
-				Preferences: workspace.Preferences{
-					SendConfirmationEnabled: true,
-				},
-			},
-		},
+		inboxCapture,
+		dispatcher,
 		fakeScheduleIDs{},
 		fakeScheduleClock{now: now},
 	)
@@ -270,22 +285,33 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 	if processed != 1 {
 		t.Fatalf("expected 1 processed schedule, got %d", processed)
 	}
-	if len(printerCreator.inputs) != 1 {
-		t.Fatalf("expected 1 created print job, got %d", len(printerCreator.inputs))
+
+	if len(inboxCapture.inputs) != 1 {
+		t.Fatalf("expected 1 ingest call, got %d", len(inboxCapture.inputs))
+	}
+	ingest := inboxCapture.inputs[0]
+	if ingest.PluginBindingID != "binding-1" {
+		t.Fatalf("unexpected binding id: %s", ingest.PluginBindingID)
+	}
+	if ingest.DeviceID != "device-1" {
+		t.Fatalf("expected device passed through, got %q", ingest.DeviceID)
+	}
+	if len(ingest.Items) != 1 || ingest.Items[0].ExternalID != "item-1" {
+		t.Fatalf("unexpected items ingested: %+v", ingest.Items)
+	}
+	// scheduleConfig.message override should have reached the fake runtime.
+	if got := ingest.Items[0].Blocks[len(ingest.Items[0].Blocks)-1].Text; got != "hello schedule" {
+		t.Fatalf("expected schedule config message to flow to block, got %q", got)
 	}
 
-	input := printerCreator.inputs[0]
-	if input.Title != "Fixture Source Digest" {
-		t.Fatalf("unexpected print title: %s", input.Title)
+	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v1" {
+		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
 	}
-	if input.Source != "Fixture Source" {
-		t.Fatalf("unexpected print source: %s", input.Source)
+	if len(dispatcher.calls) != 1 {
+		t.Fatalf("expected 1 dispatcher call, got %d", len(dispatcher.calls))
 	}
-	if input.Content != "hello schedule" {
-		t.Fatalf("unexpected print content: %s", input.Content)
-	}
-	if input.SubmitImmediately {
-		t.Fatalf("expected pending print job when confirmation is enabled")
+	if dispatcher.calls[0].bindingID != "binding-1" || dispatcher.calls[0].deviceID != "device-1" {
+		t.Fatalf("unexpected dispatch call: %+v", dispatcher.calls[0])
 	}
 
 	updated := repo.schedules["schedule-1"]
@@ -297,6 +323,132 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 	}
 	if updated.LastError != nil {
 		t.Fatalf("expected no last error, got %s", *updated.LastError)
+	}
+}
+
+func manualFetchOutput(cursor *string) plugins.FetchOutput {
+	return plugins.FetchOutput{
+		Items: []plugins.Item{
+			{
+				ExternalID:  "ext-1",
+				Title:       "Manual run item",
+				SourceLabel: "Fixture Source",
+				Blocks:      []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: "fallback"}},
+			},
+		},
+		Cursor: cursor,
+	}
+}
+
+func assertManualRunResult(t *testing.T, result ManualRunResult) {
+	t.Helper()
+	if result.FetchedCount != 1 || result.IngestedCount != 1 || result.PrintedCount != 1 {
+		t.Fatalf("unexpected result counts: %+v", result)
+	}
+	if !result.CursorAdvanced {
+		t.Fatalf("expected cursor to advance when plugin returns one")
+	}
+	if len(result.PrintJobIDs) != 1 || result.PrintJobIDs[0] != "print-job-1" {
+		t.Fatalf("unexpected print job ids: %+v", result.PrintJobIDs)
+	}
+}
+
+func assertManualRunSideEffects(t *testing.T, inboxCapture *capturedInbox, dispatcher *capturedDispatcher, runtime *fakePluginRuntime) {
+	t.Helper()
+	if len(inboxCapture.inputs) != 1 || inboxCapture.inputs[0].DeviceID != "device-1" {
+		t.Fatalf("expected one ingest call with device-1, got %+v", inboxCapture.inputs)
+	}
+	if len(dispatcher.calls) != 1 || dispatcher.calls[0].bindingID != "binding-1" {
+		t.Fatalf("expected dispatcher called once for binding-1, got %+v", dispatcher.calls)
+	}
+	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v2" {
+		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
+	}
+}
+
+func TestRunManualIngestsFlushesAndAdvancesCursor(t *testing.T) {
+	t.Parallel()
+
+	cursor := "cursor-v2"
+	runtime := &fakePluginRuntime{output: manualFetchOutput(&cursor)}
+	inboxCapture := &capturedInbox{}
+	dispatcher := &capturedDispatcher{}
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	service := NewService(
+		newScheduleRepo(),
+		fakeScheduleAuth{},
+		runtime,
+		fakePrinterRepo{},
+		inboxCapture,
+		dispatcher,
+		fakeScheduleIDs{},
+		fakeScheduleClock{now: now},
+	)
+
+	result, err := service.RunManual(context.Background(), "member-token", "plugin-1", ManualRunInput{
+		DeviceID:       "device-1",
+		ScheduleConfig: map[string]any{"message": "manual"},
+	})
+	if err != nil {
+		t.Fatalf("run manual: %v", err)
+	}
+	assertManualRunResult(t, result)
+	assertManualRunSideEffects(t, inboxCapture, dispatcher, runtime)
+}
+
+func TestRunManualDoesNotAdvanceCursorWhenNil(t *testing.T) {
+	t.Parallel()
+
+	runtime := &fakePluginRuntime{
+		output: plugins.FetchOutput{
+			Items:  []plugins.Item{},
+			Cursor: nil,
+		},
+	}
+	dispatcher := &capturedDispatcher{}
+	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
+	service := NewService(
+		newScheduleRepo(),
+		fakeScheduleAuth{},
+		runtime,
+		fakePrinterRepo{},
+		&capturedInbox{},
+		dispatcher,
+		fakeScheduleIDs{},
+		fakeScheduleClock{now: now},
+	)
+
+	result, err := service.RunManual(context.Background(), "member-token", "plugin-1", ManualRunInput{
+		ScheduleConfig: map[string]any{"message": "manual"},
+	})
+	if err != nil {
+		t.Fatalf("run manual: %v", err)
+	}
+	if result.CursorAdvanced {
+		t.Fatalf("expected cursor not to advance when plugin returns nil cursor")
+	}
+	if runtime.lastCursor != nil {
+		t.Fatalf("expected UpdateBindingCursor not called, got %v", runtime.lastCursor)
+	}
+}
+
+func TestRunManualRejectsEmptyInstallationID(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(
+		newScheduleRepo(),
+		fakeScheduleAuth{},
+		&fakePluginRuntime{},
+		fakePrinterRepo{},
+		&capturedInbox{},
+		&capturedDispatcher{},
+		fakeScheduleIDs{},
+		fakeScheduleClock{now: time.Now()},
+	)
+
+	_, err := service.RunManual(context.Background(), "member-token", "   ", ManualRunInput{})
+	if err == nil {
+		t.Fatalf("expected error for empty installation id")
 	}
 }
 

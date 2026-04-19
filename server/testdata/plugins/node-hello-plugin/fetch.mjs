@@ -20,15 +20,30 @@ const repeatValue = Number.parseInt(String(payload.scheduleConfig?.repeat ?? "1"
 const repeat = Number.isFinite(repeatValue) && repeatValue > 0 ? repeatValue : 1;
 const includeTriggeredAt = Boolean(payload.workspaceConfig?.includeTriggeredAt);
 
-const repeated = Array.from({ length: repeat }, () => message);
+const paragraphs = Array.from({ length: repeat }, () => ({
+  type: "paragraph",
+  text: message,
+}));
 if (tone === "verbose" && includeTriggeredAt && payload.trigger?.triggeredAt) {
-  repeated.push(`Triggered at: ${payload.trigger.triggeredAt}`);
+  paragraphs.push({
+    type: "paragraph",
+    text: `Triggered at: ${payload.trigger.triggeredAt}`,
+  });
 }
+
+const item = {
+  externalId: `node-hello-${payload.trigger?.triggeredAt ?? "default"}`,
+  title: `${sourceName} Digest`,
+  sourceLabel: sourceName,
+  blocks: [
+    { type: "heading", level: 1, text: `${sourceName} Digest` },
+    ...paragraphs,
+  ],
+};
 
 process.stdout.write(
   JSON.stringify({
-    title: `${sourceName} Digest`,
-    content: repeated.join("\n"),
-    sourceLabel: sourceName,
+    items: [item],
+    cursor: payload.trigger?.triggeredAt ?? null,
   }),
 );

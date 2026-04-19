@@ -6,6 +6,8 @@ type SourceType string
 type InstallationStatus string
 type BindingStatus string
 type FieldType string
+type BlockType string
+type TriggerKind string
 
 const (
 	SourceTypeUpload SourceType = "upload"
@@ -26,6 +28,15 @@ const (
 	FieldTypeNumber   FieldType = "number"
 	FieldTypeSelect   FieldType = "select"
 	FieldTypeCheckbox FieldType = "checkbox"
+
+	BlockHeading   BlockType = "heading"
+	BlockParagraph BlockType = "paragraph"
+	BlockImage     BlockType = "image"
+	BlockLink      BlockType = "link"
+	BlockDivider   BlockType = "divider"
+
+	TriggerKindSchedule TriggerKind = "schedule"
+	TriggerKindManual   TriggerKind = "manual"
 )
 
 type FieldOption struct {
@@ -93,6 +104,9 @@ type Binding struct {
 	Config               map[string]any
 	Ciphertext           []byte
 	Nonce                []byte
+	Cursor               *string
+	MaxPrintsPerRun      int
+	MaxPrintsPerDay      int
 	Status               BindingStatus
 	LastValidatedAt      *time.Time
 	LastError            *string
@@ -117,16 +131,40 @@ type ValidationResult struct {
 }
 
 type FetchTrigger struct {
-	ScheduledFor string `json:"scheduledFor"`
-	TriggeredAt  string `json:"triggeredAt"`
-	Timezone     string `json:"timezone"`
+	Kind         TriggerKind `json:"kind"`
+	ScheduledFor string      `json:"scheduledFor,omitempty"`
+	TriggeredAt  string      `json:"triggeredAt"`
+	Timezone     string      `json:"timezone"`
 }
 
-type FetchResult struct {
+// ContentBlock is the minimal structural unit a plugin emits.
+// Only a small set of block types is supported on purpose; new types are
+// additive and should extend this union.
+type ContentBlock struct {
+	Type  BlockType `json:"type"`
+	Level int       `json:"level,omitempty"` // heading: 1..3
+	Text  string    `json:"text,omitempty"`  // heading / paragraph / link
+	URL   string    `json:"url,omitempty"`   // image / link
+	Alt   string    `json:"alt,omitempty"`   // image
+}
+
+// Item represents a single printable unit produced by a plugin.
+// ExternalID is the idempotency key — the same (binding, externalId) is
+// ingested at most once.
+type Item struct {
+	ExternalID  string         `json:"externalId"`
 	Title       string         `json:"title"`
-	Content     string         `json:"content"`
 	SourceLabel string         `json:"sourceLabel,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	PublishedAt *time.Time     `json:"publishedAt,omitempty"`
+	Blocks      []ContentBlock `json:"blocks"`
+}
+
+// FetchOutput is the canonical response returned by a plugin's fetch entrypoint.
+// Items may be empty (no new content). Cursor, if present, is persisted on the
+// binding and passed back verbatim on the next fetch.
+type FetchOutput struct {
+	Items  []Item  `json:"items"`
+	Cursor *string `json:"cursor,omitempty"`
 }
 
 type InstallationSummary struct {

@@ -32,6 +32,10 @@ type Config struct {
 	PluginInstallTimeout      time.Duration
 	PluginUploadMaxBytes      int64
 	SchedulerPollInterval     time.Duration
+	DispatchRetryInterval     time.Duration
+	DispatchRetryBatch        int
+	InboxJanitorInterval      time.Duration
+	InboxRetention            time.Duration
 }
 
 // Load reads application configuration from the current environment.
@@ -91,6 +95,26 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	dispatchRetryInterval, err := envDuration("DISPATCH_RETRY_INTERVAL", 1*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
+	dispatchRetryBatch, err := envInt("DISPATCH_RETRY_BATCH", 50)
+	if err != nil {
+		return Config{}, err
+	}
+
+	inboxJanitorInterval, err := envDuration("INBOX_JANITOR_INTERVAL", 6*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
+	inboxRetention, err := envDuration("INBOX_RETENTION", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		AppName:                   envString("APP_NAME", "ink-auth"),
 		Port:                      port,
@@ -111,6 +135,10 @@ func Load() (Config, error) {
 		PluginInstallTimeout:      pluginInstallTimeout,
 		PluginUploadMaxBytes:      pluginUploadMaxBytes,
 		SchedulerPollInterval:     schedulerPollInterval,
+		DispatchRetryInterval:     dispatchRetryInterval,
+		DispatchRetryBatch:        dispatchRetryBatch,
+		InboxJanitorInterval:      inboxJanitorInterval,
+		InboxRetention:            inboxRetention,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -157,6 +185,18 @@ func Load() (Config, error) {
 	}
 	if cfg.SchedulerPollInterval <= 0 {
 		return Config{}, fmt.Errorf("SCHEDULER_POLL_INTERVAL must be positive")
+	}
+	if cfg.DispatchRetryInterval <= 0 {
+		return Config{}, fmt.Errorf("DISPATCH_RETRY_INTERVAL must be positive")
+	}
+	if cfg.DispatchRetryBatch <= 0 {
+		return Config{}, fmt.Errorf("DISPATCH_RETRY_BATCH must be positive")
+	}
+	if cfg.InboxJanitorInterval <= 0 {
+		return Config{}, fmt.Errorf("INBOX_JANITOR_INTERVAL must be positive")
+	}
+	if cfg.InboxRetention <= 0 {
+		return Config{}, fmt.Errorf("INBOX_RETENTION must be positive")
 	}
 
 	return cfg, nil
