@@ -112,6 +112,68 @@ func NewService(repo Repository, ids IDGenerator, clock Clock) *Service {
 	return &Service{repo: repo, ids: ids, clock: clock}
 }
 
+// validateRawItem returns the status (pending or invalid) and last-error
+// message for a single plugin item given its parsed fields.
+func validateRawItem(externalID string, title string, blocks []plugins.ContentBlock) (ItemStatus, *string) {
+	if externalID == "" {
+		msg := "externalId is required"
+		return StatusInvalid, &msg
+	}
+	if title == "" {
+		msg := "title is required"
+		return StatusInvalid, &msg
+	}
+	if err := plugins.ValidateBlocks(blocks); err != nil {
+		msg := err.Error()
+		return StatusInvalid, &msg
+	}
+	return StatusPending, nil
+}
+
+// buildItem converts a raw plugin item and the surrounding ingest context
+// into an inbox.Item ready for persistence.
+func buildItem(itemID string, input IngestInput, raw plugins.Item, now time.Time) Item {
+	externalID := strings.TrimSpace(raw.ExternalID)
+	title := strings.TrimSpace(raw.Title)
+	sourceLabel := strings.TrimSpace(raw.SourceLabel)
+	if sourceLabel == "" {
+		sourceLabel = input.SourceLabelFallback
+	}
+
+	status, lastError := validateRawItem(externalID, title, raw.Blocks)
+
+	// Even invalid items still need a stable external id so they can be
+	// looked up later; fall back to the generated item id.
+	effectiveExternalID := externalID
+	if effectiveExternalID == "" {
+		effectiveExternalID = itemID
+	}
+
+	var deviceID *string
+	if trimmed := strings.TrimSpace(input.DeviceID); trimmed != "" {
+		deviceID = &trimmed
+	}
+
+	return Item{
+		ID:                   itemID,
+		UserID:               input.UserID,
+		PluginInstallationID: input.PluginInstallationID,
+		PluginBindingID:      input.PluginBindingID,
+		DeviceID:             deviceID,
+		ExternalID:           effectiveExternalID,
+		Title:                title,
+		SourceLabel:          sourceLabel,
+		PublishedAt:          raw.PublishedAt,
+		Blocks:               raw.Blocks,
+		Status:               status,
+		AttemptCount:         0,
+		LastError:            lastError,
+		FetchedAt:            now,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+}
+
 // Ingest persists a batch of plugin items. Each item is validated and either
 // inserted with status=pending, skipped as a duplicate, or stored as invalid.
 // The call is safe to retry: duplicates are detected via the (binding,
@@ -128,60 +190,7 @@ func (s *Service) Ingest(ctx context.Context, input IngestInput) (IngestResult, 
 		if err != nil {
 			return result, err
 		}
-
-		externalID := strings.TrimSpace(raw.ExternalID)
-		title := strings.TrimSpace(raw.Title)
-		sourceLabel := strings.TrimSpace(raw.SourceLabel)
-		if sourceLabel == "" {
-			sourceLabel = input.SourceLabelFallback
-		}
-
-		status := StatusPending
-		var lastError *string
-		if externalID == "" {
-			status = StatusInvalid
-			message := "externalId is required"
-			lastError = &message
-		} else if title == "" {
-			status = StatusInvalid
-			message := "title is required"
-			lastError = &message
-		} else if err := plugins.ValidateBlocks(raw.Blocks); err != nil {
-			status = StatusInvalid
-			message := err.Error()
-			lastError = &message
-		}
-
-		// Even invalid items still need a stable external id so they can be
-		// looked up later; fall back to the generated item id.
-		effectiveExternalID := externalID
-		if effectiveExternalID == "" {
-			effectiveExternalID = itemID
-		}
-
-		var deviceID *string
-		if trimmed := strings.TrimSpace(input.DeviceID); trimmed != "" {
-			deviceID = &trimmed
-		}
-
-		item := Item{
-			ID:                   itemID,
-			UserID:               input.UserID,
-			PluginInstallationID: input.PluginInstallationID,
-			PluginBindingID:      input.PluginBindingID,
-			DeviceID:             deviceID,
-			ExternalID:           effectiveExternalID,
-			Title:                title,
-			SourceLabel:          sourceLabel,
-			PublishedAt:          raw.PublishedAt,
-			Blocks:               raw.Blocks,
-			Status:               status,
-			AttemptCount:         0,
-			LastError:            lastError,
-			FetchedAt:            now,
-			CreatedAt:            now,
-			UpdatedAt:            now,
-		}
+		item := buildItem(itemID, input, raw, now)
 
 		inserted, err := s.repo.InsertItem(ctx, item)
 		if err != nil {
@@ -191,10 +200,9 @@ func (s *Service) Ingest(ctx context.Context, input IngestInput) (IngestResult, 
 			result.Duplicates++
 			continue
 		}
-		switch status {
-		case StatusInvalid:
+		if item.Status == StatusInvalid {
 			result.Invalid++
-		default:
+		} else {
 			result.Inserted++
 		}
 		result.ItemIDs = append(result.ItemIDs, item.ID)

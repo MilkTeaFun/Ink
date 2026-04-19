@@ -184,71 +184,109 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 	return aggregate, nil
 }
 
+// resolveSendConfirmation loads the caller's workspace preferences and
+// returns whether print jobs should wait for user confirmation before
+// submission. Missing workspace or lookup errors fall back to the platform
+// default, which is true.
+func (s *Service) resolveSendConfirmation(ctx context.Context, userID string) bool {
+	if s.workspace == nil {
+		return workspace.EmptyState().Preferences.SendConfirmationEnabled
+	}
+	state, err := s.workspace.FindByUserID(ctx, userID)
+	if err != nil {
+		return true
+	}
+	if state == nil {
+		return workspace.EmptyState().Preferences.SendConfirmationEnabled
+	}
+	return workspace.NormalizeState(*state).Preferences.SendConfirmationEnabled
+}
+
+// pickDeviceID chooses the device id for a given item, preferring the item's
+// own binding if set and falling back to the caller-provided default.
+func pickDeviceID(item inbox.Item, defaultDeviceID string) string {
+	if item.DeviceID != nil && strings.TrimSpace(*item.DeviceID) != "" {
+		return *item.DeviceID
+	}
+	return defaultDeviceID
+}
+
+// dispatchOne attempts to print one item. It returns the outcome so the
+// caller can aggregate results. Any inbox status transition is performed
+// here so dispatchItems stays a thin loop.
+type dispatchOutcome int
+
+const (
+	outcomePrinted dispatchOutcome = iota
+	outcomeFailed
+	outcomeSkipped
+)
+
+func (s *Service) dispatchOne(
+	ctx context.Context,
+	binding plugins.Binding,
+	installation plugins.Installation,
+	item inbox.Item,
+	defaultDeviceID string,
+	sendConfirmation bool,
+) (dispatchOutcome, string) {
+	if item.AttemptCount >= inbox.MaxDispatchAttempts {
+		return outcomeSkipped, ""
+	}
+
+	rendered, err := printer.RenderBlocksToText(item.Blocks)
+	if err != nil {
+		_ = s.inbox.MarkFailed(ctx, item, fmt.Sprintf("render: %s", err.Error()))
+		return outcomeFailed, ""
+	}
+
+	source := strings.TrimSpace(item.SourceLabel)
+	if source == "" {
+		source = installation.DisplayName
+	}
+
+	deviceID := pickDeviceID(item, defaultDeviceID)
+	if strings.TrimSpace(deviceID) == "" {
+		_ = s.inbox.MarkFailed(ctx, item, "no device bound for item")
+		return outcomeFailed, ""
+	}
+
+	job, err := s.printer.CreatePrintJobForUser(ctx, binding.UserID, printer.CreateJobInput{
+		Title:             item.Title,
+		Source:            source,
+		Content:           rendered,
+		PrinterBindingID:  deviceID,
+		SubmitImmediately: !sendConfirmation,
+	})
+	if err != nil {
+		_ = s.inbox.MarkFailed(ctx, item, err.Error())
+		return outcomeFailed, ""
+	}
+	if err := s.inbox.MarkPrinted(ctx, item, job.ID); err != nil {
+		return outcomeFailed, ""
+	}
+	return outcomePrinted, job.ID
+}
+
 func (s *Service) dispatchItems(ctx context.Context, binding plugins.Binding, installation plugins.Installation, items []inbox.Item, defaultDeviceID string) (FlushResult, error) {
 	result := FlushResult{}
 	if len(items) == 0 {
 		return result, nil
 	}
 
-	sendConfirmation := true
-	if s.workspace != nil {
-		state, workspaceErr := s.workspace.FindByUserID(ctx, binding.UserID)
-		if workspaceErr == nil {
-			if state == nil {
-				defaultState := workspace.EmptyState()
-				sendConfirmation = defaultState.Preferences.SendConfirmationEnabled
-			} else {
-				sendConfirmation = workspace.NormalizeState(*state).Preferences.SendConfirmationEnabled
-			}
-		}
-	}
+	sendConfirmation := s.resolveSendConfirmation(ctx, binding.UserID)
 
 	for _, item := range items {
-		if item.AttemptCount >= inbox.MaxDispatchAttempts {
+		outcome, jobID := s.dispatchOne(ctx, binding, installation, item, defaultDeviceID, sendConfirmation)
+		switch outcome {
+		case outcomePrinted:
+			result.Printed++
+			result.PrintJobIDs = append(result.PrintJobIDs, jobID)
+		case outcomeFailed:
+			result.Failed++
+		case outcomeSkipped:
 			result.Skipped++
-			continue
 		}
-
-		rendered, err := printer.RenderBlocksToText(item.Blocks)
-		if err != nil {
-			_ = s.inbox.MarkFailed(ctx, item, fmt.Sprintf("render: %s", err.Error()))
-			result.Failed++
-			continue
-		}
-
-		source := strings.TrimSpace(item.SourceLabel)
-		if source == "" {
-			source = installation.DisplayName
-		}
-
-		deviceID := defaultDeviceID
-		if item.DeviceID != nil && strings.TrimSpace(*item.DeviceID) != "" {
-			deviceID = *item.DeviceID
-		}
-		if strings.TrimSpace(deviceID) == "" {
-			_ = s.inbox.MarkFailed(ctx, item, "no device bound for item")
-			result.Failed++
-			continue
-		}
-
-		job, err := s.printer.CreatePrintJobForUser(ctx, binding.UserID, printer.CreateJobInput{
-			Title:             item.Title,
-			Source:            source,
-			Content:           rendered,
-			PrinterBindingID:  deviceID,
-			SubmitImmediately: !sendConfirmation,
-		})
-		if err != nil {
-			_ = s.inbox.MarkFailed(ctx, item, err.Error())
-			result.Failed++
-			continue
-		}
-		if err := s.inbox.MarkPrinted(ctx, item, job.ID); err != nil {
-			result.Failed++
-			continue
-		}
-		result.Printed++
-		result.PrintJobIDs = append(result.PrintJobIDs, job.ID)
 	}
 
 	return result, nil
