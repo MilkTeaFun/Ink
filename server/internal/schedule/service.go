@@ -438,11 +438,13 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 		return
 	}
 
-	if err := s.plugins.UpdateBindingCursor(ctx, binding.ID, output.Cursor); err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
-		return
+	if output.Cursor != nil {
+		if err := s.plugins.UpdateBindingCursor(ctx, binding.ID, output.Cursor); err != nil {
+			message := err.Error()
+			current.LastError = &message
+			_ = s.repo.Save(ctx, current)
+			return
+		}
 	}
 
 	if _, err := s.dispatcher.FlushBinding(ctx, binding.ID, current.DeviceID); err != nil {

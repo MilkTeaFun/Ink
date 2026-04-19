@@ -67,7 +67,8 @@ func (s *Store) FindInboxItemByID(ctx context.Context, itemID string) (*inbox.It
 	return scanInboxItem(row)
 }
 
-// ListPendingByBinding returns pending items for a binding in insertion order.
+// ListPendingByBinding returns pending+failed (retryable) items for a binding
+// in insertion order.
 func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limit int) ([]inbox.Item, error) {
 	if limit <= 0 {
 		limit = 20
@@ -76,10 +77,10 @@ func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limi
 		select `+pluginItemColumns+`
 		from plugin_items
 		where plugin_binding_id = $1
-		  and status = $2
+		  and status in ($2, $3)
 		order by created_at asc
-		limit $3
-	`, bindingID, string(inbox.StatusPending), limit)
+		limit $4
+	`, bindingID, string(inbox.StatusPending), string(inbox.StatusFailed), limit)
 	if err != nil {
 		return nil, err
 	}
