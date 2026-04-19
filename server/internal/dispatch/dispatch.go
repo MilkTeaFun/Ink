@@ -112,28 +112,12 @@ func (s *Service) FlushBinding(ctx context.Context, bindingID string, defaultDev
 		return result, err
 	}
 
-	perRun := binding.MaxPrintsPerRun
-	if perRun <= 0 {
-		perRun = DefaultBatchSize
-	}
-
-	perDay := binding.MaxPrintsPerDay
-	if perDay <= 0 {
-		perDay = DefaultDailyCap
-	}
-
-	printedToday, err := s.counter.CountPrintedInLast24h(ctx, bindingID, s.clock.Now().Add(-24*time.Hour))
+	budget, err := s.dispatchBudget(ctx, binding)
 	if err != nil {
 		return result, err
 	}
-
-	remainingDay := perDay - printedToday
-	if remainingDay <= 0 {
+	if budget <= 0 {
 		return result, nil
-	}
-	budget := perRun
-	if remainingDay < budget {
-		budget = remainingDay
 	}
 
 	items, err := s.inbox.ListPendingByBinding(ctx, bindingID, budget)
@@ -142,6 +126,33 @@ func (s *Service) FlushBinding(ctx context.Context, bindingID string, defaultDev
 	}
 
 	return s.dispatchItems(ctx, binding, installation, items, defaultDeviceID)
+}
+
+// dispatchBudget returns the number of items the dispatcher is allowed to
+// print for the given binding right now, respecting both the per-run and
+// per-day caps. A non-positive return means the binding is saturated and
+// callers should skip.
+func (s *Service) dispatchBudget(ctx context.Context, binding plugins.Binding) (int, error) {
+	perRun := binding.MaxPrintsPerRun
+	if perRun <= 0 {
+		perRun = DefaultBatchSize
+	}
+	perDay := binding.MaxPrintsPerDay
+	if perDay <= 0 {
+		perDay = DefaultDailyCap
+	}
+	printedToday, err := s.counter.CountPrintedInLast24h(ctx, binding.ID, s.clock.Now().Add(-24*time.Hour))
+	if err != nil {
+		return 0, err
+	}
+	remainingDay := perDay - printedToday
+	if remainingDay <= 0 {
+		return 0, nil
+	}
+	if remainingDay < perRun {
+		return remainingDay, nil
+	}
+	return perRun, nil
 }
 
 // RetryFailed pulls retryable failed items across all bindings and attempts
@@ -171,6 +182,18 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 		installation, _, installationErr := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
 		if installationErr != nil {
 			continue
+		}
+		budget, budgetErr := s.dispatchBudget(ctx, binding)
+		if budgetErr != nil {
+			continue
+		}
+		if budget <= 0 {
+			aggregate.Skipped += len(batch)
+			continue
+		}
+		if len(batch) > budget {
+			aggregate.Skipped += len(batch) - budget
+			batch = batch[:budget]
 		}
 		result, flushErr := s.dispatchItems(ctx, binding, installation, batch, "")
 		if flushErr != nil {
