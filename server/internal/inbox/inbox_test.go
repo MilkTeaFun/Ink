@@ -166,10 +166,10 @@ func TestIngestInsertsDedupesAndValidates(t *testing.T) {
 		SourceLabelFallback:  "Fallback Source",
 		Items: []plugins.Item{
 			validItem("ext-1", "First"),
-			validItem("ext-1", "First Duplicate"),           // dup of ext-1
-			validItem("ext-2", "Second"),                    // new
-			{ExternalID: "", Title: "Missing external id"},  // invalid
-			{ExternalID: "ext-3", Title: ""},                // invalid title
+			validItem("ext-1", "First Duplicate"),          // dup of ext-1
+			validItem("ext-2", "Second"),                   // new
+			{ExternalID: "", Title: "Missing external id"}, // invalid
+			{ExternalID: "ext-3", Title: ""},               // invalid title
 			{ExternalID: "ext-4", Title: "Bad block", Blocks: []plugins.ContentBlock{{Type: plugins.BlockHeading}}},
 		},
 	}
