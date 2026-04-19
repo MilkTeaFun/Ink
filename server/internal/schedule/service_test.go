@@ -326,25 +326,51 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 	}
 }
 
+func manualFetchOutput(cursor *string) plugins.FetchOutput {
+	return plugins.FetchOutput{
+		Items: []plugins.Item{
+			{
+				ExternalID:  "ext-1",
+				Title:       "Manual run item",
+				SourceLabel: "Fixture Source",
+				Blocks:      []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: "fallback"}},
+			},
+		},
+		Cursor: cursor,
+	}
+}
+
+func assertManualRunResult(t *testing.T, result ManualRunResult) {
+	t.Helper()
+	if result.FetchedCount != 1 || result.IngestedCount != 1 || result.PrintedCount != 1 {
+		t.Fatalf("unexpected result counts: %+v", result)
+	}
+	if !result.CursorAdvanced {
+		t.Fatalf("expected cursor to advance when plugin returns one")
+	}
+	if len(result.PrintJobIDs) != 1 || result.PrintJobIDs[0] != "print-job-1" {
+		t.Fatalf("unexpected print job ids: %+v", result.PrintJobIDs)
+	}
+}
+
+func assertManualRunSideEffects(t *testing.T, inboxCapture *capturedInbox, dispatcher *capturedDispatcher, runtime *fakePluginRuntime) {
+	t.Helper()
+	if len(inboxCapture.inputs) != 1 || inboxCapture.inputs[0].DeviceID != "device-1" {
+		t.Fatalf("expected one ingest call with device-1, got %+v", inboxCapture.inputs)
+	}
+	if len(dispatcher.calls) != 1 || dispatcher.calls[0].bindingID != "binding-1" {
+		t.Fatalf("expected dispatcher called once for binding-1, got %+v", dispatcher.calls)
+	}
+	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v2" {
+		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
+	}
+}
+
 func TestRunManualIngestsFlushesAndAdvancesCursor(t *testing.T) {
 	t.Parallel()
 
 	cursor := "cursor-v2"
-	runtime := &fakePluginRuntime{
-		output: plugins.FetchOutput{
-			Items: []plugins.Item{
-				{
-					ExternalID:  "ext-1",
-					Title:       "Manual run item",
-					SourceLabel: "Fixture Source",
-					Blocks: []plugins.ContentBlock{
-						{Type: plugins.BlockParagraph, Text: "fallback"},
-					},
-				},
-			},
-			Cursor: &cursor,
-		},
-	}
+	runtime := &fakePluginRuntime{output: manualFetchOutput(&cursor)}
 	inboxCapture := &capturedInbox{}
 	dispatcher := &capturedDispatcher{}
 	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
@@ -360,37 +386,14 @@ func TestRunManualIngestsFlushesAndAdvancesCursor(t *testing.T) {
 	)
 
 	result, err := service.RunManual(context.Background(), "member-token", "plugin-1", ManualRunInput{
-		DeviceID: "device-1",
-		ScheduleConfig: map[string]any{
-			"message": "manual",
-		},
+		DeviceID:       "device-1",
+		ScheduleConfig: map[string]any{"message": "manual"},
 	})
 	if err != nil {
 		t.Fatalf("run manual: %v", err)
 	}
-
-	if result.FetchedCount != 1 || result.IngestedCount != 1 || result.PrintedCount != 1 {
-		t.Fatalf("unexpected result counts: %+v", result)
-	}
-	if !result.CursorAdvanced {
-		t.Fatalf("expected cursor to advance when plugin returns one")
-	}
-	if len(result.PrintJobIDs) != 1 || result.PrintJobIDs[0] != "print-job-1" {
-		t.Fatalf("unexpected print job ids: %+v", result.PrintJobIDs)
-	}
-
-	if len(inboxCapture.inputs) != 1 {
-		t.Fatalf("expected 1 ingest call, got %d", len(inboxCapture.inputs))
-	}
-	if inboxCapture.inputs[0].DeviceID != "device-1" {
-		t.Fatalf("expected device to flow through, got %q", inboxCapture.inputs[0].DeviceID)
-	}
-	if len(dispatcher.calls) != 1 || dispatcher.calls[0].bindingID != "binding-1" {
-		t.Fatalf("expected dispatcher called once for binding-1, got %+v", dispatcher.calls)
-	}
-	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v2" {
-		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
-	}
+	assertManualRunResult(t, result)
+	assertManualRunSideEffects(t, inboxCapture, dispatcher, runtime)
 }
 
 func TestRunManualDoesNotAdvanceCursorWhenNil(t *testing.T) {

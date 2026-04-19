@@ -175,28 +175,8 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 
 	aggregate := FlushResult{}
 	for bindingID, batch := range byBinding {
-		binding, _, bindingErr := s.plugins.GetBindingByID(ctx, bindingID)
-		if bindingErr != nil {
-			continue
-		}
-		installation, _, installationErr := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
-		if installationErr != nil {
-			continue
-		}
-		budget, budgetErr := s.dispatchBudget(ctx, binding)
-		if budgetErr != nil {
-			continue
-		}
-		if budget <= 0 {
-			aggregate.Skipped += len(batch)
-			continue
-		}
-		if len(batch) > budget {
-			aggregate.Skipped += len(batch) - budget
-			batch = batch[:budget]
-		}
-		result, flushErr := s.dispatchItems(ctx, binding, installation, batch, "")
-		if flushErr != nil {
+		result, ok := s.retryBindingBatch(ctx, bindingID, batch)
+		if !ok {
 			continue
 		}
 		aggregate.Printed += result.Printed
@@ -205,6 +185,39 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 		aggregate.PrintJobIDs = append(aggregate.PrintJobIDs, result.PrintJobIDs...)
 	}
 	return aggregate, nil
+}
+
+// retryBindingBatch flushes one binding's retry batch respecting the per-run
+// and per-day caps. Returns (result, true) on success; (_, false) signals the
+// binding should be skipped (missing binding/installation or budget lookup
+// failure). Skipped-because-budget-exhausted is reported inside the result.
+func (s *Service) retryBindingBatch(ctx context.Context, bindingID string, batch []inbox.Item) (FlushResult, bool) {
+	binding, _, err := s.plugins.GetBindingByID(ctx, bindingID)
+	if err != nil {
+		return FlushResult{}, false
+	}
+	installation, _, err := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
+	if err != nil {
+		return FlushResult{}, false
+	}
+	budget, err := s.dispatchBudget(ctx, binding)
+	if err != nil {
+		return FlushResult{}, false
+	}
+	if budget <= 0 {
+		return FlushResult{Skipped: len(batch)}, true
+	}
+	skipped := 0
+	if len(batch) > budget {
+		skipped = len(batch) - budget
+		batch = batch[:budget]
+	}
+	result, err := s.dispatchItems(ctx, binding, installation, batch, "")
+	if err != nil {
+		return FlushResult{}, false
+	}
+	result.Skipped += skipped
+	return result, true
 }
 
 // resolveSendConfirmation loads the caller's workspace preferences and

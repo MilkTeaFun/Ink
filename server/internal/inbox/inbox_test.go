@@ -152,13 +152,8 @@ func validItem(external string, title string) plugins.Item {
 	}
 }
 
-func TestIngestInsertsDedupesAndValidates(t *testing.T) {
-	t.Parallel()
-
-	repo := newMemoryRepo()
-	service := NewService(repo, &incrementingIDs{}, fixedClock{now: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)})
-
-	input := IngestInput{
+func buildIngestInput() IngestInput {
+	return IngestInput{
 		UserID:               "user-1",
 		PluginInstallationID: "install-1",
 		PluginBindingID:      "binding-1",
@@ -173,12 +168,10 @@ func TestIngestInsertsDedupesAndValidates(t *testing.T) {
 			{ExternalID: "ext-4", Title: "Bad block", Blocks: []plugins.ContentBlock{{Type: plugins.BlockHeading}}},
 		},
 	}
+}
 
-	result, err := service.Ingest(context.Background(), input)
-	if err != nil {
-		t.Fatalf("ingest: %v", err)
-	}
-
+func assertIngestCounts(t *testing.T, result IngestResult) {
+	t.Helper()
 	if result.Inserted != 2 {
 		t.Fatalf("expected 2 inserted, got %d", result.Inserted)
 	}
@@ -191,9 +184,11 @@ func TestIngestInsertsDedupesAndValidates(t *testing.T) {
 	if len(result.ItemIDs) != 5 {
 		t.Fatalf("expected 5 item ids in result (inserted + invalid), got %d", len(result.ItemIDs))
 	}
+}
 
-	// Ensure source label fallback applied when plugin did not set one.
-	for _, item := range repo.inserted {
+func assertFallbackApplied(t *testing.T, items []Item) {
+	t.Helper()
+	for _, item := range items {
 		if item.SourceLabel != "Fallback Source" {
 			t.Fatalf("expected fallback source label to be applied, got %q", item.SourceLabel)
 		}
@@ -201,6 +196,22 @@ func TestIngestInsertsDedupesAndValidates(t *testing.T) {
 			t.Fatalf("expected device id to be stored, got %+v", item.DeviceID)
 		}
 	}
+}
+
+func TestIngestInsertsDedupesAndValidates(t *testing.T) {
+	t.Parallel()
+
+	repo := newMemoryRepo()
+	service := NewService(repo, &incrementingIDs{}, fixedClock{now: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)})
+	input := buildIngestInput()
+
+	result, err := service.Ingest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	assertIngestCounts(t, result)
+	assertFallbackApplied(t, repo.inserted)
 
 	// A second ingest with the same items should be a no-op.
 	second, err := service.Ingest(context.Background(), input)
@@ -224,33 +235,33 @@ func TestIngestRequiresBinding(t *testing.T) {
 	}
 }
 
-func TestMarkPrintedAndFailed(t *testing.T) {
-	t.Parallel()
-
-	repo := newMemoryRepo()
-	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	service := NewService(repo, &incrementingIDs{}, fixedClock{now: now})
-
-	_, err := service.Ingest(context.Background(), IngestInput{
-		PluginBindingID: "binding-1",
-		Items:           []plugins.Item{validItem("ext-1", "Good")},
-	})
-	if err != nil {
+func ingestOne(t *testing.T, service *Service, bindingID string, externalID string, title string) Item {
+	t.Helper()
+	if _, err := service.Ingest(context.Background(), IngestInput{
+		PluginBindingID: bindingID,
+		Items:           []plugins.Item{validItem(externalID, title)},
+	}); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
-
-	pending, err := service.ListPendingByBinding(context.Background(), "binding-1", 10)
+	pending, err := service.ListPendingByBinding(context.Background(), bindingID, 10)
 	if err != nil {
 		t.Fatalf("list pending: %v", err)
 	}
 	if len(pending) != 1 {
 		t.Fatalf("expected 1 pending item, got %d", len(pending))
 	}
+	return pending[0]
+}
 
-	if err := service.MarkPrinted(context.Background(), pending[0], "print-job-1"); err != nil {
+func TestMarkPrintedRemovesItemFromPending(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(newMemoryRepo(), &incrementingIDs{}, fixedClock{now: time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)})
+	item := ingestOne(t, service, "binding-1", "ext-1", "Good")
+
+	if err := service.MarkPrinted(context.Background(), item, "print-job-1"); err != nil {
 		t.Fatalf("mark printed: %v", err)
 	}
-
 	afterPrinted, err := service.ListPendingByBinding(context.Background(), "binding-1", 10)
 	if err != nil {
 		t.Fatalf("list pending after print: %v", err)
@@ -258,32 +269,28 @@ func TestMarkPrintedAndFailed(t *testing.T) {
 	if len(afterPrinted) != 0 {
 		t.Fatalf("expected 0 pending items after mark-printed, got %d", len(afterPrinted))
 	}
+}
 
-	// Ingest another item and mark it failed; it should show up in retryable.
-	if _, err := service.Ingest(context.Background(), IngestInput{
-		PluginBindingID: "binding-1",
-		Items:           []plugins.Item{validItem("ext-2", "Retry me")},
-	}); err != nil {
-		t.Fatalf("ingest 2: %v", err)
-	}
-	pending2, _ := service.ListPendingByBinding(context.Background(), "binding-1", 10)
-	if len(pending2) != 1 {
-		t.Fatalf("expected 1 pending, got %d", len(pending2))
-	}
-	if err := service.MarkFailed(context.Background(), pending2[0], "network down"); err != nil {
+func TestMarkFailedMovesItemToRetryable(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
+	service := NewService(newMemoryRepo(), &incrementingIDs{}, fixedClock{now: now})
+	item := ingestOne(t, service, "binding-1", "ext-2", "Retry me")
+
+	if err := service.MarkFailed(context.Background(), item, "network down"); err != nil {
 		t.Fatalf("mark failed: %v", err)
 	}
-
-	cutoff := now.Add(1 * time.Hour)
-	retryable, err := service.ListRetryable(context.Background(), cutoff, 10)
+	retryable, err := service.ListRetryable(context.Background(), now.Add(1*time.Hour), 10)
 	if err != nil {
 		t.Fatalf("list retryable: %v", err)
 	}
 	if len(retryable) != 1 {
 		t.Fatalf("expected 1 retryable item, got %d", len(retryable))
 	}
-	if retryable[0].AttemptCount != 1 || retryable[0].LastError == nil || *retryable[0].LastError != "network down" {
-		t.Fatalf("unexpected retryable state: %+v", retryable[0])
+	r := retryable[0]
+	if r.AttemptCount != 1 || r.LastError == nil || *r.LastError != "network down" {
+		t.Fatalf("unexpected retryable state: %+v", r)
 	}
 }
 

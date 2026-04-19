@@ -22,36 +22,51 @@ func ValidateBlocks(blocks []ContentBlock) error {
 	return nil
 }
 
+var blockValidators = map[BlockType]func(ContentBlock) error{
+	BlockHeading:   validateHeadingBlock,
+	BlockParagraph: validateParagraphBlock,
+	BlockImage:     validateImageBlock,
+	BlockLink:      validateLinkBlock,
+	BlockDivider:   func(ContentBlock) error { return nil },
+}
+
 func validateBlock(block ContentBlock) error {
-	switch block.Type {
-	case BlockHeading:
-		if block.Level < 1 || block.Level > 3 {
-			return fmt.Errorf("heading.level must be 1..3, got %d", block.Level)
-		}
-		if strings.TrimSpace(block.Text) == "" {
-			return fmt.Errorf("heading.text is required")
-		}
-		return nil
-	case BlockParagraph:
-		if strings.TrimSpace(block.Text) == "" {
-			return fmt.Errorf("paragraph.text is required")
-		}
-		return nil
-	case BlockImage:
-		if err := validateHTTPURL(block.URL); err != nil {
-			return fmt.Errorf("image.url: %w", err)
-		}
-		return nil
-	case BlockLink:
-		if err := validateHTTPURL(block.URL); err != nil {
-			return fmt.Errorf("link.url: %w", err)
-		}
-		return nil
-	case BlockDivider:
-		return nil
-	default:
+	fn, ok := blockValidators[block.Type]
+	if !ok {
 		return fmt.Errorf("unsupported block type %q", block.Type)
 	}
+	return fn(block)
+}
+
+func validateHeadingBlock(block ContentBlock) error {
+	if block.Level < 1 || block.Level > 3 {
+		return fmt.Errorf("heading.level must be 1..3, got %d", block.Level)
+	}
+	if strings.TrimSpace(block.Text) == "" {
+		return fmt.Errorf("heading.text is required")
+	}
+	return nil
+}
+
+func validateParagraphBlock(block ContentBlock) error {
+	if strings.TrimSpace(block.Text) == "" {
+		return fmt.Errorf("paragraph.text is required")
+	}
+	return nil
+}
+
+func validateImageBlock(block ContentBlock) error {
+	if err := validateHTTPURL(block.URL); err != nil {
+		return fmt.Errorf("image.url: %w", err)
+	}
+	return nil
+}
+
+func validateLinkBlock(block ContentBlock) error {
+	if err := validateHTTPURL(block.URL); err != nil {
+		return fmt.Errorf("link.url: %w", err)
+	}
+	return nil
 }
 
 func validateHTTPURL(raw string) error {
