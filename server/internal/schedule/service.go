@@ -261,26 +261,34 @@ type ManualRunResult struct {
 	CursorAdvanced bool     `json:"cursorAdvanced"`
 }
 
-// RunManual triggers an installation outside of a schedule. It reuses the same
-// executor path as processSchedule but writes to the inbox immediately and
-// dispatches synchronously so the caller can show results straight away.
-func (s *Service) RunManual(ctx context.Context, accessToken string, installationID string, input ManualRunInput) (ManualRunResult, error) {
+type manualRunContext struct {
+	user         auth.UserDTO
+	installation plugins.Installation
+	binding      plugins.Binding
+	secrets      map[string]string
+	normalized   map[string]any
+	deviceID     string
+}
+
+// resolveManualRun performs auth, installation/binding lookup, config
+// normalization, and optional device validation for a manual run.
+func (s *Service) resolveManualRun(ctx context.Context, accessToken string, installationID string, input ManualRunInput) (manualRunContext, error) {
 	currentUser, err := s.auth.GetCurrentUser(ctx, accessToken)
 	if err != nil {
-		return ManualRunResult{}, err
+		return manualRunContext{}, err
 	}
 
 	installationID = strings.TrimSpace(installationID)
 	if installationID == "" {
-		return ManualRunResult{}, fmt.Errorf("%w: installation id is required", ErrInvalidInput)
+		return manualRunContext{}, fmt.Errorf("%w: installation id is required", ErrInvalidInput)
 	}
 
 	installation, manifest, err := s.plugins.GetInstallation(ctx, installationID)
 	if err != nil {
-		return ManualRunResult{}, err
+		return manualRunContext{}, err
 	}
 	if installation.Status != plugins.InstallationStatusReady {
-		return ManualRunResult{}, fmt.Errorf("%w: plugin is not ready", ErrInvalidInput)
+		return manualRunContext{}, fmt.Errorf("%w: plugin is not ready", ErrInvalidInput)
 	}
 
 	scheduleConfig := input.ScheduleConfig
@@ -289,26 +297,45 @@ func (s *Service) RunManual(ctx context.Context, accessToken string, installatio
 	}
 	normalized, _, fieldErrs := plugins.NormalizeConfigValues(manifest.ScheduleConfigSchema, scheduleConfig, false)
 	if len(fieldErrs) > 0 {
-		return ManualRunResult{}, fmt.Errorf("%w: %s", ErrInvalidInput, fieldErrs[0].Message)
+		return manualRunContext{}, fmt.Errorf("%w: %s", ErrInvalidInput, fieldErrs[0].Message)
 	}
 
 	binding, secrets, err := s.plugins.GetBindingForUser(ctx, installation.ID, currentUser.ID)
 	if err != nil {
-		return ManualRunResult{}, err
+		return manualRunContext{}, err
 	}
 	if !binding.Enabled || binding.Status != plugins.BindingStatusConnected {
-		return ManualRunResult{}, fmt.Errorf("%w: 插件连接未启用", ErrInvalidInput)
+		return manualRunContext{}, fmt.Errorf("%w: 插件连接未启用", ErrInvalidInput)
 	}
 
 	deviceID := strings.TrimSpace(input.DeviceID)
 	if deviceID != "" {
 		if _, err := s.printerRepo.FindBindingByID(ctx, currentUser.ID, deviceID); err != nil {
-			return ManualRunResult{}, err
+			return manualRunContext{}, err
 		}
 	}
 
+	return manualRunContext{
+		user:         currentUser,
+		installation: installation,
+		binding:      binding,
+		secrets:      secrets,
+		normalized:   normalized,
+		deviceID:     deviceID,
+	}, nil
+}
+
+// RunManual triggers an installation outside of a schedule. It reuses the same
+// executor path as processSchedule but writes to the inbox immediately and
+// dispatches synchronously so the caller can show results straight away.
+func (s *Service) RunManual(ctx context.Context, accessToken string, installationID string, input ManualRunInput) (ManualRunResult, error) {
+	prep, err := s.resolveManualRun(ctx, accessToken, installationID, input)
+	if err != nil {
+		return ManualRunResult{}, err
+	}
+
 	now := s.clock.Now()
-	output, err := s.plugins.ExecuteFetch(ctx, installation, binding, secrets, normalized, plugins.FetchTrigger{
+	output, err := s.plugins.ExecuteFetch(ctx, prep.installation, prep.binding, prep.secrets, prep.normalized, plugins.FetchTrigger{
 		Kind:        plugins.TriggerKindManual,
 		TriggeredAt: now.UTC().Format(time.RFC3339),
 	})
@@ -317,11 +344,11 @@ func (s *Service) RunManual(ctx context.Context, accessToken string, installatio
 	}
 
 	ingested, err := s.inbox.Ingest(ctx, inbox.IngestInput{
-		UserID:               currentUser.ID,
-		PluginInstallationID: installation.ID,
-		PluginBindingID:      binding.ID,
-		DeviceID:             deviceID,
-		SourceLabelFallback:  installation.DisplayName,
+		UserID:               prep.user.ID,
+		PluginInstallationID: prep.installation.ID,
+		PluginBindingID:      prep.binding.ID,
+		DeviceID:             prep.deviceID,
+		SourceLabelFallback:  prep.installation.DisplayName,
 		Items:                output.Items,
 	})
 	if err != nil {
@@ -330,13 +357,13 @@ func (s *Service) RunManual(ctx context.Context, accessToken string, installatio
 
 	cursorAdvanced := false
 	if output.Cursor != nil {
-		if err := s.plugins.UpdateBindingCursor(ctx, binding.ID, output.Cursor); err != nil {
+		if err := s.plugins.UpdateBindingCursor(ctx, prep.binding.ID, output.Cursor); err != nil {
 			return ManualRunResult{}, err
 		}
 		cursorAdvanced = true
 	}
 
-	flushed, err := s.dispatcher.FlushBinding(ctx, binding.ID, deviceID)
+	flushed, err := s.dispatcher.FlushBinding(ctx, prep.binding.ID, prep.deviceID)
 	if err != nil {
 		return ManualRunResult{}, err
 	}
@@ -365,6 +392,43 @@ func (s *Service) ProcessDue(ctx context.Context, limit int) (int, error) {
 	return len(claimed), nil
 }
 
+func (s *Service) failSchedule(ctx context.Context, current PrintSchedule, message string) {
+	current.LastError = &message
+	_ = s.repo.Save(ctx, current)
+}
+
+// resolveScheduleRun validates the schedule's plugin, binding, and config for
+// the upcoming run. On failure the schedule row is saved with LastError set
+// and the caller should abort.
+func (s *Service) resolveScheduleRun(ctx context.Context, current PrintSchedule) (plugins.Installation, plugins.Binding, map[string]string, bool) {
+	installation, manifest, err := s.plugins.GetInstallation(ctx, current.PluginInstallationID)
+	if err != nil {
+		s.failSchedule(ctx, current, err.Error())
+		return plugins.Installation{}, plugins.Binding{}, nil, false
+	}
+	if installation.Status != plugins.InstallationStatusReady {
+		s.failSchedule(ctx, current, "插件当前不可用")
+		return plugins.Installation{}, plugins.Binding{}, nil, false
+	}
+
+	if _, _, fieldErrs := plugins.NormalizeConfigValues(manifest.ScheduleConfigSchema, current.ScheduleConfig, false); len(fieldErrs) > 0 {
+		s.failSchedule(ctx, current, fieldErrs[0].Message)
+		return plugins.Installation{}, plugins.Binding{}, nil, false
+	}
+
+	binding, secrets, err := s.plugins.GetBindingForUser(ctx, current.PluginInstallationID, current.UserID)
+	if err != nil {
+		s.failSchedule(ctx, current, err.Error())
+		return plugins.Installation{}, plugins.Binding{}, nil, false
+	}
+	if !binding.Enabled || binding.Status != plugins.BindingStatusConnected {
+		s.failSchedule(ctx, current, "插件连接未启用")
+		return plugins.Installation{}, plugins.Binding{}, nil, false
+	}
+
+	return installation, binding, secrets, true
+}
+
 func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, now time.Time) {
 	scheduledFor := current.NextRunAt
 	nextRun, nextErr := NextRunAt(current.FrequencyType, current.Timezone, current.Hour, current.Minute, current.Weekdays, now)
@@ -376,38 +440,8 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 	current.LeaseUntil = nil
 	current.UpdatedAt = now
 
-	installation, manifest, err := s.plugins.GetInstallation(ctx, current.PluginInstallationID)
-	if err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
-		return
-	}
-	if installation.Status != plugins.InstallationStatusReady {
-		message := "插件当前不可用"
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
-		return
-	}
-
-	if _, _, fieldErrs := plugins.NormalizeConfigValues(manifest.ScheduleConfigSchema, current.ScheduleConfig, false); len(fieldErrs) > 0 {
-		message := fieldErrs[0].Message
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
-		return
-	}
-
-	binding, secrets, err := s.plugins.GetBindingForUser(ctx, current.PluginInstallationID, current.UserID)
-	if err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
-		return
-	}
-	if !binding.Enabled || binding.Status != plugins.BindingStatusConnected {
-		message := "插件连接未启用"
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
+	installation, binding, secrets, ok := s.resolveScheduleRun(ctx, current)
+	if !ok {
 		return
 	}
 
@@ -418,9 +452,7 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 		Timezone:     current.Timezone,
 	})
 	if err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
+		s.failSchedule(ctx, current, err.Error())
 		return
 	}
 
@@ -432,25 +464,19 @@ func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, no
 		SourceLabelFallback:  installation.DisplayName,
 		Items:                output.Items,
 	}); err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
+		s.failSchedule(ctx, current, err.Error())
 		return
 	}
 
 	if output.Cursor != nil {
 		if err := s.plugins.UpdateBindingCursor(ctx, binding.ID, output.Cursor); err != nil {
-			message := err.Error()
-			current.LastError = &message
-			_ = s.repo.Save(ctx, current)
+			s.failSchedule(ctx, current, err.Error())
 			return
 		}
 	}
 
 	if _, err := s.dispatcher.FlushBinding(ctx, binding.ID, current.DeviceID); err != nil {
-		message := err.Error()
-		current.LastError = &message
-		_ = s.repo.Save(ctx, current)
+		s.failSchedule(ctx, current, err.Error())
 		return
 	}
 
