@@ -124,6 +124,7 @@ func main() {
 		store,
 		store,
 		clock.SystemClock{},
+		cfg.DispatchRetryBackoff,
 	)
 	scheduleService := schedule.NewService(
 		store,

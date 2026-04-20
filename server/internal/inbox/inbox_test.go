@@ -56,7 +56,7 @@ func (r *memoryRepo) ListPendingByBinding(_ context.Context, bindingID string, l
 		if item.PluginBindingID != bindingID {
 			continue
 		}
-		if item.Status != StatusPending && item.Status != StatusFailed {
+		if item.Status != StatusPending {
 			continue
 		}
 		result = append(result, item)
@@ -66,6 +66,32 @@ func (r *memoryRepo) ListPendingByBinding(_ context.Context, bindingID string, l
 		result = result[:limit]
 	}
 	return result, nil
+}
+
+func (r *memoryRepo) ListPendingBindingIDs(_ context.Context, limit int) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	oldest := map[string]time.Time{}
+	for _, item := range r.items {
+		if item.Status != StatusPending {
+			continue
+		}
+		current, exists := oldest[item.PluginBindingID]
+		if !exists || item.CreatedAt.Before(current) {
+			oldest[item.PluginBindingID] = item.CreatedAt
+		}
+	}
+
+	ids := make([]string, 0, len(oldest))
+	for bindingID := range oldest {
+		ids = append(ids, bindingID)
+	}
+	sort.Slice(ids, func(i, j int) bool { return oldest[ids[i]].Before(oldest[ids[j]]) })
+	if limit > 0 && len(ids) > limit {
+		ids = ids[:limit]
+	}
+	return ids, nil
 }
 
 func (r *memoryRepo) ListRetryable(_ context.Context, olderThan time.Time, limit int) ([]Item, error) {
@@ -280,6 +306,13 @@ func TestMarkFailedMovesItemToRetryable(t *testing.T) {
 
 	if err := service.MarkFailed(context.Background(), item, "network down"); err != nil {
 		t.Fatalf("mark failed: %v", err)
+	}
+	pending, err := service.ListPendingByBinding(context.Background(), "binding-1", 10)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("expected failed item to leave pending queue, got %d pending rows", len(pending))
 	}
 	retryable, err := service.ListRetryable(context.Background(), now.Add(1*time.Hour), 10)
 	if err != nil {

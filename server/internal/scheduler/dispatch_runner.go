@@ -8,13 +8,15 @@ import (
 	"github.com/ruhuang/ink/server/internal/dispatch"
 )
 
-// DispatchProcessor retries inbox items that previously failed to dispatch.
+// DispatchProcessor drains pending backlog and retries inbox items that
+// previously failed to dispatch.
 type DispatchProcessor interface {
+	DrainPending(ctx context.Context, limit int) (dispatch.FlushResult, error)
 	RetryFailed(ctx context.Context, limit int) (dispatch.FlushResult, error)
 }
 
-// DispatchRunner periodically invokes RetryFailed on the dispatch service so
-// transient delivery failures self-heal without operator intervention.
+// DispatchRunner periodically drains pending backlog and retries failed items
+// so transient delivery failures self-heal and over-budget fetches keep moving.
 type DispatchRunner struct {
 	processor DispatchProcessor
 	logger    *slog.Logger
@@ -56,16 +58,27 @@ func (r *DispatchRunner) Start(ctx context.Context) {
 }
 
 func (r *DispatchRunner) runOnce(ctx context.Context) {
-	result, err := r.processor.RetryFailed(ctx, r.limit)
+	pendingResult, err := r.processor.DrainPending(ctx, r.limit)
+	if err != nil {
+		r.logger.Error("pending backlog drain failed", "error", err)
+	} else if pendingResult.Printed > 0 || pendingResult.Failed > 0 || pendingResult.Skipped > 0 {
+		r.logger.Info("drained pending inbox items",
+			"printed", pendingResult.Printed,
+			"failed", pendingResult.Failed,
+			"skipped", pendingResult.Skipped,
+		)
+	}
+
+	retryResult, err := r.processor.RetryFailed(ctx, r.limit)
 	if err != nil {
 		r.logger.Error("dispatch retry failed", "error", err)
 		return
 	}
-	if result.Printed > 0 || result.Failed > 0 {
+	if retryResult.Printed > 0 || retryResult.Failed > 0 || retryResult.Skipped > 0 {
 		r.logger.Info("retried failed inbox items",
-			"printed", result.Printed,
-			"failed", result.Failed,
-			"skipped", result.Skipped,
+			"printed", retryResult.Printed,
+			"failed", retryResult.Failed,
+			"skipped", retryResult.Skipped,
 		)
 	}
 }
