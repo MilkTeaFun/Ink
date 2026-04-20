@@ -41,7 +41,22 @@ func (GoGitCloner) Clone(ctx context.Context, repoURL, ref, destDir string) (str
 	if ref != "" && !safeGitRefPattern.MatchString(ref) {
 		return "", fmt.Errorf("%w: git ref contains unsupported characters", ErrInvalidInput)
 	}
+	repo, err := cloneRepo(ctx, repoURL, ref, destDir)
+	if err != nil {
+		return "", fmt.Errorf("git clone: %w", err)
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("git head: %w", err)
+	}
+	return head.Hash().String(), nil
+}
 
+// cloneRepo performs the PlainCloneContext call, falling back from a branch
+// reference to a tag reference when ref is non-empty and the branch lookup
+// fails. Extracted to keep GoGitCloner.Clone under the Codacy complexity
+// threshold.
+func cloneRepo(ctx context.Context, repoURL, ref, destDir string) (*gogit.Repository, error) {
 	opts := &gogit.CloneOptions{
 		URL:          repoURL,
 		Depth:        1,
@@ -51,22 +66,12 @@ func (GoGitCloner) Clone(ctx context.Context, repoURL, ref, destDir string) (str
 	if ref != "" {
 		opts.ReferenceName = plumbing.NewBranchReferenceName(ref)
 	}
-
 	repo, err := gogit.PlainCloneContext(ctx, destDir, false, opts)
-	if err != nil && ref != "" && errors.Is(err, plumbing.ErrReferenceNotFound) {
-		// Retry treating ref as a tag rather than a branch.
-		opts.ReferenceName = plumbing.NewTagReferenceName(ref)
-		repo, err = gogit.PlainCloneContext(ctx, destDir, false, opts)
+	if err == nil || ref == "" || !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return repo, err
 	}
-	if err != nil {
-		return "", fmt.Errorf("git clone: %w", err)
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		return "", fmt.Errorf("git head: %w", err)
-	}
-	return head.Hash().String(), nil
+	opts.ReferenceName = plumbing.NewTagReferenceName(ref)
+	return gogit.PlainCloneContext(ctx, destDir, false, opts)
 }
 
 // GitInstallInput describes a request to install a plugin from a remote git
