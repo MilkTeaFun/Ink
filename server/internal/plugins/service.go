@@ -73,15 +73,17 @@ type Runner interface {
 }
 
 type Service struct {
-	repo           Repository
-	auth           Authenticator
-	encryptor      Encryptor
-	ids            IDGenerator
-	clock          Clock
-	runner         Runner
-	pluginRoot     string
-	execTimeout    time.Duration
-	installTimeout time.Duration
+	repo            Repository
+	auth            Authenticator
+	encryptor       Encryptor
+	ids             IDGenerator
+	clock           Clock
+	runner          Runner
+	pluginRoot      string
+	execTimeout     time.Duration
+	installTimeout  time.Duration
+	gitCloner       GitCloner
+	gitAllowedHosts []string
 }
 
 type validationPayload struct {
@@ -109,21 +111,27 @@ func NewService(
 	pluginRoot string,
 	execTimeout time.Duration,
 	installTimeout time.Duration,
+	gitCloner GitCloner,
+	gitAllowedHosts []string,
 ) *Service {
 	if runner == nil {
 		runner = execRunner{}
 	}
 
+	hosts := append([]string{}, gitAllowedHosts...)
+
 	return &Service{
-		repo:           repo,
-		auth:           authenticator,
-		encryptor:      encryptor,
-		ids:            ids,
-		clock:          clock,
-		runner:         runner,
-		pluginRoot:     pluginRoot,
-		execTimeout:    execTimeout,
-		installTimeout: installTimeout,
+		repo:            repo,
+		auth:            authenticator,
+		encryptor:       encryptor,
+		ids:             ids,
+		clock:           clock,
+		runner:          runner,
+		pluginRoot:      pluginRoot,
+		execTimeout:     execTimeout,
+		installTimeout:  installTimeout,
+		gitCloner:       gitCloner,
+		gitAllowedHosts: hosts,
 	}
 }
 
@@ -295,6 +303,191 @@ func (s *Service) UploadPlugin(ctx context.Context, accessToken string, filename
 	}
 
 	return s.detailsFromInstallation(installation, nil), nil
+}
+
+// gitInstallContext bundles the inputs needed once URL/subdir validation has
+// passed. It keeps InstallFromGit short enough for Codacy.
+type gitInstallContext struct {
+	user          string
+	normalizedURL string
+	ref           string
+	subdir        string
+	manifest      Manifest
+	manifestJSON  []byte
+	pluginDir     string
+	commitSHA     string
+}
+
+// InstallFromGit clones a plugin from a remote git repository, validates and
+// installs it using the same pipeline as UploadPlugin. The repository must
+// use HTTPS and its host must be present in the configured allowlist.
+func (s *Service) InstallFromGit(ctx context.Context, accessToken string, input GitInstallInput) (PluginDetails, error) {
+	if s.gitCloner == nil {
+		return PluginDetails{}, ErrGitInstallDisabled
+	}
+	currentUser, err := s.requireAdminUser(ctx, accessToken)
+	if err != nil {
+		return PluginDetails{}, err
+	}
+	normalizedURL, subdir, ref, err := s.validateGitInput(input)
+	if err != nil {
+		return PluginDetails{}, err
+	}
+	if err := s.ensurePluginRoot(); err != nil {
+		return PluginDetails{}, err
+	}
+
+	stagingDir, err := os.MkdirTemp(s.pluginRoot, "plugin-git-*")
+	if err != nil {
+		return PluginDetails{}, err
+	}
+	defer func() {
+		_ = os.RemoveAll(stagingDir)
+	}()
+
+	pluginDir, manifest, manifestJSON, commitSHA, err := s.cloneAndParse(ctx, stagingDir, normalizedURL, ref, subdir)
+	if err != nil {
+		return PluginDetails{}, err
+	}
+
+	gc := gitInstallContext{
+		user:          currentUser.ID,
+		normalizedURL: normalizedURL,
+		ref:           ref,
+		subdir:        subdir,
+		manifest:      manifest,
+		manifestJSON:  manifestJSON,
+		pluginDir:     pluginDir,
+		commitSHA:     commitSHA,
+	}
+	return s.finalizeGitInstall(ctx, gc)
+}
+
+func (s *Service) validateGitInput(input GitInstallInput) (string, string, string, error) {
+	normalizedURL, _, err := validateGitURL(input.RepoURL, s.gitAllowedHosts)
+	if err != nil {
+		return "", "", "", err
+	}
+	subdir, err := sanitizeSubdir(input.Subdir)
+	if err != nil {
+		return "", "", "", err
+	}
+	return normalizedURL, subdir, strings.TrimSpace(input.Ref), nil
+}
+
+func (s *Service) cloneAndParse(ctx context.Context, stagingDir, normalizedURL, ref, subdir string) (string, Manifest, []byte, string, error) {
+	cloneDir := filepath.Join(stagingDir, "clone")
+	cloneCtx, cancel := context.WithTimeout(ctx, s.installTimeout)
+	defer cancel()
+
+	commitSHA, err := s.gitCloner.Clone(cloneCtx, normalizedURL, ref, cloneDir)
+	if err != nil {
+		return "", Manifest{}, nil, "", fmt.Errorf("%w: %s", ErrInvalidPlugin, err.Error())
+	}
+	pluginDir, err := resolvePluginDirectoryInClone(cloneDir, subdir)
+	if err != nil {
+		return "", Manifest{}, nil, "", err
+	}
+	manifestJSON, err := os.ReadFile(filepath.Join(pluginDir, "ink-plugin.json"))
+	if err != nil {
+		return "", Manifest{}, nil, "", fmt.Errorf("%w: missing ink-plugin.json", ErrInvalidPlugin)
+	}
+	manifest, err := ParseManifest(manifestJSON)
+	if err != nil {
+		return "", Manifest{}, nil, "", err
+	}
+	if err := validateRuntimeFiles(pluginDir, manifest); err != nil {
+		return "", Manifest{}, nil, "", err
+	}
+	return pluginDir, manifest, manifestJSON, commitSHA, nil
+}
+
+func (s *Service) finalizeGitInstall(ctx context.Context, gc gitInstallContext) (PluginDetails, error) {
+	if err := s.installPlugin(ctx, gc.pluginDir, gc.manifest); err != nil {
+		s.recordFailedGitInstall(ctx, gc, err)
+		return PluginDetails{}, err
+	}
+	installationID, createdAt, err := s.resolveInstallationID(ctx, gc.manifest.PluginKey)
+	if err != nil {
+		return PluginDetails{}, err
+	}
+	now := s.clock.Now()
+	finalDir := filepath.Join(s.pluginRoot, "installations", fmt.Sprintf("%s-%d", installationID, now.UnixNano()))
+	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
+		return PluginDetails{}, err
+	}
+	if err := os.Rename(gc.pluginDir, finalDir); err != nil {
+		return PluginDetails{}, err
+	}
+	installation := Installation{
+		ID:            installationID,
+		PluginKey:     gc.manifest.PluginKey,
+		SourceType:    SourceTypeGit,
+		DisplayName:   gc.manifest.Name,
+		Version:       gc.manifest.Version,
+		RuntimeType:   gc.manifest.Runtime.Type,
+		ManifestJSON:  gc.manifestJSON,
+		CurrentPath:   finalDir,
+		Status:        InstallationStatusReady,
+		InstalledBy:   &gc.user,
+		RepoURL:       gc.normalizedURL,
+		RepoRef:       gc.ref,
+		RepoCommitSHA: gc.commitSHA,
+		RepoSubdir:    gc.subdir,
+		CreatedAt:     createdAt,
+		UpdatedAt:     now,
+	}
+	if err := s.repo.SaveInstallation(ctx, installation); err != nil {
+		return PluginDetails{}, err
+	}
+	return s.detailsFromInstallation(installation, nil), nil
+}
+
+func (s *Service) resolveInstallationID(ctx context.Context, pluginKey string) (string, time.Time, error) {
+	existing, err := s.repo.FindInstallationByPluginKey(ctx, pluginKey)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	now := s.clock.Now()
+	if existing != nil {
+		return existing.ID, existing.CreatedAt, nil
+	}
+	id, err := s.ids.New("plugin")
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return id, now, nil
+}
+
+func (s *Service) recordFailedGitInstall(ctx context.Context, gc gitInstallContext, installErr error) {
+	existing, lookupErr := s.repo.FindInstallationByPluginKey(ctx, gc.manifest.PluginKey)
+	if lookupErr != nil || existing != nil {
+		return
+	}
+	installationID, idErr := s.ids.New("plugin")
+	if idErr != nil {
+		return
+	}
+	now := s.clock.Now()
+	message := installErr.Error()
+	_ = s.repo.SaveInstallation(ctx, Installation{
+		ID:            installationID,
+		PluginKey:     gc.manifest.PluginKey,
+		SourceType:    SourceTypeGit,
+		DisplayName:   gc.manifest.Name,
+		Version:       gc.manifest.Version,
+		RuntimeType:   gc.manifest.Runtime.Type,
+		ManifestJSON:  gc.manifestJSON,
+		Status:        InstallationStatusFailed,
+		LastError:     &message,
+		InstalledBy:   &gc.user,
+		RepoURL:       gc.normalizedURL,
+		RepoRef:       gc.ref,
+		RepoCommitSHA: gc.commitSHA,
+		RepoSubdir:    gc.subdir,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	})
 }
 
 func (s *Service) DisableInstallation(ctx context.Context, accessToken string, installationID string) (PluginDetails, error) {
@@ -686,16 +879,20 @@ func (s *Service) detailsFromInstallation(installation Installation, binding *Bi
 	manifest, _ := ParseManifest(installation.ManifestJSON)
 	details := PluginDetails{
 		Installation: InstallationSummary{
-			ID:          installation.ID,
-			PluginKey:   installation.PluginKey,
-			SourceType:  installation.SourceType,
-			DisplayName: installation.DisplayName,
-			Version:     installation.Version,
-			RuntimeType: installation.RuntimeType,
-			Status:      installation.Status,
-			Description: manifest.Description,
-			CreatedAt:   &installation.CreatedAt,
-			UpdatedAt:   &installation.UpdatedAt,
+			ID:            installation.ID,
+			PluginKey:     installation.PluginKey,
+			SourceType:    installation.SourceType,
+			DisplayName:   installation.DisplayName,
+			Version:       installation.Version,
+			RuntimeType:   installation.RuntimeType,
+			Status:        installation.Status,
+			Description:   manifest.Description,
+			RepoURL:       installation.RepoURL,
+			RepoRef:       installation.RepoRef,
+			RepoCommitSHA: installation.RepoCommitSHA,
+			RepoSubdir:    installation.RepoSubdir,
+			CreatedAt:     &installation.CreatedAt,
+			UpdatedAt:     &installation.UpdatedAt,
 		},
 		Manifest: manifest,
 	}

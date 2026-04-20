@@ -403,6 +403,10 @@ func (f fakePluginService) UploadPlugin(_ context.Context, _ string, _ string, _
 	return f.result, f.err
 }
 
+func (f fakePluginService) InstallFromGit(_ context.Context, _ string, _ plugins.GitInstallInput) (plugins.PluginDetails, error) {
+	return f.result, f.err
+}
+
 func (f fakePluginService) DisableInstallation(_ context.Context, _ string, _ string) (plugins.PluginDetails, error) {
 	return f.result, f.err
 }
