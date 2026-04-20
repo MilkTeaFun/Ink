@@ -47,6 +47,9 @@ const DefaultBatchSize = 20
 // binding has not configured its own MaxPrintsPerDay.
 const DefaultDailyCap = 50
 
+// DefaultRetryBackoff is the minimum delay between failed dispatch attempts.
+const DefaultRetryBackoff = 15 * time.Minute
+
 // DailyCounter returns how many items a binding has already printed within
 // the rolling 24h window. Implementations are typically backed by the inbox
 // repository using a count query.
@@ -56,12 +59,13 @@ type DailyCounter interface {
 
 // Service dispatches items out of the inbox into print jobs.
 type Service struct {
-	inbox     *inbox.Service
-	plugins   PluginRuntime
-	printer   PrinterJobCreator
-	workspace WorkspaceRepository
-	counter   DailyCounter
-	clock     Clock
+	inbox        *inbox.Service
+	plugins      PluginRuntime
+	printer      PrinterJobCreator
+	workspace    WorkspaceRepository
+	counter      DailyCounter
+	clock        Clock
+	retryBackoff time.Duration
 }
 
 // NewService builds a dispatcher.
@@ -72,14 +76,19 @@ func NewService(
 	workspaceRepo WorkspaceRepository,
 	counter DailyCounter,
 	clock Clock,
+	retryBackoff time.Duration,
 ) *Service {
+	if retryBackoff <= 0 {
+		retryBackoff = DefaultRetryBackoff
+	}
 	return &Service{
-		inbox:     inboxService,
-		plugins:   pluginRuntime,
-		printer:   printerCreator,
-		workspace: workspaceRepo,
-		counter:   counter,
-		clock:     clock,
+		inbox:        inboxService,
+		plugins:      pluginRuntime,
+		printer:      printerCreator,
+		workspace:    workspaceRepo,
+		counter:      counter,
+		clock:        clock,
+		retryBackoff: retryBackoff,
 	}
 }
 
@@ -94,38 +103,40 @@ type FlushResult struct {
 // FlushBinding drains pending items for a binding into the printer up to the
 // configured rate limits. It is safe to call from both schedule processors
 // and the manual trigger endpoint.
-//
-// The defaultDeviceID is used as a fallback for items that don't record their
-// own device (for example, items ingested before a schedule had a device set).
 func (s *Service) FlushBinding(ctx context.Context, bindingID string, defaultDeviceID string) (FlushResult, error) {
-	result := FlushResult{}
-	if strings.TrimSpace(bindingID) == "" {
-		return result, errors.New("binding id is required")
+	return s.dispatchPending(ctx, bindingID, defaultDeviceID, 0)
+}
+
+// DrainPending flushes pending items across bindings so backlog created by a
+// previous over-budget fetch can continue draining even when the source goes
+// quiet. The limit caps the total number of items processed in one pass.
+func (s *Service) DrainPending(ctx context.Context, limit int) (FlushResult, error) {
+	if limit <= 0 {
+		limit = DefaultBatchSize
 	}
 
-	binding, _, err := s.plugins.GetBindingByID(ctx, bindingID)
+	bindingIDs, err := s.inbox.ListPendingBindingIDs(ctx, limit)
 	if err != nil {
-		return result, err
-	}
-	installation, _, err := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
-	if err != nil {
-		return result, err
+		return FlushResult{}, err
 	}
 
-	budget, err := s.dispatchBudget(ctx, binding)
-	if err != nil {
-		return result, err
+	aggregate := FlushResult{}
+	remaining := limit
+	for _, bindingID := range bindingIDs {
+		if remaining <= 0 {
+			break
+		}
+		result, err := s.dispatchPending(ctx, bindingID, "", remaining)
+		if err != nil {
+			continue
+		}
+		mergeFlushResult(&aggregate, result)
+		processed := result.Printed + result.Failed + result.Skipped
+		if processed > 0 {
+			remaining -= processed
+		}
 	}
-	if budget <= 0 {
-		return result, nil
-	}
-
-	items, err := s.inbox.ListPendingByBinding(ctx, bindingID, budget)
-	if err != nil {
-		return result, err
-	}
-
-	return s.dispatchItems(ctx, binding, installation, items, defaultDeviceID)
+	return aggregate, nil
 }
 
 // dispatchBudget returns the number of items the dispatcher is allowed to
@@ -155,6 +166,48 @@ func (s *Service) dispatchBudget(ctx context.Context, binding plugins.Binding) (
 	return perRun, nil
 }
 
+func (s *Service) resolveDispatchContext(ctx context.Context, bindingID string) (plugins.Binding, plugins.Installation, error) {
+	binding, _, err := s.plugins.GetBindingByID(ctx, bindingID)
+	if err != nil {
+		return plugins.Binding{}, plugins.Installation{}, err
+	}
+	installation, _, err := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
+	if err != nil {
+		return plugins.Binding{}, plugins.Installation{}, err
+	}
+	return binding, installation, nil
+}
+
+func (s *Service) dispatchPending(ctx context.Context, bindingID string, defaultDeviceID string, limit int) (FlushResult, error) {
+	result := FlushResult{}
+	if strings.TrimSpace(bindingID) == "" {
+		return result, errors.New("binding id is required")
+	}
+
+	binding, installation, err := s.resolveDispatchContext(ctx, bindingID)
+	if err != nil {
+		return result, err
+	}
+
+	budget, err := s.dispatchBudget(ctx, binding)
+	if err != nil {
+		return result, err
+	}
+	if limit > 0 && budget > limit {
+		budget = limit
+	}
+	if budget <= 0 {
+		return result, nil
+	}
+
+	items, err := s.inbox.ListPendingByBinding(ctx, bindingID, budget)
+	if err != nil {
+		return result, err
+	}
+
+	return s.dispatchItems(ctx, binding, installation, items, defaultDeviceID)
+}
+
 // RetryFailed pulls retryable failed items across all bindings and attempts
 // to flush them. It is intended to be called periodically from a background
 // runner.
@@ -162,7 +215,7 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 	if limit <= 0 {
 		limit = DefaultBatchSize
 	}
-	cutoff := s.clock.Now().Add(-15 * time.Minute)
+	cutoff := s.clock.Now().Add(-s.retryBackoff)
 	items, err := s.inbox.ListRetryable(ctx, cutoff, limit)
 	if err != nil {
 		return FlushResult{}, err
@@ -179,10 +232,7 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 		if !ok {
 			continue
 		}
-		aggregate.Printed += result.Printed
-		aggregate.Failed += result.Failed
-		aggregate.Skipped += result.Skipped
-		aggregate.PrintJobIDs = append(aggregate.PrintJobIDs, result.PrintJobIDs...)
+		mergeFlushResult(&aggregate, result)
 	}
 	return aggregate, nil
 }
@@ -192,11 +242,7 @@ func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, erro
 // binding should be skipped (missing binding/installation or budget lookup
 // failure). Skipped-because-budget-exhausted is reported inside the result.
 func (s *Service) retryBindingBatch(ctx context.Context, bindingID string, batch []inbox.Item) (FlushResult, bool) {
-	binding, _, err := s.plugins.GetBindingByID(ctx, bindingID)
-	if err != nil {
-		return FlushResult{}, false
-	}
-	installation, _, err := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
+	binding, installation, err := s.resolveDispatchContext(ctx, bindingID)
 	if err != nil {
 		return FlushResult{}, false
 	}
@@ -220,6 +266,13 @@ func (s *Service) retryBindingBatch(ctx context.Context, bindingID string, batch
 	return result, true
 }
 
+func mergeFlushResult(dst *FlushResult, src FlushResult) {
+	dst.Printed += src.Printed
+	dst.Failed += src.Failed
+	dst.Skipped += src.Skipped
+	dst.PrintJobIDs = append(dst.PrintJobIDs, src.PrintJobIDs...)
+}
+
 // resolveSendConfirmation loads the caller's workspace preferences and
 // returns whether print jobs should wait for user confirmation before
 // submission. Missing workspace or lookup errors fall back to the platform
@@ -238,13 +291,17 @@ func (s *Service) resolveSendConfirmation(ctx context.Context, userID string) bo
 	return workspace.NormalizeState(*state).Preferences.SendConfirmationEnabled
 }
 
-// pickDeviceID chooses the device id for a given item, preferring the item's
-// own binding if set and falling back to the caller-provided default.
+// pickDeviceID chooses the device id for a given item, preferring the caller's
+// current default and only falling back to the stored inbox snapshot when the
+// caller has no fresher routing information.
 func pickDeviceID(item inbox.Item, defaultDeviceID string) string {
-	if item.DeviceID != nil && strings.TrimSpace(*item.DeviceID) != "" {
-		return *item.DeviceID
+	if trimmed := strings.TrimSpace(defaultDeviceID); trimmed != "" {
+		return trimmed
 	}
-	return defaultDeviceID
+	if item.DeviceID != nil && strings.TrimSpace(*item.DeviceID) != "" {
+		return strings.TrimSpace(*item.DeviceID)
+	}
+	return ""
 }
 
 // dispatchOne attempts to print one item. It returns the outcome so the
