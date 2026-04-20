@@ -31,6 +31,7 @@ type Config struct {
 	PluginExecTimeout         time.Duration
 	PluginInstallTimeout      time.Duration
 	PluginUploadMaxBytes      int64
+	PluginGitAllowedHosts     []string
 	SchedulerPollInterval     time.Duration
 	DispatchRetryInterval     time.Duration
 	DispatchRetryBatch        int
@@ -134,6 +135,7 @@ func Load() (Config, error) {
 		PluginExecTimeout:         pluginExecTimeout,
 		PluginInstallTimeout:      pluginInstallTimeout,
 		PluginUploadMaxBytes:      pluginUploadMaxBytes,
+		PluginGitAllowedHosts:     envStringList("PLUGIN_GIT_ALLOWED_HOSTS", []string{"github.com", "gitee.com", "gitlab.com"}),
 		SchedulerPollInterval:     schedulerPollInterval,
 		DispatchRetryInterval:     dispatchRetryInterval,
 		DispatchRetryBatch:        dispatchRetryBatch,
@@ -282,6 +284,26 @@ func envDuration(key string, fallback time.Duration) (time.Duration, error) {
 	}
 
 	return parsed, nil
+}
+
+// envStringList returns a comma-separated env var as a trimmed non-empty
+// string slice, falling back to the provided default when the var is unset
+// or empty.
+func envStringList(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func envBool(key string, fallback bool) bool {

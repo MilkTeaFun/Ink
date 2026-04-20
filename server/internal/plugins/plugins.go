@@ -11,6 +11,7 @@ type TriggerKind string
 
 const (
 	SourceTypeUpload SourceType = "upload"
+	SourceTypeGit    SourceType = "git"
 
 	InstallationStatusInstalling InstallationStatus = "installing"
 	InstallationStatusReady      InstallationStatus = "ready"
@@ -92,8 +93,13 @@ type Installation struct {
 	Status       InstallationStatus
 	LastError    *string
 	InstalledBy  *string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// Git install metadata. Empty for upload installs.
+	RepoURL       string
+	RepoRef       string
+	RepoCommitSHA string
+	RepoSubdir    string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type Binding struct {
@@ -168,17 +174,21 @@ type FetchOutput struct {
 }
 
 type InstallationSummary struct {
-	ID          string             `json:"id"`
-	PluginKey   string             `json:"pluginKey"`
-	SourceType  SourceType         `json:"sourceType"`
-	DisplayName string             `json:"displayName"`
-	Version     string             `json:"version"`
-	RuntimeType string             `json:"runtimeType"`
-	Status      InstallationStatus `json:"status"`
-	LastError   string             `json:"lastError,omitempty"`
-	Description string             `json:"description,omitempty"`
-	CreatedAt   *time.Time         `json:"createdAt,omitempty"`
-	UpdatedAt   *time.Time         `json:"updatedAt,omitempty"`
+	ID            string             `json:"id"`
+	PluginKey     string             `json:"pluginKey"`
+	SourceType    SourceType         `json:"sourceType"`
+	DisplayName   string             `json:"displayName"`
+	Version       string             `json:"version"`
+	RuntimeType   string             `json:"runtimeType"`
+	Status        InstallationStatus `json:"status"`
+	LastError     string             `json:"lastError,omitempty"`
+	Description   string             `json:"description,omitempty"`
+	RepoURL       string             `json:"repoUrl,omitempty"`
+	RepoRef       string             `json:"repoRef,omitempty"`
+	RepoCommitSHA string             `json:"repoCommitSha,omitempty"`
+	RepoSubdir    string             `json:"repoSubdir,omitempty"`
+	CreatedAt     *time.Time         `json:"createdAt,omitempty"`
+	UpdatedAt     *time.Time         `json:"updatedAt,omitempty"`
 }
 
 type BindingSummary struct {

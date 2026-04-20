@@ -26,6 +26,7 @@ import (
 type PluginService interface {
 	ListAdminInstallations(ctx context.Context, accessToken string) ([]plugins.PluginDetails, error)
 	UploadPlugin(ctx context.Context, accessToken string, filename string, source io.Reader) (plugins.PluginDetails, error)
+	InstallFromGit(ctx context.Context, accessToken string, input plugins.GitInstallInput) (plugins.PluginDetails, error)
 	DisableInstallation(ctx context.Context, accessToken string, installationID string) (plugins.PluginDetails, error)
 	ListUserPlugins(ctx context.Context, accessToken string) ([]plugins.PluginDetails, error)
 	GetUserPlugin(ctx context.Context, accessToken string, installationID string) (plugins.PluginDetails, error)
@@ -107,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/ai/reply", s.wrap(s.handleGenerateAIReply))
 	mux.HandleFunc("GET /api/v1/admin/plugins", s.wrap(s.handleListAdminPlugins))
 	mux.HandleFunc("POST /api/v1/admin/plugins/upload", s.wrap(s.handleUploadPlugin))
+	mux.HandleFunc("POST /api/v1/admin/plugins/install-from-git", s.wrap(s.handleInstallPluginFromGit))
 	mux.HandleFunc("POST /api/v1/admin/plugins/{installationID}/disable", s.wrap(s.handleDisablePlugin))
 	mux.HandleFunc("GET /api/v1/plugins", s.wrap(s.handleListPlugins))
 	mux.HandleFunc("GET /api/v1/plugins/{installationID}", s.wrap(s.handleGetPlugin))
@@ -516,6 +518,38 @@ func (s *Server) handleUploadPlugin(w http.ResponseWriter, r *http.Request, requ
 	}()
 
 	details, err := s.plugins.UploadPlugin(r.Context(), accessToken, header.Filename, file)
+	if err != nil {
+		s.writePluginError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]plugins.PluginDetails{"plugin": details})
+}
+
+type installPluginFromGitRequest struct {
+	RepoURL string `json:"repoUrl"`
+	Ref     string `json:"ref"`
+	Subdir  string `json:"subdir"`
+}
+
+func (s *Server) handleInstallPluginFromGit(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	var req installPluginFromGitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, requestID, http.StatusBadRequest, "invalid_json", "请求体必须是 JSON。")
+		return
+	}
+
+	details, err := s.plugins.InstallFromGit(r.Context(), accessToken, plugins.GitInstallInput{
+		RepoURL: req.RepoURL,
+		Ref:     req.Ref,
+		Subdir:  req.Subdir,
+	})
 	if err != nil {
 		s.writePluginError(w, requestID, err)
 		return
@@ -1045,6 +1079,8 @@ func (s *Server) writePluginError(w http.ResponseWriter, requestID string, err e
 		writeError(w, requestID, http.StatusBadRequest, "invalid_plugin_input", "请输入有效的插件配置。")
 	case errors.Is(err, plugins.ErrInvalidPlugin):
 		writeError(w, requestID, http.StatusBadRequest, "invalid_plugin_package", err.Error())
+	case errors.Is(err, plugins.ErrGitInstallDisabled):
+		writeError(w, requestID, http.StatusServiceUnavailable, "plugin_git_install_disabled", "服务端未启用从 Git 仓库安装插件。")
 	case errors.Is(err, plugins.ErrExecutionFailed):
 		writeError(w, requestID, http.StatusBadGateway, "plugin_execution_failed", err.Error())
 	default:

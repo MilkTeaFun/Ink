@@ -16,10 +16,13 @@ const pluginBindingColumns = `id, plugin_installation_id, user_id, enabled, conf
 			secret_nonce, cursor_json, max_prints_per_run, max_prints_per_day,
 			status, last_validated_at, last_error, created_at, updated_at`
 
+const pluginInstallationColumns = `id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
+			current_path, status, last_error, installed_by, repo_url, repo_ref, repo_commit_sha,
+			repo_subdir, created_at, updated_at`
+
 func (s *Store) ListInstallations(ctx context.Context) ([]plugins.Installation, error) {
 	rows, err := s.db.Query(ctx, `
-		select id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
-			current_path, status, last_error, installed_by, created_at, updated_at
+		select `+pluginInstallationColumns+`
 		from plugin_installations
 		order by updated_at desc, created_at desc
 	`)
@@ -42,8 +45,7 @@ func (s *Store) ListInstallations(ctx context.Context) ([]plugins.Installation, 
 
 func (s *Store) FindInstallationByID(ctx context.Context, installationID string) (*plugins.Installation, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
-			current_path, status, last_error, installed_by, created_at, updated_at
+		select `+pluginInstallationColumns+`
 		from plugin_installations
 		where id = $1
 	`, installationID)
@@ -52,8 +54,7 @@ func (s *Store) FindInstallationByID(ctx context.Context, installationID string)
 
 func (s *Store) FindInstallationByPluginKey(ctx context.Context, pluginKey string) (*plugins.Installation, error) {
 	row := s.db.QueryRow(ctx, `
-		select id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
-			current_path, status, last_error, installed_by, created_at, updated_at
+		select `+pluginInstallationColumns+`
 		from plugin_installations
 		where plugin_key = $1
 	`, pluginKey)
@@ -64,8 +65,9 @@ func (s *Store) SaveInstallation(ctx context.Context, installation plugins.Insta
 	_, err := s.db.Exec(ctx, `
 		insert into plugin_installations (
 			id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
-			current_path, status, last_error, installed_by, created_at, updated_at
-		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			current_path, status, last_error, installed_by, repo_url, repo_ref, repo_commit_sha,
+			repo_subdir, created_at, updated_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		on conflict (id)
 		do update set
 			plugin_key = excluded.plugin_key,
@@ -78,6 +80,10 @@ func (s *Store) SaveInstallation(ctx context.Context, installation plugins.Insta
 			status = excluded.status,
 			last_error = excluded.last_error,
 			installed_by = excluded.installed_by,
+			repo_url = excluded.repo_url,
+			repo_ref = excluded.repo_ref,
+			repo_commit_sha = excluded.repo_commit_sha,
+			repo_subdir = excluded.repo_subdir,
 			updated_at = excluded.updated_at
 	`,
 		installation.ID,
@@ -91,6 +97,10 @@ func (s *Store) SaveInstallation(ctx context.Context, installation plugins.Insta
 		installation.Status,
 		installation.LastError,
 		installation.InstalledBy,
+		installation.RepoURL,
+		installation.RepoRef,
+		installation.RepoCommitSHA,
+		installation.RepoSubdir,
 		installation.CreatedAt,
 		installation.UpdatedAt,
 	)
@@ -218,6 +228,10 @@ func scanPluginInstallation(row pgx.Row) (*plugins.Installation, error) {
 		&current.Status,
 		&lastError,
 		&installedBy,
+		&current.RepoURL,
+		&current.RepoRef,
+		&current.RepoCommitSHA,
+		&current.RepoSubdir,
 		&current.CreatedAt,
 		&current.UpdatedAt,
 	); err != nil {

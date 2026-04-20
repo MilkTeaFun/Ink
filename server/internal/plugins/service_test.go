@@ -208,6 +208,8 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		pluginRoot,
 		5*time.Second,
 		30*time.Second,
+		nil,
+		nil,
 	)
 
 	file, err := os.Open(zipPath)
