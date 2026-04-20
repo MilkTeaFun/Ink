@@ -133,9 +133,9 @@ func (s *stubGitCloner) Clone(_ context.Context, repoURL, ref, destDir string) (
 }
 
 func copyTree(src string, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	return filepath.Walk(src, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
@@ -145,29 +145,34 @@ func copyTree(src string, dst string) error {
 		if info.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		in, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-		if err != nil {
-			_ = in.Close()
-			return err
-		}
-		if _, err := io.Copy(out, in); err != nil {
-			_ = in.Close()
-			_ = out.Close()
-			return err
-		}
-		if err := out.Close(); err != nil {
-			_ = in.Close()
-			return err
-		}
-		return in.Close()
+		return copyFile(path, target)
 	})
+}
+
+func copyFile(srcPath, dstPath string) (err error) {
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := in.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := out.Close(); err == nil {
+			err = closeErr
+		}
+	}()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func newGitTestService(t *testing.T, cloner GitCloner, hosts []string) (*Service, *memoryRepo, string) {
@@ -198,28 +203,14 @@ func (passthroughRunner) Run(_ context.Context, _ string, _ []string, _ []byte) 
 	return nil, nil, nil
 }
 
-func TestInstallFromGit(t *testing.T) {
-	t.Parallel()
-
-	fixture := filepath.Join("..", "..", "testdata", "plugins", "node-hello-plugin")
-	cloner := &stubGitCloner{fixtureDir: fixture, commitSHA: "deadbeef"}
-	service, repo, pluginRoot := newGitTestService(t, cloner, []string{"github.com"})
-
-	details, err := service.InstallFromGit(context.Background(), "admin-token", GitInstallInput{
-		RepoURL: "https://github.com/owner/repo.git",
-		Ref:     "main",
-	})
-	if err != nil {
-		t.Fatalf("InstallFromGit failed: %v", err)
-	}
-
+func assertInstallFromGitHappyPath(t *testing.T, cloner *stubGitCloner, details PluginDetails) {
+	t.Helper()
 	if cloner.lastURL == "" {
 		t.Fatal("expected cloner.Clone to be invoked")
 	}
 	if cloner.lastRef != "main" {
 		t.Fatalf("cloner received ref %q, want main", cloner.lastRef)
 	}
-
 	if details.Installation.SourceType != SourceTypeGit {
 		t.Fatalf("SourceType = %q, want git", details.Installation.SourceType)
 	}
@@ -229,11 +220,10 @@ func TestInstallFromGit(t *testing.T) {
 	if details.Installation.RepoURL != "https://github.com/owner/repo.git" {
 		t.Fatalf("RepoURL = %q", details.Installation.RepoURL)
 	}
+}
 
-	installations, err := repo.ListInstallations(context.Background())
-	if err != nil {
-		t.Fatalf("ListInstallations: %v", err)
-	}
+func assertInstallPersisted(t *testing.T, installations []Installation, pluginRoot string) {
+	t.Helper()
 	if len(installations) != 1 {
 		t.Fatalf("installations = %d, want 1", len(installations))
 	}
@@ -250,6 +240,30 @@ func TestInstallFromGit(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(persisted.CurrentPath, "ink-plugin.json")); err != nil {
 		t.Fatalf("plugin directory missing ink-plugin.json: %v", err)
 	}
+}
+
+func TestInstallFromGit(t *testing.T) {
+	t.Parallel()
+
+	fixture := filepath.Join("..", "..", "testdata", "plugins", "node-hello-plugin")
+	cloner := &stubGitCloner{fixtureDir: fixture, commitSHA: "deadbeef"}
+	service, repo, pluginRoot := newGitTestService(t, cloner, []string{"github.com"})
+
+	details, err := service.InstallFromGit(context.Background(), "admin-token", GitInstallInput{
+		RepoURL: "https://github.com/owner/repo.git",
+		Ref:     "main",
+	})
+	if err != nil {
+		t.Fatalf("InstallFromGit failed: %v", err)
+	}
+
+	assertInstallFromGitHappyPath(t, cloner, details)
+
+	installations, err := repo.ListInstallations(context.Background())
+	if err != nil {
+		t.Fatalf("ListInstallations: %v", err)
+	}
+	assertInstallPersisted(t, installations, pluginRoot)
 }
 
 func TestInstallFromGitRejectsDisallowedHost(t *testing.T) {
