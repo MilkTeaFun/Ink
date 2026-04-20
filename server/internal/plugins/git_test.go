@@ -152,14 +152,21 @@ func copyTree(src string, dst string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
+			_ = in.Close()
 			return err
 		}
-		defer out.Close()
-		_, err = io.Copy(out, in)
-		return err
+		if _, err := io.Copy(out, in); err != nil {
+			_ = in.Close()
+			_ = out.Close()
+			return err
+		}
+		if err := out.Close(); err != nil {
+			_ = in.Close()
+			return err
+		}
+		return in.Close()
 	})
 }
 
