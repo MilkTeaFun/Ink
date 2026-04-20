@@ -58,6 +58,7 @@ The development admin credentials are saved to `server/.dev-admin-password` on f
 
 - [Contributing guide](CONTRIBUTING.md)
 - [Server guide](server/README.md)
+- [Plugin specification](docs/PLUGIN_SPEC.md)
 - [Security policy](SECURITY.md)
 
 ## Current capabilities
