@@ -1,28 +1,22 @@
 package plugins
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// safeGitURLPattern matches the narrow set of HTTPS URLs the installer will
-// pass to the git CLI: https://<host>/<path>. Hosts are alphanumerics plus
-// "." and "-"; paths are alphanumerics plus "._-/". This is re-checked on
-// the normalized URL inside validateGitURL so static analysis can see that
-// the value reaching exec.CommandContext is sanitized.
-var safeGitURLPattern = regexp.MustCompile(`^https://[A-Za-z0-9][A-Za-z0-9.\-]*(?::[0-9]+)?/[A-Za-z0-9._\-/]+$`)
-
 // safeGitRefPattern restricts the branch/tag name to characters that cannot
-// be interpreted as arguments or shell metacharacters. This is intentionally
-// stricter than git's own rules.
+// be misinterpreted as arguments or shell metacharacters and that are valid
+// inside a git refname.
 var safeGitRefPattern = regexp.MustCompile(`^[A-Za-z0-9._\-/]+$`)
 
 // GitCloner performs a shallow clone of a remote git repository into destDir
@@ -33,58 +27,46 @@ type GitCloner interface {
 	Clone(ctx context.Context, repoURL, ref, destDir string) (commitSHA string, err error)
 }
 
-// ExecGitCloner shells out to the `git` binary. It is used by the real
-// service wiring in production; tests substitute a fake.
-type ExecGitCloner struct{}
+// GoGitCloner performs clones through the pure-Go `go-git` library. It
+// intentionally does NOT shell out to the `git` binary, which means an
+// attacker cannot smuggle arguments into a subprocess even if upstream
+// validation is ever relaxed.
+type GoGitCloner struct{}
 
-// Clone runs `git clone --depth 1 --single-branch [--branch <ref>] <url> <dest>`
-// with interactive credential prompts disabled, then resolves HEAD to a commit
-// SHA. An empty ref lets the remote default branch be cloned.
-//
-// The caller MUST have already routed repoURL through validateGitURL and ref
-// (when non-empty) must match safeGitRefPattern; as a defense in depth we
-// re-check both here so that any future caller cannot accidentally pass an
-// unsanitized value to exec.CommandContext.
-func (ExecGitCloner) Clone(ctx context.Context, repoURL, ref, destDir string) (string, error) {
-	if !safeGitURLPattern.MatchString(repoURL) {
-		return "", fmt.Errorf("%w: repository URL failed safety check", ErrInvalidInput)
-	}
+// Clone performs a shallow single-branch clone of repoURL into destDir and
+// returns the resolved commit SHA. An empty ref lets the remote default
+// branch be cloned.
+func (GoGitCloner) Clone(ctx context.Context, repoURL, ref, destDir string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref != "" && !safeGitRefPattern.MatchString(ref) {
 		return "", fmt.Errorf("%w: git ref contains unsupported characters", ErrInvalidInput)
 	}
 
-	args := []string{"clone", "--depth", "1", "--single-branch"}
+	opts := &gogit.CloneOptions{
+		URL:          repoURL,
+		Depth:        1,
+		SingleBranch: true,
+		Tags:         gogit.NoTags,
+	}
 	if ref != "" {
-		args = append(args, "--branch", ref)
-	}
-	args = append(args, "--", repoURL, destDir)
-
-	cloneEnv := append(os.Environ(),
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_ASKPASS=/bin/echo",
-		"GCM_INTERACTIVE=never",
-	)
-
-	cloneCmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // repoURL + ref sanitized via safeGitURLPattern / safeGitRefPattern above
-	cloneCmd.Env = cloneEnv
-	var cloneStderr bytes.Buffer
-	cloneCmd.Stderr = &cloneStderr
-	if err := cloneCmd.Run(); err != nil {
-		return "", fmt.Errorf("git clone: %w: %s", err, strings.TrimSpace(cloneStderr.String()))
+		opts.ReferenceName = plumbing.NewBranchReferenceName(ref)
 	}
 
-	revCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
-	revCmd.Dir = destDir
-	var revStdout bytes.Buffer
-	var revStderr bytes.Buffer
-	revCmd.Stdout = &revStdout
-	revCmd.Stderr = &revStderr
-	if err := revCmd.Run(); err != nil {
-		return "", fmt.Errorf("git rev-parse: %w: %s", err, strings.TrimSpace(revStderr.String()))
+	repo, err := gogit.PlainCloneContext(ctx, destDir, false, opts)
+	if err != nil && ref != "" && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		// Retry treating ref as a tag rather than a branch.
+		opts.ReferenceName = plumbing.NewTagReferenceName(ref)
+		repo, err = gogit.PlainCloneContext(ctx, destDir, false, opts)
+	}
+	if err != nil {
+		return "", fmt.Errorf("git clone: %w", err)
 	}
 
-	return strings.TrimSpace(revStdout.String()), nil
+	head, err := repo.Head()
+	if err != nil {
+		return "", fmt.Errorf("git head: %w", err)
+	}
+	return head.Hash().String(), nil
 }
 
 // GitInstallInput describes a request to install a plugin from a remote git
@@ -140,11 +122,7 @@ func validateGitURL(rawURL string, allowedHosts []string) (string, string, error
 		Host:   parsed.Host,
 		Path:   parsed.Path,
 	}
-	normalizedStr := normalized.String()
-	if !safeGitURLPattern.MatchString(normalizedStr) {
-		return "", "", fmt.Errorf("%w: repository URL contains unsupported characters", ErrInvalidInput)
-	}
-	return normalizedStr, host, nil
+	return normalized.String(), host, nil
 }
 
 // isHostAllowed reports whether host matches any entry in allowed. Entries

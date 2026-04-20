@@ -113,7 +113,7 @@ func main() {
 		cfg.PluginRoot,
 		cfg.PluginExecTimeout,
 		cfg.PluginInstallTimeout,
-		plugins.ExecGitCloner{},
+		plugins.GoGitCloner{},
 		cfg.PluginGitAllowedHosts,
 	)
 	inboxService := inbox.NewService(store, idgen.Generator{}, clock.SystemClock{})
