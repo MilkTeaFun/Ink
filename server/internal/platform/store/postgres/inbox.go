@@ -67,8 +67,7 @@ func (s *Store) FindInboxItemByID(ctx context.Context, itemID string) (*inbox.It
 	return scanInboxItem(row)
 }
 
-// ListPendingByBinding returns pending+failed (retryable) items for a binding
-// in insertion order.
+// ListPendingByBinding returns pending items for a binding in insertion order.
 func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limit int) ([]inbox.Item, error) {
 	if limit <= 0 {
 		limit = 20
@@ -77,10 +76,10 @@ func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limi
 		select `+pluginItemColumns+`
 		from plugin_items
 		where plugin_binding_id = $1
-		  and status in ($2, $3)
+		  and status = $2
 		order by created_at asc
-		limit $4
-	`, bindingID, string(inbox.StatusPending), string(inbox.StatusFailed), limit)
+		limit $3
+	`, bindingID, string(inbox.StatusPending), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +95,36 @@ func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limi
 			continue
 		}
 		result = append(result, *current)
+	}
+	return result, rows.Err()
+}
+
+// ListPendingBindingIDs returns bindings with pending items ordered by their
+// oldest pending row so backlog draining stays fair across bindings.
+func (s *Store) ListPendingBindingIDs(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.Query(ctx, `
+		select plugin_binding_id
+		from plugin_items
+		where status = $1
+		group by plugin_binding_id
+		order by min(created_at) asc
+		limit $2
+	`, string(inbox.StatusPending), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []string{}
+	for rows.Next() {
+		var bindingID string
+		if err := rows.Scan(&bindingID); err != nil {
+			return nil, err
+		}
+		result = append(result, bindingID)
 	}
 	return result, rows.Err()
 }

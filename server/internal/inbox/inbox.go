@@ -66,6 +66,7 @@ type Repository interface {
 	InsertItem(ctx context.Context, item Item) (bool, error)
 	FindInboxItemByID(ctx context.Context, itemID string) (*Item, error)
 	ListPendingByBinding(ctx context.Context, bindingID string, limit int) ([]Item, error)
+	ListPendingBindingIDs(ctx context.Context, limit int) ([]string, error)
 	ListRetryable(ctx context.Context, olderThan time.Time, limit int) ([]Item, error)
 	UpdateStatus(ctx context.Context, item Item) error
 	DeletePrintedOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
@@ -211,9 +212,14 @@ func (s *Service) Ingest(ctx context.Context, input IngestInput) (IngestResult, 
 	return result, nil
 }
 
-// ListPendingByBinding returns pending+failed (retryable) items for a binding.
+// ListPendingByBinding returns pending items for a binding.
 func (s *Service) ListPendingByBinding(ctx context.Context, bindingID string, limit int) ([]Item, error) {
 	return s.repo.ListPendingByBinding(ctx, bindingID, limit)
+}
+
+// ListPendingBindingIDs returns binding ids that currently have pending items.
+func (s *Service) ListPendingBindingIDs(ctx context.Context, limit int) ([]string, error) {
+	return s.repo.ListPendingBindingIDs(ctx, limit)
 }
 
 // MarkPrinted moves an item to StatusPrinted, associating it with a print job.
