@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -108,6 +109,38 @@ func (r *memoryRepo) FindPluginBindingByID(_ context.Context, bindingID string) 
 	}
 	copy := binding
 	return &copy, nil
+}
+
+func (r *memoryRepo) ClaimBindingsDueForFetch(_ context.Context, now time.Time, leaseUntil time.Time, limit int) ([]Binding, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	result := []Binding{}
+	for _, binding := range r.bindings {
+		if !bindingDueForFetch(binding, now) {
+			continue
+		}
+		binding.FetchLeaseUntil = &leaseUntil
+		r.bindings[binding.ID] = binding
+		result = append(result, binding)
+	}
+	sort.Slice(result, func(i int, j int) bool {
+		return result[i].NextFetchAt.Before(*result[j].NextFetchAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func bindingDueForFetch(binding Binding, now time.Time) bool {
+	if !binding.Enabled || binding.Status != BindingStatusConnected || binding.NextFetchAt == nil {
+		return false
+	}
+	if binding.FetchLeaseUntil != nil && binding.FetchLeaseUntil.After(now) {
+		return false
+	}
+	return !binding.NextFetchAt.After(now)
 }
 
 func (r *memoryRepo) SavePluginBinding(_ context.Context, binding Binding) error {
@@ -248,6 +281,9 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		Config: map[string]any{
 			"sourceName":         "Fixture Source",
 			"includeTriggeredAt": true,
+			"message":            "Hello plugin",
+			"tone":               "verbose",
+			"repeat":             2,
 		},
 		Secrets: map[string]string{
 			"apiToken": "super-secret",
@@ -258,6 +294,9 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	}
 	if saved.Binding == nil || saved.Binding.Status != BindingStatusConnected {
 		t.Fatalf("expected connected binding, got %+v", saved.Binding)
+	}
+	if saved.Binding.NextFetchAt == nil {
+		t.Fatalf("expected enabled binding to schedule immediate fetch")
 	}
 
 	validation, err := service.TestBinding(ctx, "member-token", installation.ID, BindingInput{
@@ -281,12 +320,8 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		t.Fatalf("expected decrypted secret, got %+v", secrets)
 	}
 
-	result, err := service.ExecuteFetch(ctx, installation, binding, secrets, map[string]any{
-		"message": "Hello plugin",
-		"tone":    "verbose",
-		"repeat":  2,
-	}, FetchTrigger{
-		Kind:         TriggerKindSchedule,
+	result, err := service.ExecuteFetch(ctx, installation, binding, secrets, FetchTrigger{
+		Kind:         TriggerKindAutomatic,
 		ScheduledFor: "2026-04-10T10:00:00+08:00",
 		TriggeredAt:  "2026-04-10T02:00:00Z",
 		Timezone:     "Asia/Shanghai",
@@ -325,6 +360,19 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	}
 	if result.Cursor == nil || *result.Cursor != "2026-04-10T02:00:00Z" {
 		t.Fatalf("unexpected cursor: %v", result.Cursor)
+	}
+
+	disabled, err := service.SaveBinding(ctx, "member-token", installation.ID, BindingInput{
+		Enabled: false,
+		Config: map[string]any{
+			"sourceName": "Fixture Source",
+		},
+	})
+	if err != nil {
+		t.Fatalf("disable binding: %v", err)
+	}
+	if disabled.Binding == nil || disabled.Binding.NextFetchAt != nil {
+		t.Fatalf("expected disabled binding to stop automatic fetches, got %+v", disabled.Binding)
 	}
 }
 

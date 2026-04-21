@@ -11,12 +11,12 @@ type Clock interface {
 	Now() time.Time
 }
 
-// InboxPurger deletes printed inbox items older than a cutoff.
+// InboxPurger deletes collected inbox items older than a cutoff.
 type InboxPurger interface {
-	PurgePrinted(ctx context.Context, cutoff time.Time) (int64, error)
+	PurgeOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
-// InboxJanitor purges printed items older than Retention on a fixed cadence.
+// InboxJanitor purges collected items older than Retention on a fixed cadence.
 type InboxJanitor struct {
 	purger    InboxPurger
 	clock     Clock
@@ -61,12 +61,12 @@ func (j *InboxJanitor) Start(ctx context.Context) {
 
 func (j *InboxJanitor) runOnce(ctx context.Context) {
 	cutoff := j.clock.Now().Add(-j.retention)
-	removed, err := j.purger.PurgePrinted(ctx, cutoff)
+	removed, err := j.purger.PurgeOlderThan(ctx, cutoff)
 	if err != nil {
 		j.logger.Error("inbox janitor failed", "error", err)
 		return
 	}
 	if removed > 0 {
-		j.logger.Info("purged printed inbox items", "count", removed, "cutoff", cutoff)
+		j.logger.Info("purged expired inbox items", "count", removed, "cutoff", cutoff)
 	}
 }

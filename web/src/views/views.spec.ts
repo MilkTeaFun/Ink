@@ -606,7 +606,7 @@ describe("workspace views", () => {
     await wrapper.find("input[placeholder='例如：gpt-4.1-mini']").setValue("gpt-4.1-mini");
     await wrapper.find("input[placeholder='输入新的服务端密钥']").setValue("secret-key");
 
-    const aiForm = wrapper.findAll("form").at(-1);
+    const aiForm = wrapper.findAll("form").find((form) => form.text().includes("管理员配置"));
     await aiForm?.trigger("submit");
 
     expect(store.aiConfigSummary.bound).toBe(true);

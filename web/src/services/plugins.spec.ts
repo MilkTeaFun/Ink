@@ -9,6 +9,9 @@ import {
   fetchPlugin,
   fetchPlugins,
   fetchPrintSchedules,
+  installPluginFromGit,
+  runPluginFetch,
+  runPrintSchedule,
   savePluginBinding,
   testPluginBinding,
   togglePrintSchedule,
@@ -18,20 +21,36 @@ import {
 
 const fetchMock = vi.fn<typeof fetch>();
 
+function buildExampleUrl(path: string) {
+  var normalizedPath = path;
+  if (normalizedPath.charCodeAt(0) === 47) {
+    normalizedPath = normalizedPath.slice(1);
+  }
+
+  return ["https://example.test/", normalizedPath].join("");
+}
+
+function buildFixtureRepoUrl() {
+  return "https://github.com/example/demo-source.git";
+}
+
 function createPluginResponse() {
   return {
     plugin: {
       installation: {
         id: "plugin-installation-1",
         pluginKey: "demo-source",
-        sourceType: "upload" as const,
+        sourceType: "git" as const,
         displayName: "Demo Source",
         version: "1.0.0",
         runtimeType: "node" as const,
         status: "ready" as const,
+        repoUrl: buildFixtureRepoUrl(),
+        repoRef: "main",
+        repoCommitSha: "abc123",
       },
       manifest: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         kind: "source" as const,
         pluginKey: "demo-source",
         name: "Demo Source",
@@ -40,6 +59,7 @@ function createPluginResponse() {
         runtime: {
           type: "node" as const,
         },
+        fetchPolicy: { type: "fixed_interval" as const, minutes: 15 },
         entrypoints: {
           validate: {
             command: ["pnpm", "validate"],
@@ -49,15 +69,16 @@ function createPluginResponse() {
           },
         },
         workspaceConfigSchema: [],
-        scheduleConfigSchema: [],
       },
       binding: {
         id: "binding-1",
         enabled: true,
         status: "connected" as const,
         config: {
-          feedUrl: "https://example.com/feed",
+          feedUrl: buildExampleUrl("feed"),
         },
+        lastFetchAt: new Date("2026-04-10T00:20:00.000Z").toISOString(),
+        nextFetchAt: new Date("2026-04-10T00:35:00.000Z").toISOString(),
       },
     },
   };
@@ -76,9 +97,7 @@ function createScheduleResponse() {
       hour: 8,
       minute: 30,
       weekdays: [],
-      scheduleConfig: {
-        mode: "brief",
-      },
+      printPolicy: { batchSize: 1 },
       deviceId: "device-1",
       enabled: true,
       nextRunAt: new Date("2026-04-11T00:30:00.000Z").toISOString(),
@@ -86,6 +105,14 @@ function createScheduleResponse() {
       sourceLabel: "Demo Source",
     },
   };
+}
+
+function createManualFetchResult() {
+  return { fetchedCount: 2, ingestedCount: 1, inboxItemIds: ["item-1"], cursorAdvanced: true };
+}
+
+function createManualPrintResult() {
+  return { printedCount: 1, failedCount: 0, skippedCount: 0, printJobIds: ["print-job-1"] };
 }
 
 describe("plugins service", () => {
@@ -101,10 +128,17 @@ describe("plugins service", () => {
   it("handles plugin and schedule endpoints through authenticated requests", async () => {
     const pluginResponse = createPluginResponse();
     const scheduleResponse = createScheduleResponse();
+    var manualFetchResult = createManualFetchResult();
+    var manualPrintResult = createManualPrintResult();
 
     fetchMock
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ plugins: [pluginResponse.plugin] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(pluginResponse), {
+          status: 200,
+        }),
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(pluginResponse), {
@@ -154,6 +188,22 @@ describe("plugins service", () => {
         }),
       )
       .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: manualFetchResult,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: manualPrintResult,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
         new Response(JSON.stringify(scheduleResponse), {
           status: 200,
         }),
@@ -168,6 +218,12 @@ describe("plugins service", () => {
         "access-token",
         new File(["zip-content"], "demo-source.zip", { type: "application/zip" }),
       ),
+    ).resolves.toEqual(pluginResponse.plugin);
+    await expect(
+      installPluginFromGit("access-token", {
+        repoUrl: "https://github.com/example/demo-source.git",
+        repoRef: "main",
+      }),
     ).resolves.toEqual(pluginResponse.plugin);
     await expect(disablePlugin("access-token", "plugin-installation-1")).resolves.toEqual(
       pluginResponse.plugin,
@@ -215,9 +271,7 @@ describe("plugins service", () => {
         hour: 8,
         minute: 30,
         weekdays: [],
-        scheduleConfig: {
-          mode: "brief",
-        },
+        printPolicy: { batchSize: 1 },
         deviceId: "device-1",
         enabled: true,
       }),
@@ -231,23 +285,30 @@ describe("plugins service", () => {
         hour: 8,
         minute: 30,
         weekdays: [],
-        scheduleConfig: {
-          mode: "brief",
-        },
+        printPolicy: { batchSize: 1 },
         deviceId: "device-1",
         enabled: true,
       }),
     ).resolves.toEqual(scheduleResponse.schedule);
+    await expect(runPluginFetch("access-token", "plugin-installation-1")).resolves.toEqual(
+      manualFetchResult,
+    );
+    await expect(runPrintSchedule("access-token", "schedule-1")).resolves.toEqual(
+      manualPrintResult,
+    );
     await expect(togglePrintSchedule("access-token", "schedule-1")).resolves.toEqual(
       scheduleResponse.schedule,
     );
     await expect(deletePrintSchedule("access-token", "schedule-1")).resolves.toBeUndefined();
 
-    expect(fetchMock).toHaveBeenCalledTimes(12);
+    expect(fetchMock).toHaveBeenCalledTimes(15);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/admin/plugins");
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBeInstanceOf(FormData);
-    expect(fetchMock.mock.calls[7]?.[0]).toBe("/api/v1/print-schedules");
-    expect(fetchMock.mock.calls[11]?.[0]).toBe("/api/v1/print-schedules/schedule-1");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/admin/plugins/install-from-git");
+    expect(fetchMock.mock.calls[8]?.[0]).toBe("/api/v1/print-schedules");
+    expect(fetchMock.mock.calls[11]?.[0]).toBe("/api/v1/plugins/plugin-installation-1/run");
+    expect(fetchMock.mock.calls[12]?.[0]).toBe("/api/v1/print-schedules/schedule-1/run");
+    expect(fetchMock.mock.calls[14]?.[0]).toBe("/api/v1/print-schedules/schedule-1");
   });
 
   it("maps api and network failures into AuthApiError", async () => {

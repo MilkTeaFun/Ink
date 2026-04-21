@@ -13,6 +13,12 @@ export interface PluginBindingPayload {
   secrets: Record<string, string>;
 }
 
+export interface GitPluginInstallPayload {
+  repoUrl: string;
+  repoRef?: string;
+  repoSubdir?: string;
+}
+
 export interface PrintSchedulePayload {
   title: string;
   pluginInstallationId: string;
@@ -21,9 +27,25 @@ export interface PrintSchedulePayload {
   hour: number;
   minute: number;
   weekdays: number[];
-  scheduleConfig: Record<string, unknown>;
+  printPolicy: {
+    batchSize: number;
+  };
   deviceId: string;
   enabled: boolean;
+}
+
+export interface ManualPluginFetchResult {
+  fetchedCount: number;
+  ingestedCount: number;
+  inboxItemIds: string[];
+  cursorAdvanced: boolean;
+}
+
+export interface ManualPrintScheduleRunResult {
+  printedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  printJobIds: string[];
 }
 
 async function request<T>(input: string, init: RequestInit = {}): Promise<T> {
@@ -92,6 +114,21 @@ export async function uploadPluginZip(accessToken: string, file: File) {
     },
     body: formData,
   });
+
+  return response.plugin;
+}
+
+export async function installPluginFromGit(accessToken: string, payload: GitPluginInstallPayload) {
+  const response = await request<{ plugin: PluginDetails }>(
+    "/api/v1/admin/plugins/install-from-git",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    },
+  );
 
   return response.plugin;
 }
@@ -231,4 +268,34 @@ export async function deletePrintSchedule(accessToken: string, scheduleId: strin
       Authorization: `Bearer ${accessToken}`,
     },
   });
+}
+
+export async function runPluginFetch(accessToken: string, installationId: string) {
+  const response = await request<{ result: ManualPluginFetchResult }>(
+    `/api/v1/plugins/${installationId}/run`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({}),
+    },
+  );
+
+  return response.result;
+}
+
+export async function runPrintSchedule(accessToken: string, scheduleId: string) {
+  const response = await request<{ result: ManualPrintScheduleRunResult }>(
+    `/api/v1/print-schedules/${scheduleId}/run`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({}),
+    },
+  );
+
+  return response.result;
 }

@@ -20,7 +20,7 @@ type PrintSchedule struct {
 	Hour                 int
 	Minute               int
 	Weekdays             []int
-	ScheduleConfig       map[string]any
+	PrintPolicy          PrintPolicy
 	DeviceID             string
 	Enabled              bool
 	NextRunAt            time.Time
@@ -31,36 +31,40 @@ type PrintSchedule struct {
 	UpdatedAt            time.Time
 }
 
+type PrintPolicy struct {
+	BatchSize int `json:"batchSize"`
+}
+
 type UpsertInput struct {
-	Title                string         `json:"title"`
-	PluginInstallationID string         `json:"pluginInstallationId"`
-	FrequencyType        FrequencyType  `json:"frequencyType"`
-	Timezone             string         `json:"timezone"`
-	Hour                 int            `json:"hour"`
-	Minute               int            `json:"minute"`
-	Weekdays             []int          `json:"weekdays"`
-	ScheduleConfig       map[string]any `json:"scheduleConfig"`
-	DeviceID             string         `json:"deviceId"`
-	Enabled              bool           `json:"enabled"`
+	Title                string        `json:"title"`
+	PluginInstallationID string        `json:"pluginInstallationId"`
+	FrequencyType        FrequencyType `json:"frequencyType"`
+	Timezone             string        `json:"timezone"`
+	Hour                 int           `json:"hour"`
+	Minute               int           `json:"minute"`
+	Weekdays             []int         `json:"weekdays"`
+	PrintPolicy          PrintPolicy   `json:"printPolicy"`
+	DeviceID             string        `json:"deviceId"`
+	Enabled              bool          `json:"enabled"`
 }
 
 type ScheduleView struct {
-	ID                   string         `json:"id"`
-	Title                string         `json:"title"`
-	PluginInstallationID string         `json:"pluginInstallationId"`
-	PluginBindingID      string         `json:"pluginBindingId"`
-	PluginDisplayName    string         `json:"pluginDisplayName"`
-	FrequencyType        FrequencyType  `json:"frequencyType"`
-	Timezone             string         `json:"timezone"`
-	Hour                 int            `json:"hour"`
-	Minute               int            `json:"minute"`
-	Weekdays             []int          `json:"weekdays"`
-	ScheduleConfig       map[string]any `json:"scheduleConfig"`
-	DeviceID             string         `json:"deviceId"`
-	Enabled              bool           `json:"enabled"`
-	NextRunAt            *time.Time     `json:"nextRunAt,omitempty"`
-	LastRunAt            *time.Time     `json:"lastRunAt,omitempty"`
-	LastError            string         `json:"lastError,omitempty"`
-	TimeLabel            string         `json:"timeLabel"`
-	SourceLabel          string         `json:"sourceLabel"`
+	ID                   string        `json:"id"`
+	Title                string        `json:"title"`
+	PluginInstallationID string        `json:"pluginInstallationId"`
+	PluginBindingID      string        `json:"pluginBindingId"`
+	PluginDisplayName    string        `json:"pluginDisplayName"`
+	FrequencyType        FrequencyType `json:"frequencyType"`
+	Timezone             string        `json:"timezone"`
+	Hour                 int           `json:"hour"`
+	Minute               int           `json:"minute"`
+	Weekdays             []int         `json:"weekdays"`
+	PrintPolicy          PrintPolicy   `json:"printPolicy"`
+	DeviceID             string        `json:"deviceId"`
+	Enabled              bool          `json:"enabled"`
+	NextRunAt            *time.Time    `json:"nextRunAt,omitempty"`
+	LastRunAt            *time.Time    `json:"lastRunAt,omitempty"`
+	LastError            string        `json:"lastError,omitempty"`
+	TimeLabel            string        `json:"timeLabel"`
+	SourceLabel          string        `json:"sourceLabel"`
 }

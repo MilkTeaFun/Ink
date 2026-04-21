@@ -24,6 +24,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/platform/secret"
 	"github.com/ruhuang/ink/server/internal/platform/store/postgres"
 	"github.com/ruhuang/ink/server/internal/platform/token"
+	"github.com/ruhuang/ink/server/internal/pluginfetch"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/schedule"
@@ -118,29 +119,27 @@ func main() {
 	)
 	inboxService := inbox.NewService(store, idgen.Generator{}, clock.SystemClock{})
 	dispatchService := dispatch.NewService(
-		inboxService,
-		pluginService,
+		store,
 		printerService,
 		store,
-		store,
+		idgen.Generator{},
 		clock.SystemClock{},
-		cfg.DispatchRetryBackoff,
 	)
+	pluginFetchService := pluginfetch.NewService(service, pluginService, inboxService, clock.SystemClock{})
 	scheduleService := schedule.NewService(
 		store,
 		service,
 		pluginService,
 		store,
-		inboxService,
 		dispatchService,
 		idgen.Generator{},
 		clock.SystemClock{},
 	)
+	fetchRunner := scheduler.NewFetchRunner(pluginFetchService, logger, cfg.SchedulerPollInterval, 10)
+	fetchRunner.Start(ctx)
+
 	schedulerRunner := scheduler.NewRunner(scheduleService, logger, cfg.SchedulerPollInterval, 10)
 	schedulerRunner.Start(ctx)
-
-	dispatchRunner := scheduler.NewDispatchRunner(dispatchService, logger, cfg.DispatchRetryInterval, cfg.DispatchRetryBatch)
-	dispatchRunner.Start(ctx)
 
 	inboxJanitor := scheduler.NewInboxJanitor(inboxService, clock.SystemClock{}, logger, cfg.InboxJanitorInterval, cfg.InboxRetention)
 	inboxJanitor.Start(ctx)
@@ -154,6 +153,7 @@ func main() {
 			printerService,
 			feedbackService,
 			pluginService,
+			pluginFetchService,
 			scheduleService,
 			logger,
 			cfg.RateLimitWindow,

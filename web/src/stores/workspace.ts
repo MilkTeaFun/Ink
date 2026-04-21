@@ -20,6 +20,7 @@ import {
   fetchAdminPlugins,
   fetchPlugins,
   fetchPrintSchedules,
+  installPluginFromGit,
   savePluginBinding,
   testPluginBinding,
   togglePrintSchedule,
@@ -72,6 +73,22 @@ const REMOTE_SAVE_DEBOUNCE_MS = 180;
 const REMOTE_PRINT_STATUS_POLL_MS = 5000;
 const REMOTE_PRINT_STATUS_INITIAL_POLL_MS = 1500;
 
+type ActiveSchedule = Schedule & {
+  pluginInstallationId: string;
+  frequencyType: "daily" | "weekly";
+  timezone: string;
+  hour: number;
+  minute: number;
+  weekdays: number[];
+  printPolicy: {
+    batchSize: number;
+  };
+  pluginDisplayName: string;
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastError: string;
+};
+
 function getNow() {
   return new Date().toISOString();
 }
@@ -122,6 +139,49 @@ function createInitialMessages(): ConversationMessage[] {
       createdAt: new Date(Date.now() - 1000 * 60 * 9).toISOString(),
     },
   ];
+}
+
+function mapRemoteScheduleToActiveSchedule(schedule: PrintScheduleView): ActiveSchedule {
+  return {
+    id: schedule.id,
+    title: schedule.title,
+    source: schedule.sourceLabel,
+    timeLabel: schedule.timeLabel,
+    deviceId: schedule.deviceId,
+    enabled: schedule.enabled,
+    pluginInstallationId: schedule.pluginInstallationId,
+    frequencyType: schedule.frequencyType,
+    timezone: schedule.timezone,
+    hour: schedule.hour,
+    minute: schedule.minute,
+    weekdays: Array.from(schedule.weekdays),
+    printPolicy: {
+      batchSize: schedule.printPolicy.batchSize,
+    },
+    pluginDisplayName: schedule.pluginDisplayName,
+    nextRunAt: schedule.nextRunAt,
+    lastRunAt: schedule.lastRunAt,
+    lastError: schedule.lastError || "",
+  };
+}
+
+function mapLocalScheduleToActiveSchedule(schedule: Schedule): ActiveSchedule {
+  return {
+    ...schedule,
+    pluginInstallationId: "",
+    frequencyType: "daily",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+    hour: 19,
+    minute: 30,
+    weekdays: [],
+    printPolicy: {
+      batchSize: 1,
+    },
+    pluginDisplayName: schedule.source,
+    nextRunAt: undefined,
+    lastRunAt: undefined,
+    lastError: "",
+  };
 }
 
 function createSeedState(): PersistedWorkspaceState {
@@ -439,21 +499,23 @@ function buildAIReplyMessages(messages: ConversationMessage[]) {
   })) as { role: "user" | "assistant"; content: string }[];
 }
 
-function cloneRecord(input?: Record<string, unknown>) {
-  return { ...input };
-}
-
 function mapPluginToSource(plugin: PluginDetails): SourceConnection {
   const note =
+    plugin.binding?.lastFetchError ||
     plugin.binding?.lastError ||
     plugin.installation.lastError ||
+    (plugin.installation.sourceType === "git" && plugin.installation.repoUrl
+      ? `Git 仓库：${plugin.installation.repoUrl}`
+      : "") ||
     plugin.installation.description ||
     "可作为定时打印内容来源";
 
   return {
     id: plugin.installation.id,
     name: plugin.installation.displayName,
-    type: plugin.installation.runtimeType === "node" ? "Node 插件" : "Python 插件",
+    type: `${
+      plugin.installation.runtimeType === "node" ? "Node" : "Python"
+    } ${plugin.installation.sourceType === "git" ? "Git 插件" : "上传插件"}`,
     note,
     status:
       plugin.installation.status === "disabled" || !plugin.binding?.enabled
@@ -488,6 +550,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const pluginLoading = ref(false);
   const pluginSaving = ref(false);
   const pluginUploadLoading = ref(false);
+  const pluginGitInstallLoading = ref(false);
   const pluginError = ref("");
   const pluginActionError = ref("");
   const pluginTestingId = ref("");
@@ -564,39 +627,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const recentPrintJobs = computed(() => sortedPrintJobs.value.slice(0, 5));
   const activeSchedules = computed(() =>
     isAuthenticated.value
-      ? remoteSchedules.value.map((schedule) => ({
-          id: schedule.id,
-          title: schedule.title,
-          source: schedule.sourceLabel,
-          timeLabel: schedule.timeLabel,
-          deviceId: schedule.deviceId,
-          enabled: schedule.enabled,
-          pluginInstallationId: schedule.pluginInstallationId,
-          frequencyType: schedule.frequencyType,
-          timezone: schedule.timezone,
-          hour: schedule.hour,
-          minute: schedule.minute,
-          weekdays: schedule.weekdays,
-          scheduleConfig: cloneRecord(schedule.scheduleConfig),
-          pluginDisplayName: schedule.pluginDisplayName,
-          nextRunAt: schedule.nextRunAt,
-          lastRunAt: schedule.lastRunAt,
-          lastError: schedule.lastError || "",
-        }))
-      : schedules.value.map((schedule) => ({
-          ...schedule,
-          pluginInstallationId: "",
-          frequencyType: "daily",
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-          hour: 19,
-          minute: 30,
-          weekdays: [] as number[],
-          scheduleConfig: {},
-          pluginDisplayName: schedule.source,
-          nextRunAt: undefined,
-          lastRunAt: undefined,
-          lastError: "",
-        })),
+      ? remoteSchedules.value.map(mapRemoteScheduleToActiveSchedule)
+      : schedules.value.map(mapLocalScheduleToActiveSchedule),
   );
   const activeSources = computed(() =>
     isAuthenticated.value ? availablePlugins.value.map(mapPluginToSource) : sources.value,
@@ -1584,7 +1616,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     hour?: number;
     minute?: number;
     weekdays?: number[];
-    scheduleConfig?: Record<string, unknown>;
+    batchSize?: number;
   }) {
     const nextDeviceId = options?.deviceId || defaultDeviceId.value;
     const targetDevice = devices.value.find((device) => device.id === nextDeviceId);
@@ -1610,7 +1642,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           hour: options?.hour ?? 19,
           minute: options?.minute ?? 30,
           weekdays: options?.weekdays ?? [],
-          scheduleConfig: cloneRecord(options?.scheduleConfig),
+          printPolicy: {
+            batchSize: options?.batchSize ?? 1,
+          },
           deviceId: nextDeviceId,
           enabled: true,
         });
@@ -1663,7 +1697,9 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           hour: current.hour,
           minute: current.minute,
           weekdays: current.weekdays,
-          scheduleConfig: cloneRecord(current.scheduleConfig),
+          printPolicy: {
+            batchSize: current.printPolicy.batchSize,
+          },
           deviceId,
           enabled: current.enabled,
         });
@@ -1758,6 +1794,44 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     } finally {
       pluginUploadLoading.value = false;
       pluginUploadingName.value = "";
+    }
+  }
+
+  async function installPluginRepository(options: {
+    repoUrl: string;
+    repoRef?: string;
+    repoSubdir?: string;
+  }) {
+    const current = authSession.value;
+
+    if (!current) {
+      pluginActionError.value = "登录状态已失效，请重新登录。";
+      return null;
+    }
+
+    pluginGitInstallLoading.value = true;
+    pluginActionError.value = "";
+
+    try {
+      const installed = await installPluginFromGit(current.accessToken, {
+        repoUrl: options.repoUrl.trim(),
+        repoRef: options.repoRef?.trim() || undefined,
+        repoSubdir: options.repoSubdir?.trim() || undefined,
+      });
+      upsertPlugin(installed);
+      if (isAdmin.value) {
+        const adminResponse = await fetchAdminPlugins(current.accessToken);
+        adminPlugins.value = adminResponse.plugins;
+      }
+      showFlash("插件仓库已拉取并完成安装。", "success");
+      return installed;
+    } catch (error) {
+      pluginActionError.value =
+        error instanceof Error ? error.message : "从 Git 安装插件失败，请稍后重试。";
+      showFlash(pluginActionError.value, "error");
+      return null;
+    } finally {
+      pluginGitInstallLoading.value = false;
     }
   }
 
@@ -2222,6 +2296,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     pluginLoading,
     pluginSaving,
     pluginUploadLoading,
+    pluginGitInstallLoading,
     pluginError,
     pluginActionError,
     pluginTestingId,
@@ -2289,6 +2364,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     deleteSchedule,
     toggleSourceConnection,
     uploadPlugin,
+    installPluginRepository,
     disablePluginInstallation,
     testPluginConfiguration,
     savePluginConfiguration,

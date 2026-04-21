@@ -14,7 +14,8 @@ var _ plugins.Repository = (*Store)(nil)
 
 const pluginBindingColumns = `id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
 			secret_nonce, cursor_json, max_prints_per_run, max_prints_per_day,
-			status, last_validated_at, last_error, created_at, updated_at`
+			status, last_validated_at, last_error, next_fetch_at, last_fetch_at,
+			fetch_lease_until, last_fetch_error, created_at, updated_at`
 
 const pluginInstallationColumns = `id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
 			current_path, status, last_error, installed_by, repo_url, repo_ref, repo_commit_sha,
@@ -163,8 +164,9 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 		insert into plugin_bindings (
 			id, plugin_installation_id, user_id, enabled, config_json, secret_ciphertext,
 			secret_nonce, cursor_json, max_prints_per_run, max_prints_per_day,
-			status, last_validated_at, last_error, created_at, updated_at
-		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			status, last_validated_at, last_error, next_fetch_at, last_fetch_at,
+			fetch_lease_until, last_fetch_error, created_at, updated_at
+		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		on conflict (id)
 		do update set
 			plugin_installation_id = excluded.plugin_installation_id,
@@ -173,11 +175,16 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 			config_json = excluded.config_json,
 			secret_ciphertext = excluded.secret_ciphertext,
 			secret_nonce = excluded.secret_nonce,
+			cursor_json = excluded.cursor_json,
 			max_prints_per_run = excluded.max_prints_per_run,
 			max_prints_per_day = excluded.max_prints_per_day,
 			status = excluded.status,
 			last_validated_at = excluded.last_validated_at,
 			last_error = excluded.last_error,
+			next_fetch_at = excluded.next_fetch_at,
+			last_fetch_at = excluded.last_fetch_at,
+			fetch_lease_until = excluded.fetch_lease_until,
+			last_fetch_error = excluded.last_fetch_error,
 			updated_at = excluded.updated_at
 	`,
 		binding.ID,
@@ -193,6 +200,10 @@ func (s *Store) SavePluginBinding(ctx context.Context, binding plugins.Binding) 
 		binding.Status,
 		binding.LastValidatedAt,
 		binding.LastError,
+		binding.NextFetchAt,
+		binding.LastFetchAt,
+		binding.FetchLeaseUntil,
+		binding.LastFetchError,
 		binding.CreatedAt,
 		binding.UpdatedAt,
 	)
@@ -210,6 +221,45 @@ func (s *Store) UpdatePluginBindingCursor(ctx context.Context, bindingID string,
 		where id = $1
 	`, bindingID, cursorJSON, updatedAt)
 	return err
+}
+
+func (s *Store) ClaimBindingsDueForFetch(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]plugins.Binding, error) {
+	rows, err := s.db.Query(ctx, `
+		with due as (
+			select id
+			from plugin_bindings
+			where enabled = true
+			  and status = $1
+			  and next_fetch_at is not null
+			  and next_fetch_at <= $2
+			  and (fetch_lease_until is null or fetch_lease_until < $2)
+			order by next_fetch_at asc
+			limit $3
+			for update skip locked
+		)
+		update plugin_bindings as bindings
+		set fetch_lease_until = $4, updated_at = $2
+		from due
+		where bindings.id = due.id
+		returning `+pluginBindingColumns+`
+	`, string(plugins.BindingStatusConnected), now, limit, leaseUntil)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []plugins.Binding{}
+	for rows.Next() {
+		current, err := scanPluginBinding(rows)
+		if err != nil {
+			return nil, err
+		}
+		if current != nil {
+			result = append(result, *current)
+		}
+	}
+
+	return result, rows.Err()
 }
 
 func scanPluginInstallation(row pgx.Row) (*plugins.Installation, error) {
@@ -252,6 +302,10 @@ func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 	var cursorJSON []byte
 	var lastValidatedAt *time.Time
 	var lastError *string
+	var nextFetchAt *time.Time
+	var lastFetchAt *time.Time
+	var fetchLeaseUntil *time.Time
+	var lastFetchError *string
 	var ciphertext []byte
 	var nonce []byte
 	if err := row.Scan(
@@ -268,6 +322,10 @@ func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 		&current.Status,
 		&lastValidatedAt,
 		&lastError,
+		&nextFetchAt,
+		&lastFetchAt,
+		&fetchLeaseUntil,
+		&lastFetchError,
 		&current.CreatedAt,
 		&current.UpdatedAt,
 	); err != nil {
@@ -294,5 +352,9 @@ func scanPluginBinding(row pgx.Row) (*plugins.Binding, error) {
 	current.Nonce = nonce
 	current.LastValidatedAt = lastValidatedAt
 	current.LastError = lastError
+	current.NextFetchAt = nextFetchAt
+	current.LastFetchAt = lastFetchAt
+	current.FetchLeaseUntil = fetchLeaseUntil
+	current.LastFetchError = lastFetchError
 	return &current, nil
 }

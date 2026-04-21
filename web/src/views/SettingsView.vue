@@ -44,6 +44,10 @@ const aiModel = ref("gpt-4.1-mini");
 const aiApiKey = ref("");
 const aiFormError = ref("");
 const pluginUploadError = ref("");
+const pluginGitInstallError = ref("");
+const pluginGitRepoUrl = ref("");
+const pluginGitRepoRef = ref("");
+const pluginGitRepoSubdir = ref("");
 const pluginEnabledDrafts = ref<Record<string, boolean>>({});
 const pluginDrafts = ref<Record<string, Record<string, unknown>>>({});
 const pluginSecretDrafts = ref<Record<string, Record<string, string>>>({});
@@ -214,6 +218,31 @@ async function handlePluginUpload(event: Event) {
     target.value = "";
   }
 }
+
+async function handlePluginInstallFromGit() {
+  pluginGitInstallError.value = "";
+
+  if (!pluginGitRepoUrl.value.trim()) {
+    pluginGitInstallError.value = "请输入 Git 仓库地址。";
+    return;
+  }
+
+  const installed = await workspaceStore.installPluginRepository({
+    repoUrl: pluginGitRepoUrl.value,
+    repoRef: pluginGitRepoRef.value,
+    repoSubdir: pluginGitRepoSubdir.value,
+  });
+  if (!installed) {
+    pluginGitInstallError.value = workspaceStore.pluginActionError;
+    return;
+  }
+
+  pluginGitRepoUrl.value = "";
+  pluginGitRepoRef.value = "";
+  pluginGitRepoSubdir.value = "";
+}
+
+void handlePluginInstallFromGit;
 
 async function handlePluginDisable(installationId: string) {
   await workspaceStore.disablePluginInstallation(installationId);
@@ -884,6 +913,77 @@ async function handleAIConfigSubmit() {
               </p>
             </section>
 
+            <section
+              v-if="workspaceStore.isAdmin"
+              class="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
+            >
+              <form class="space-y-4" @submit.prevent="handlePluginInstallFromGit">
+                <div>
+                  <p class="text-sm font-medium text-stone-900">从 Git 仓库安装插件</p>
+                  <p class="mt-1 text-sm text-stone-500">
+                    推荐直接安装“单仓库单插件”的仓库根目录。只有仓库里放了多个插件时，才需要填写子目录。
+                  </p>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                  <label class="block md:col-span-2">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">仓库地址</span>
+                    <input
+                      v-model="pluginGitRepoUrl"
+                      type="url"
+                      placeholder="例如：https://github.com/MilkTeaFun/Ink-plugin.git"
+                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                    />
+                  </label>
+
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      分支 / Tag / Commit
+                    </span>
+                    <input
+                      v-model="pluginGitRepoRef"
+                      type="text"
+                      placeholder="默认 main"
+                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                    />
+                  </label>
+
+                  <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      插件子目录（高级可选）
+                    </span>
+                    <input
+                      v-model="pluginGitRepoSubdir"
+                      type="text"
+                      placeholder="例如：plugins/acme-source"
+                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <p class="text-sm text-stone-500">
+                  推荐留空。只有仓库根目录不是插件目录时，才填写“插件子目录”。
+                </p>
+
+                <p
+                  v-if="pluginGitInstallError"
+                  class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                >
+                  {{ pluginGitInstallError }}
+                </p>
+
+                <div class="flex justify-end">
+                  <button
+                    type="submit"
+                    class="ui-btn-secondary px-4 py-2 text-sm"
+                    :disabled="workspaceStore.pluginGitInstallLoading"
+                  >
+                    {{ workspaceStore.pluginGitInstallLoading ? "安装中..." : "从 Git 安装" }}
+                  </button>
+                </div>
+              </form>
+            </section>
+
             <section v-if="workspaceStore.isAdmin" class="ui-settings-group">
               <div class="ui-settings-row !items-start">
                 <div class="ui-settings-copy">
@@ -924,7 +1024,9 @@ async function handleAIConfigSubmit() {
                     </span>
                     <span class="text-xs text-stone-500">
                       {{ plugin.installation.runtimeType === "node" ? "Node" : "Python" }}
-                      · v{{ plugin.installation.version }}
+                      · {{ plugin.installation.sourceType === "git" ? "Git" : "Upload" }} · v{{
+                        plugin.installation.version
+                      }}
                     </span>
                   </div>
                   <p class="mt-1 text-sm text-stone-500">
@@ -932,6 +1034,12 @@ async function handleAIConfigSubmit() {
                   </p>
                   <p class="mt-1 text-xs text-stone-500">
                     {{ plugin.installation.pluginKey }}
+                    <span v-if="plugin.installation.repoUrl">
+                      · {{ plugin.installation.repoUrl }}
+                    </span>
+                    <span v-if="plugin.installation.repoRef">
+                      @{{ plugin.installation.repoRef }}
+                    </span>
                     <span v-if="plugin.installation.lastError">
                       · {{ plugin.installation.lastError }}
                     </span>
@@ -1016,9 +1124,47 @@ async function handleAIConfigSubmit() {
                     </p>
                     <p class="mt-2 text-xs text-stone-500">
                       {{ plugin.installation.runtimeType === "node" ? "Node.js" : "Python" }}
-                      · v{{ plugin.installation.version }} · key:
+                      · {{ plugin.installation.sourceType === "git" ? "Git" : "Upload" }} · v{{
+                        plugin.installation.version
+                      }}
+                      · key:
                       {{ plugin.installation.pluginKey }}
                     </p>
+                    <div class="mt-3 grid gap-3 md:grid-cols-2">
+                      <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
+                        <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                          抓取策略
+                        </p>
+                        <p class="mt-1 text-sm text-stone-900">
+                          每 {{ plugin.manifest.fetchPolicy.minutes }} 分钟抓取一次
+                        </p>
+                        <p class="mt-1 text-xs text-stone-500">
+                          binding 启用后会自动抓取，和打印任务无关。
+                        </p>
+                      </div>
+                      <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
+                        <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                          抓取状态
+                        </p>
+                        <p class="mt-1 text-sm text-stone-900">
+                          {{
+                            plugin.binding?.lastFetchAt
+                              ? `最近抓取 ${new Date(plugin.binding.lastFetchAt).toLocaleString()}`
+                              : "尚未抓取过"
+                          }}
+                        </p>
+                        <p class="mt-1 text-xs text-stone-500">
+                          {{
+                            plugin.binding?.nextFetchAt
+                              ? `下次抓取 ${new Date(plugin.binding.nextFetchAt).toLocaleString()}`
+                              : "当前未安排自动抓取"
+                          }}
+                        </p>
+                        <p v-if="plugin.binding?.lastFetchError" class="mt-2 text-xs text-rose-700">
+                          {{ plugin.binding.lastFetchError }}
+                        </p>
+                      </div>
+                    </div>
                     <p
                       v-if="plugin.binding?.lastError || plugin.installation.lastError"
                       class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"

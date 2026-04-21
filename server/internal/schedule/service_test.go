@@ -7,7 +7,6 @@ import (
 
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/dispatch"
-	"github.com/ruhuang/ink/server/internal/inbox"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/workspace"
@@ -25,21 +24,21 @@ func newScheduleRepo() *scheduleRepo {
 }
 
 func (r *scheduleRepo) ListByUserID(_ context.Context, userID string) ([]PrintSchedule, error) {
-	result := make([]PrintSchedule, 0, len(r.schedules))
-	for _, schedule := range r.schedules {
-		if schedule.UserID == userID {
-			result = append(result, schedule)
+	result := []PrintSchedule{}
+	for _, current := range r.schedules {
+		if current.UserID == userID {
+			result = append(result, current)
 		}
 	}
 	return result, nil
 }
 
 func (r *scheduleRepo) FindByID(_ context.Context, userID string, scheduleID string) (*PrintSchedule, error) {
-	schedule, exists := r.schedules[scheduleID]
-	if !exists || schedule.UserID != userID {
+	current, exists := r.schedules[scheduleID]
+	if !exists || current.UserID != userID {
 		return nil, nil
 	}
-	copy := schedule
+	copy := current
 	return &copy, nil
 }
 
@@ -49,15 +48,15 @@ func (r *scheduleRepo) Save(_ context.Context, schedule PrintSchedule) error {
 }
 
 func (r *scheduleRepo) Delete(_ context.Context, userID string, scheduleID string) error {
-	schedule, exists := r.schedules[scheduleID]
-	if exists && schedule.UserID == userID {
+	current, exists := r.schedules[scheduleID]
+	if exists && current.UserID == userID {
 		delete(r.schedules, scheduleID)
 	}
 	return nil
 }
 
 func (r *scheduleRepo) ClaimDue(_ context.Context, _ time.Time, _ time.Time, limit int) ([]PrintSchedule, error) {
-	if len(r.claimed) > limit {
+	if limit > 0 && len(r.claimed) > limit {
 		return append([]PrintSchedule{}, r.claimed[:limit]...), nil
 	}
 	return append([]PrintSchedule{}, r.claimed...), nil
@@ -74,117 +73,50 @@ func (fakeScheduleAuth) GetCurrentUser(_ context.Context, accessToken string) (a
 	}, nil
 }
 
-type fakePluginRuntime struct {
-	output      plugins.FetchOutput
-	lastCursor  *string
-	lastBinding string
-}
+type fakePluginRuntime struct{}
 
-func (r *fakePluginRuntime) GetInstallation(_ context.Context, installationID string) (plugins.Installation, plugins.Manifest, error) {
-	manifest := plugins.Manifest{
-		SchemaVersion: 1,
-		Kind:          "source",
-		PluginKey:     "fixture-source",
-		Name:          "Fixture Source",
-		Version:       "1.0.0",
-		Description:   "fixture",
-		Runtime: plugins.RuntimeSpec{
-			Type: "node",
-		},
-		Entrypoints: plugins.Entrypoints{
-			Validate: plugins.CommandSpec{Command: []string{"node", "validate.mjs"}},
-			Fetch:    plugins.CommandSpec{Command: []string{"node", "fetch.mjs"}},
-		},
-		ScheduleConfigSchema: []plugins.FieldSpec{
-			{
-				Key:      "message",
-				Label:    "Message",
-				Type:     plugins.FieldTypeText,
-				Required: true,
-			},
-		},
-	}
-
+func (fakePluginRuntime) GetInstallation(_ context.Context, installationID string) (plugins.Installation, plugins.Manifest, error) {
 	return plugins.Installation{
-		ID:          installationID,
-		DisplayName: "Fixture Source",
-		Status:      plugins.InstallationStatusReady,
-		ManifestJSON: []byte(`{
-			"schemaVersion": 1,
-			"kind": "source",
-			"pluginKey": "fixture-source",
-			"name": "Fixture Source",
-			"version": "1.0.0",
-			"description": "fixture",
-			"runtime": { "type": "node" },
-			"entrypoints": {
-				"validate": { "command": ["node", "validate.mjs"] },
-				"fetch": { "command": ["node", "fetch.mjs"] }
+			ID:          installationID,
+			DisplayName: "Fixture Source",
+			Status:      plugins.InstallationStatusReady,
+		}, plugins.Manifest{
+			SchemaVersion: 2,
+			Kind:          "source",
+			PluginKey:     "fixture-source",
+			Name:          "Fixture Source",
+			Version:       "1.0.0",
+			Runtime:       plugins.RuntimeSpec{Type: "node"},
+			FetchPolicy: plugins.FetchPolicy{
+				Type:    plugins.FetchPolicyTypeFixedInterval,
+				Minutes: 15,
 			},
-			"workspaceConfigSchema": [],
-			"scheduleConfigSchema": [
-				{ "key": "message", "label": "Message", "type": "text", "required": true }
-			]
-		}`),
-	}, manifest, nil
+		}, nil
 }
 
-func (r *fakePluginRuntime) GetBindingForUser(_ context.Context, installationID string, userID string) (plugins.Binding, map[string]string, error) {
+func (fakePluginRuntime) GetBindingForUser(_ context.Context, installationID string, userID string) (plugins.Binding, map[string]string, error) {
 	return plugins.Binding{
 		ID:                   "binding-1",
 		PluginInstallationID: installationID,
 		UserID:               userID,
 		Enabled:              true,
 		Status:               plugins.BindingStatusConnected,
-		Config: map[string]any{
-			"sourceName": "Fixture Source",
-		},
 	}, map[string]string{}, nil
 }
 
-func (r *fakePluginRuntime) ExecuteFetch(_ context.Context, _ plugins.Installation, _ plugins.Binding, _ map[string]string, scheduleConfig map[string]any, _ plugins.FetchTrigger) (plugins.FetchOutput, error) {
-	output := r.output
-	if message, ok := scheduleConfig["message"].(string); ok {
-		for index := range output.Items {
-			if len(output.Items[index].Blocks) > 0 {
-				output.Items[index].Blocks[len(output.Items[index].Blocks)-1].Text = message
-			}
-		}
-	}
-	return output, nil
-}
-
-func (r *fakePluginRuntime) UpdateBindingCursor(_ context.Context, bindingID string, cursor *string) error {
-	r.lastBinding = bindingID
-	r.lastCursor = cursor
-	return nil
-}
-
-type capturedInbox struct {
-	inputs []inbox.IngestInput
-}
-
-func (c *capturedInbox) Ingest(_ context.Context, input inbox.IngestInput) (inbox.IngestResult, error) {
-	c.inputs = append(c.inputs, input)
-	itemIDs := make([]string, len(input.Items))
-	for index := range input.Items {
-		itemIDs[index] = input.Items[index].ExternalID
-	}
-	return inbox.IngestResult{Inserted: len(input.Items), ItemIDs: itemIDs}, nil
-}
-
-type capturedDispatcher struct {
-	calls []dispatchCall
-}
-
 type dispatchCall struct {
-	bindingID string
-	deviceID  string
+	input dispatch.ScheduleRunInput
 }
 
-func (d *capturedDispatcher) FlushBinding(_ context.Context, bindingID string, deviceID string) (dispatch.FlushResult, error) {
-	d.calls = append(d.calls, dispatchCall{bindingID: bindingID, deviceID: deviceID})
-	return dispatch.FlushResult{Printed: 1, PrintJobIDs: []string{"print-job-1"}}, nil
+type fakeDispatcher struct {
+	calls  []dispatchCall
+	result dispatch.ScheduleRunResult
+	err    error
+}
+
+func (d *fakeDispatcher) RunSchedule(_ context.Context, input dispatch.ScheduleRunInput) (dispatch.ScheduleRunResult, error) {
+	d.calls = append(d.calls, dispatchCall{input: input})
+	return d.result, d.err
 }
 
 type fakePrinterRepo struct{}
@@ -214,40 +146,64 @@ func (c fakeScheduleClock) Now() time.Time {
 	return c.now
 }
 
-func TestCreateAndProcessDueSchedule(t *testing.T) {
-	t.Parallel()
-
-	repo := newScheduleRepo()
-	cursor := "cursor-v1"
-	runtime := &fakePluginRuntime{
-		output: plugins.FetchOutput{
-			Items: []plugins.Item{
-				{
-					ExternalID:  "item-1",
-					Title:       "Fixture Source Digest",
-					SourceLabel: "Fixture Source",
-					Blocks: []plugins.ContentBlock{
-						{Type: plugins.BlockHeading, Level: 1, Text: "Fixture Source Digest"},
-						{Type: plugins.BlockParagraph, Text: "fallback"},
-					},
-				},
-			},
-			Cursor: &cursor,
-		},
-	}
-	inboxCapture := &capturedInbox{}
-	dispatcher := &capturedDispatcher{}
-	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
-	service := NewService(
+func newScheduleService(now time.Time, repo *scheduleRepo, dispatcher *fakeDispatcher) *Service {
+	return NewService(
 		repo,
 		fakeScheduleAuth{},
-		runtime,
+		fakePluginRuntime{},
 		fakePrinterRepo{},
-		inboxCapture,
 		dispatcher,
 		fakeScheduleIDs{},
 		fakeScheduleClock{now: now},
 	)
+}
+
+func assertDispatchInput(t *testing.T, input dispatch.ScheduleRunInput, scheduleID string, deviceID string, batchSize int) {
+	t.Helper()
+	if input.ScheduleID != scheduleID {
+		t.Fatalf("unexpected schedule id: %s", input.ScheduleID)
+	}
+	if input.Binding.ID != "binding-1" {
+		t.Fatalf("unexpected binding id: %s", input.Binding.ID)
+	}
+	if input.DeviceID != deviceID {
+		t.Fatalf("unexpected device id: %s", input.DeviceID)
+	}
+	if input.BatchSize != batchSize {
+		t.Fatalf("expected batch size %d, got %d", batchSize, input.BatchSize)
+	}
+}
+
+func assertCreatedScheduleDefaults(t *testing.T, created ScheduleView) {
+	t.Helper()
+	if created.PrintPolicy.BatchSize != 1 {
+		t.Fatalf("expected default batch size 1, got %+v", created.PrintPolicy)
+	}
+	if created.PluginDisplayName != "Fixture Source" {
+		t.Fatalf("unexpected plugin display name: %s", created.PluginDisplayName)
+	}
+}
+
+func assertProcessedScheduleState(t *testing.T, updated PrintSchedule, now time.Time) {
+	t.Helper()
+	if updated.LastRunAt == nil {
+		t.Fatalf("expected last run at to be populated")
+	}
+	if !updated.NextRunAt.After(now) {
+		t.Fatalf("expected next run to move forward, got %s", updated.NextRunAt)
+	}
+	if updated.LastError != nil {
+		t.Fatalf("expected no last error, got %s", *updated.LastError)
+	}
+}
+
+func TestCreateAndProcessDueScheduleUsesPrintPolicyBatchSize(t *testing.T) {
+	t.Parallel()
+
+	repo := newScheduleRepo()
+	dispatcher := &fakeDispatcher{}
+	now := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
+	service := newScheduleService(now, repo, dispatcher)
 
 	created, err := service.Create(context.Background(), "member-token", UpsertInput{
 		Title:                "Morning Digest",
@@ -256,22 +212,13 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 		Timezone:             "Asia/Shanghai",
 		Hour:                 9,
 		Minute:               30,
-		Weekdays:             nil,
-		ScheduleConfig: map[string]any{
-			"message": "hello schedule",
-		},
-		DeviceID: "device-1",
-		Enabled:  true,
+		DeviceID:             "device-1",
+		Enabled:              true,
 	})
 	if err != nil {
 		t.Fatalf("create schedule: %v", err)
 	}
-	if created.TimeLabel != "每天 09:30" {
-		t.Fatalf("unexpected time label: %s", created.TimeLabel)
-	}
-	if created.PluginDisplayName != "Fixture Source" {
-		t.Fatalf("unexpected plugin display name: %s", created.PluginDisplayName)
-	}
+	assertCreatedScheduleDefaults(t, created)
 
 	saved := repo.schedules["schedule-1"]
 	saved.NextRunAt = now
@@ -285,177 +232,65 @@ func TestCreateAndProcessDueSchedule(t *testing.T) {
 	if processed != 1 {
 		t.Fatalf("expected 1 processed schedule, got %d", processed)
 	}
-
-	if len(inboxCapture.inputs) != 1 {
-		t.Fatalf("expected 1 ingest call, got %d", len(inboxCapture.inputs))
-	}
-	ingest := inboxCapture.inputs[0]
-	if ingest.PluginBindingID != "binding-1" {
-		t.Fatalf("unexpected binding id: %s", ingest.PluginBindingID)
-	}
-	if ingest.DeviceID != "device-1" {
-		t.Fatalf("expected device passed through, got %q", ingest.DeviceID)
-	}
-	if len(ingest.Items) != 1 || ingest.Items[0].ExternalID != "item-1" {
-		t.Fatalf("unexpected items ingested: %+v", ingest.Items)
-	}
-	// scheduleConfig.message override should have reached the fake runtime.
-	if got := ingest.Items[0].Blocks[len(ingest.Items[0].Blocks)-1].Text; got != "hello schedule" {
-		t.Fatalf("expected schedule config message to flow to block, got %q", got)
-	}
-
-	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v1" {
-		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
-	}
 	if len(dispatcher.calls) != 1 {
 		t.Fatalf("expected 1 dispatcher call, got %d", len(dispatcher.calls))
 	}
-	if dispatcher.calls[0].bindingID != "binding-1" || dispatcher.calls[0].deviceID != "device-1" {
-		t.Fatalf("unexpected dispatch call: %+v", dispatcher.calls[0])
-	}
-
-	updated := repo.schedules["schedule-1"]
-	if updated.LastRunAt == nil {
-		t.Fatalf("expected last run at to be populated")
-	}
-	if !updated.NextRunAt.After(now) {
-		t.Fatalf("expected next run to move forward, got %s", updated.NextRunAt)
-	}
-	if updated.LastError != nil {
-		t.Fatalf("expected no last error, got %s", *updated.LastError)
-	}
+	assertDispatchInput(t, dispatcher.calls[0].input, "schedule-1", "device-1", 1)
+	assertProcessedScheduleState(t, repo.schedules["schedule-1"], now)
 }
 
-func manualFetchOutput(cursor *string) plugins.FetchOutput {
-	return plugins.FetchOutput{
-		Items: []plugins.Item{
-			{
-				ExternalID:  "ext-1",
-				Title:       "Manual run item",
-				SourceLabel: "Fixture Source",
-				Blocks:      []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: "fallback"}},
-			},
+func TestRunNowDispatchesWithoutFetching(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	repo := newScheduleRepo()
+	repo.schedules["schedule-1"] = PrintSchedule{
+		ID:                   "schedule-1",
+		UserID:               "member-user",
+		PluginInstallationID: "plugin-1",
+		PluginBindingID:      "binding-1",
+		Title:                "Lunch Digest",
+		FrequencyType:        FrequencyTypeDaily,
+		Timezone:             "Asia/Shanghai",
+		Hour:                 12,
+		Minute:               0,
+		PrintPolicy:          PrintPolicy{BatchSize: 3},
+		DeviceID:             "device-1",
+		Enabled:              true,
+		NextRunAt:            now.Add(2 * time.Hour),
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+	dispatcher := &fakeDispatcher{
+		result: dispatch.ScheduleRunResult{
+			Printed:     1,
+			Failed:      1,
+			Skipped:     1,
+			PrintJobIDs: []string{"print-job-1"},
 		},
-		Cursor: cursor,
 	}
-}
+	service := newScheduleService(now, repo, dispatcher)
 
-func assertManualRunResult(t *testing.T, result ManualRunResult) {
-	t.Helper()
-	if result.FetchedCount != 1 || result.IngestedCount != 1 || result.PrintedCount != 1 {
-		t.Fatalf("unexpected result counts: %+v", result)
+	result, err := service.RunNow(context.Background(), "member-token", "schedule-1")
+	if err != nil {
+		t.Fatalf("run now: %v", err)
 	}
-	if !result.CursorAdvanced {
-		t.Fatalf("expected cursor to advance when plugin returns one")
+	if result.PrintedCount != 1 || result.FailedCount != 1 || result.SkippedCount != 1 {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 	if len(result.PrintJobIDs) != 1 || result.PrintJobIDs[0] != "print-job-1" {
 		t.Fatalf("unexpected print job ids: %+v", result.PrintJobIDs)
 	}
-}
-
-func assertManualRunSideEffects(t *testing.T, inboxCapture *capturedInbox, dispatcher *capturedDispatcher, runtime *fakePluginRuntime) {
-	t.Helper()
-	if len(inboxCapture.inputs) != 1 || inboxCapture.inputs[0].DeviceID != "device-1" {
-		t.Fatalf("expected one ingest call with device-1, got %+v", inboxCapture.inputs)
+	if len(dispatcher.calls) != 1 {
+		t.Fatalf("expected one dispatch call, got %d", len(dispatcher.calls))
 	}
-	if len(dispatcher.calls) != 1 || dispatcher.calls[0].bindingID != "binding-1" {
-		t.Fatalf("expected dispatcher called once for binding-1, got %+v", dispatcher.calls)
-	}
-	if runtime.lastCursor == nil || *runtime.lastCursor != "cursor-v2" {
-		t.Fatalf("expected cursor to be persisted, got %v", runtime.lastCursor)
-	}
-}
-
-func TestRunManualIngestsFlushesAndAdvancesCursor(t *testing.T) {
-	t.Parallel()
-
-	cursor := "cursor-v2"
-	runtime := &fakePluginRuntime{output: manualFetchOutput(&cursor)}
-	inboxCapture := &capturedInbox{}
-	dispatcher := &capturedDispatcher{}
-	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
-	service := NewService(
-		newScheduleRepo(),
-		fakeScheduleAuth{},
-		runtime,
-		fakePrinterRepo{},
-		inboxCapture,
-		dispatcher,
-		fakeScheduleIDs{},
-		fakeScheduleClock{now: now},
-	)
-
-	result, err := service.RunManual(context.Background(), "member-token", "plugin-1", ManualRunInput{
-		DeviceID:       "device-1",
-		ScheduleConfig: map[string]any{"message": "manual"},
-	})
-	if err != nil {
-		t.Fatalf("run manual: %v", err)
-	}
-	assertManualRunResult(t, result)
-	assertManualRunSideEffects(t, inboxCapture, dispatcher, runtime)
-}
-
-func TestRunManualDoesNotAdvanceCursorWhenNil(t *testing.T) {
-	t.Parallel()
-
-	runtime := &fakePluginRuntime{
-		output: plugins.FetchOutput{
-			Items:  []plugins.Item{},
-			Cursor: nil,
-		},
-	}
-	dispatcher := &capturedDispatcher{}
-	now := time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC)
-	service := NewService(
-		newScheduleRepo(),
-		fakeScheduleAuth{},
-		runtime,
-		fakePrinterRepo{},
-		&capturedInbox{},
-		dispatcher,
-		fakeScheduleIDs{},
-		fakeScheduleClock{now: now},
-	)
-
-	result, err := service.RunManual(context.Background(), "member-token", "plugin-1", ManualRunInput{
-		ScheduleConfig: map[string]any{"message": "manual"},
-	})
-	if err != nil {
-		t.Fatalf("run manual: %v", err)
-	}
-	if result.CursorAdvanced {
-		t.Fatalf("expected cursor not to advance when plugin returns nil cursor")
-	}
-	if runtime.lastCursor != nil {
-		t.Fatalf("expected UpdateBindingCursor not called, got %v", runtime.lastCursor)
-	}
-}
-
-func TestRunManualRejectsEmptyInstallationID(t *testing.T) {
-	t.Parallel()
-
-	service := NewService(
-		newScheduleRepo(),
-		fakeScheduleAuth{},
-		&fakePluginRuntime{},
-		fakePrinterRepo{},
-		&capturedInbox{},
-		&capturedDispatcher{},
-		fakeScheduleIDs{},
-		fakeScheduleClock{now: time.Now()},
-	)
-
-	_, err := service.RunManual(context.Background(), "member-token", "   ", ManualRunInput{})
-	if err == nil {
-		t.Fatalf("expected error for empty installation id")
-	}
+	assertDispatchInput(t, dispatcher.calls[0].input, "schedule-1", "device-1", 3)
 }
 
 func TestNextRunAtWeekly(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC) // Friday morning UTC.
+	now := time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)
 	next, err := NextRunAt(FrequencyTypeWeekly, "Asia/Shanghai", 9, 30, []int{1, 3, 5}, now)
 	if err != nil {
 		t.Fatalf("next run at: %v", err)

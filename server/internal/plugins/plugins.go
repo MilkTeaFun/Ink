@@ -8,6 +8,7 @@ type BindingStatus string
 type FieldType string
 type BlockType string
 type TriggerKind string
+type FetchPolicyType string
 
 const (
 	SourceTypeUpload SourceType = "upload"
@@ -36,8 +37,10 @@ const (
 	BlockLink      BlockType = "link"
 	BlockDivider   BlockType = "divider"
 
-	TriggerKindSchedule TriggerKind = "schedule"
-	TriggerKindManual   TriggerKind = "manual"
+	TriggerKindAutomatic TriggerKind = "automatic"
+	TriggerKindManual    TriggerKind = "manual"
+
+	FetchPolicyTypeFixedInterval FetchPolicyType = "fixed_interval"
 )
 
 type FieldOption struct {
@@ -63,6 +66,11 @@ type RuntimeSpec struct {
 	Type string `json:"type"`
 }
 
+type FetchPolicy struct {
+	Type    FetchPolicyType `json:"type"`
+	Minutes int             `json:"minutes"`
+}
+
 type Entrypoints struct {
 	Validate CommandSpec `json:"validate"`
 	Fetch    CommandSpec `json:"fetch"`
@@ -76,9 +84,9 @@ type Manifest struct {
 	Version               string      `json:"version"`
 	Description           string      `json:"description"`
 	Runtime               RuntimeSpec `json:"runtime"`
+	FetchPolicy           FetchPolicy `json:"fetchPolicy"`
 	Entrypoints           Entrypoints `json:"entrypoints"`
 	WorkspaceConfigSchema []FieldSpec `json:"workspaceConfigSchema"`
-	ScheduleConfigSchema  []FieldSpec `json:"scheduleConfigSchema"`
 }
 
 type Installation struct {
@@ -116,6 +124,10 @@ type Binding struct {
 	Status               BindingStatus
 	LastValidatedAt      *time.Time
 	LastError            *string
+	NextFetchAt          *time.Time
+	LastFetchAt          *time.Time
+	FetchLeaseUntil      *time.Time
+	LastFetchError       *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -198,6 +210,9 @@ type BindingSummary struct {
 	Config          map[string]any `json:"config"`
 	LastValidatedAt *time.Time     `json:"lastValidatedAt,omitempty"`
 	LastError       string         `json:"lastError,omitempty"`
+	NextFetchAt     *time.Time     `json:"nextFetchAt,omitempty"`
+	LastFetchAt     *time.Time     `json:"lastFetchAt,omitempty"`
+	LastFetchError  string         `json:"lastFetchError,omitempty"`
 }
 
 type PluginDetails struct {

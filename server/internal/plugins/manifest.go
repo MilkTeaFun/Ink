@@ -27,8 +27,8 @@ func ParseManifest(raw []byte) (Manifest, error) {
 }
 
 func ValidateManifest(manifest Manifest) error {
-	if manifest.SchemaVersion != 1 {
-		return fmt.Errorf("%w: schemaVersion must be 1", ErrInvalidPlugin)
+	if manifest.SchemaVersion != 2 {
+		return fmt.Errorf("%w: schemaVersion must be 2", ErrInvalidPlugin)
 	}
 	if manifest.Kind != "source" {
 		return fmt.Errorf("%w: kind must be source", ErrInvalidPlugin)
@@ -50,6 +50,12 @@ func ValidateManifest(manifest Manifest) error {
 	if manifest.Runtime.Type != "node" && manifest.Runtime.Type != "python" {
 		return fmt.Errorf("%w: runtime.type must be node or python", ErrInvalidPlugin)
 	}
+	if manifest.FetchPolicy.Type != FetchPolicyTypeFixedInterval {
+		return fmt.Errorf("%w: fetchPolicy.type must be fixed_interval", ErrInvalidPlugin)
+	}
+	if manifest.FetchPolicy.Minutes <= 0 {
+		return fmt.Errorf("%w: fetchPolicy.minutes must be positive", ErrInvalidPlugin)
+	}
 	if len(manifest.Entrypoints.Validate.Command) == 0 ||
 		strings.TrimSpace(manifest.Entrypoints.Validate.Command[0]) == "" {
 		return fmt.Errorf("%w: entrypoints.validate.command is required", ErrInvalidPlugin)
@@ -59,9 +65,6 @@ func ValidateManifest(manifest Manifest) error {
 		return fmt.Errorf("%w: entrypoints.fetch.command is required", ErrInvalidPlugin)
 	}
 	if err := validateFieldSpecs(manifest.WorkspaceConfigSchema, true); err != nil {
-		return err
-	}
-	if err := validateFieldSpecs(manifest.ScheduleConfigSchema, false); err != nil {
 		return err
 	}
 
@@ -92,7 +95,7 @@ func validateFieldSpecs(fields []FieldSpec, allowSecret bool) error {
 		case FieldTypeText, FieldTypeTextarea, FieldTypeURL, FieldTypeNumber, FieldTypeSelect, FieldTypeCheckbox:
 		case FieldTypeSecret:
 			if !allowSecret {
-				return fmt.Errorf("%w: scheduleConfigSchema does not support secret fields", ErrInvalidPlugin)
+				return fmt.Errorf("%w: secret fields are not allowed here", ErrInvalidPlugin)
 			}
 		default:
 			return fmt.Errorf("%w: unsupported field type %s", ErrInvalidPlugin, field.Type)

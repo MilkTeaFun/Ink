@@ -2,39 +2,66 @@ package plugins
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
-func TestParseManifestRejectsSecretScheduleFields(t *testing.T) {
+func TestParseManifestAcceptsValidV2Manifest(t *testing.T) {
 	t.Parallel()
 
-	raw := []byte(`{
-		"schemaVersion": 1,
+	raw := []byte(v2ManifestJSON(`"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },`))
+
+	manifest, err := ParseManifest(raw)
+	if err != nil {
+		t.Fatalf("expected valid manifest, got %v", err)
+	}
+	if manifest.SchemaVersion != 2 {
+		t.Fatalf("unexpected schema version: %d", manifest.SchemaVersion)
+	}
+	if manifest.FetchPolicy.Type != FetchPolicyTypeFixedInterval {
+		t.Fatalf("unexpected fetch policy: %+v", manifest.FetchPolicy)
+	}
+	if manifest.FetchPolicy.Minutes != 15 {
+		t.Fatalf("unexpected fetch minutes: %d", manifest.FetchPolicy.Minutes)
+	}
+}
+
+func TestParseManifestRejectsInvalidFetchPolicy(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name       string
+		fetchBlock string
+	}{
+		{name: "missing", fetchBlock: ""},
+		{name: "unsupported type", fetchBlock: `"fetchPolicy": { "type": "cron", "minutes": 15 },`},
+		{name: "non-positive interval", fetchBlock: `"fetchPolicy": { "type": "fixed_interval", "minutes": 0 },`},
+	}
+
+	for _, testCase := range testCases {
+		_, err := ParseManifest([]byte(v2ManifestJSON(testCase.fetchBlock)))
+		if !errors.Is(err, ErrInvalidPlugin) {
+			t.Fatalf("expected invalid plugin error, got %v", err)
+		}
+	}
+}
+
+func v2ManifestJSON(fetchBlock string) string {
+	return fmt.Sprintf(`{
+		"schemaVersion": 2,
 		"kind": "source",
-		"pluginKey": "bad-schedule-secret",
-		"name": "Bad Plugin",
+		"pluginKey": "demo-source",
+		"name": "Demo Source",
 		"version": "1.0.0",
-		"description": "bad",
+		"description": "demo",
 		"runtime": { "type": "node" },
+		%s
 		"entrypoints": {
 			"validate": { "command": ["node", "validate.mjs"] },
 			"fetch": { "command": ["node", "fetch.mjs"] }
 		},
-		"workspaceConfigSchema": [],
-		"scheduleConfigSchema": [
-			{
-				"key": "token",
-				"label": "Token",
-				"type": "secret",
-				"required": false
-			}
-		]
-	}`)
-
-	_, err := ParseManifest(raw)
-	if !errors.Is(err, ErrInvalidPlugin) {
-		t.Fatalf("expected invalid plugin error, got %v", err)
-	}
+		"workspaceConfigSchema": []
+	}`, fetchBlock)
 }
 
 func TestNormalizeConfigValuesSeparatesSecretsAndReportsUnknownFields(t *testing.T) {
@@ -98,13 +125,14 @@ func TestParseManifestRejectsSurroundingWhitespaceInIdentifiers(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(`{
-		"schemaVersion": 1,
+		"schemaVersion": 2,
 		"kind": "source",
 		"pluginKey": " demo-source ",
 		"name": "Demo Source",
 		"version": "1.0.0",
 		"description": "bad",
 		"runtime": { "type": "node" },
+		"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },
 		"entrypoints": {
 			"validate": { "command": ["node", "validate.mjs"] },
 			"fetch": { "command": ["node", "fetch.mjs"] }
@@ -116,8 +144,7 @@ func TestParseManifestRejectsSurroundingWhitespaceInIdentifiers(t *testing.T) {
 				"type": "url",
 				"required": true
 			}
-		],
-		"scheduleConfigSchema": []
+		]
 	}`)
 
 	_, err := ParseManifest(raw)
@@ -130,19 +157,19 @@ func TestParseManifestRejectsBlankCommandEntries(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(`{
-		"schemaVersion": 1,
+		"schemaVersion": 2,
 		"kind": "source",
 		"pluginKey": "demo-source",
 		"name": "Demo Source",
 		"version": "1.0.0",
 		"description": "bad",
 		"runtime": { "type": "node" },
+		"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },
 		"entrypoints": {
 			"validate": { "command": ["   "] },
 			"fetch": { "command": ["node", "fetch.mjs"] }
 		},
-		"workspaceConfigSchema": [],
-		"scheduleConfigSchema": []
+		"workspaceConfigSchema": []
 	}`)
 
 	_, err := ParseManifest(raw)

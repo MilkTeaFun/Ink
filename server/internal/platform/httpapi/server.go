@@ -16,6 +16,7 @@ import (
 	"github.com/ruhuang/ink/server/internal/ai"
 	"github.com/ruhuang/ink/server/internal/auth"
 	"github.com/ruhuang/ink/server/internal/feedback"
+	"github.com/ruhuang/ink/server/internal/pluginfetch"
 	"github.com/ruhuang/ink/server/internal/plugins"
 	"github.com/ruhuang/ink/server/internal/printer"
 	"github.com/ruhuang/ink/server/internal/schedule"
@@ -34,13 +35,17 @@ type PluginService interface {
 	TestBinding(ctx context.Context, accessToken string, installationID string, input plugins.BindingInput) (plugins.ValidationResult, error)
 }
 
+type PluginRunService interface {
+	RunManual(ctx context.Context, accessToken string, installationID string) (pluginfetch.ManualRunResult, error)
+}
+
 type ScheduleService interface {
 	List(ctx context.Context, accessToken string) ([]schedule.ScheduleView, error)
 	Create(ctx context.Context, accessToken string, input schedule.UpsertInput) (schedule.ScheduleView, error)
 	Update(ctx context.Context, accessToken string, scheduleID string, input schedule.UpsertInput) (schedule.ScheduleView, error)
 	Toggle(ctx context.Context, accessToken string, scheduleID string) (schedule.ScheduleView, error)
 	Delete(ctx context.Context, accessToken string, scheduleID string) error
-	RunManual(ctx context.Context, accessToken string, installationID string, input schedule.ManualRunInput) (schedule.ManualRunResult, error)
+	RunNow(ctx context.Context, accessToken string, scheduleID string) (schedule.ManualPrintResult, error)
 }
 
 type FeedbackService interface {
@@ -57,6 +62,7 @@ type Server struct {
 	printer              printer.PrinterService
 	feedback             FeedbackService
 	plugins              PluginService
+	pluginRuns           PluginRunService
 	schedules            ScheduleService
 	logger               *slog.Logger
 	rateLimiter          *LoginRateLimiter
@@ -71,6 +77,7 @@ func NewServer(
 	printerService printer.PrinterService,
 	feedbackService FeedbackService,
 	pluginService PluginService,
+	pluginRunService PluginRunService,
 	scheduleService ScheduleService,
 	logger *slog.Logger,
 	rateWindow time.Duration,
@@ -84,6 +91,7 @@ func NewServer(
 		printer:              printerService,
 		feedback:             feedbackService,
 		plugins:              pluginService,
+		pluginRuns:           pluginRunService,
 		schedules:            scheduleService,
 		logger:               logger,
 		rateLimiter:          NewLoginRateLimiter(rateWindow, rateMax),
@@ -127,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/print-schedules", s.wrap(s.handleListPrintSchedules))
 	mux.HandleFunc("POST /api/v1/print-schedules", s.wrap(s.handleCreatePrintSchedule))
 	mux.HandleFunc("PUT /api/v1/print-schedules/{scheduleID}", s.wrap(s.handleUpdatePrintSchedule))
+	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/run", s.wrap(s.handleRunPrintSchedule))
 	mux.HandleFunc("POST /api/v1/print-schedules/{scheduleID}/toggle", s.wrap(s.handleTogglePrintSchedule))
 	mux.HandleFunc("DELETE /api/v1/print-schedules/{scheduleID}", s.wrap(s.handleDeletePrintSchedule))
 	return mux
@@ -211,7 +220,7 @@ type printScheduleRequest struct {
 	Hour                 int                    `json:"hour"`
 	Minute               int                    `json:"minute"`
 	Weekdays             []int                  `json:"weekdays"`
-	ScheduleConfig       map[string]any         `json:"scheduleConfig"`
+	PrintPolicy          schedule.PrintPolicy   `json:"printPolicy"`
 	DeviceID             string                 `json:"deviceId"`
 	Enabled              bool                   `json:"enabled"`
 }
@@ -658,11 +667,6 @@ func (s *Server) handleTestPluginBinding(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, map[string]plugins.ValidationResult{"result": result})
 }
 
-type pluginRunRequest struct {
-	DeviceID       string         `json:"deviceId"`
-	ScheduleConfig map[string]any `json:"scheduleConfig"`
-}
-
 func (s *Server) handleRunPlugin(w http.ResponseWriter, r *http.Request, requestID string) {
 	accessToken := bearerToken(r.Header.Get("Authorization"))
 	if accessToken == "" {
@@ -670,24 +674,21 @@ func (s *Server) handleRunPlugin(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 
-	var payload pluginRunRequest
 	if r.ContentLength > 0 {
+		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
 			return
 		}
 	}
 
-	result, err := s.schedules.RunManual(r.Context(), accessToken, r.PathValue("installationID"), schedule.ManualRunInput{
-		DeviceID:       payload.DeviceID,
-		ScheduleConfig: payload.ScheduleConfig,
-	})
+	result, err := s.pluginRuns.RunManual(r.Context(), accessToken, r.PathValue("installationID"))
 	if err != nil {
-		s.writeScheduleError(w, requestID, err)
+		s.writePluginError(w, requestID, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]schedule.ManualRunResult{"result": result})
+	writeJSON(w, http.StatusOK, map[string]pluginfetch.ManualRunResult{"result": result})
 }
 
 func (s *Server) handleListPrinters(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -907,7 +908,7 @@ func (s *Server) handleCreatePrintSchedule(w http.ResponseWriter, r *http.Reques
 		Hour:                 payload.Hour,
 		Minute:               payload.Minute,
 		Weekdays:             payload.Weekdays,
-		ScheduleConfig:       payload.ScheduleConfig,
+		PrintPolicy:          payload.PrintPolicy,
 		DeviceID:             payload.DeviceID,
 		Enabled:              payload.Enabled,
 	})
@@ -940,7 +941,7 @@ func (s *Server) handleUpdatePrintSchedule(w http.ResponseWriter, r *http.Reques
 		Hour:                 payload.Hour,
 		Minute:               payload.Minute,
 		Weekdays:             payload.Weekdays,
-		ScheduleConfig:       payload.ScheduleConfig,
+		PrintPolicy:          payload.PrintPolicy,
 		DeviceID:             payload.DeviceID,
 		Enabled:              payload.Enabled,
 	})
@@ -950,6 +951,30 @@ func (s *Server) handleUpdatePrintSchedule(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, map[string]schedule.ScheduleView{"schedule": item})
+}
+
+func (s *Server) handleRunPrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {
+	accessToken := bearerToken(r.Header.Get("Authorization"))
+	if accessToken == "" {
+		writeError(w, requestID, http.StatusUnauthorized, "unauthorized", "请先登录。")
+		return
+	}
+
+	if r.ContentLength > 0 {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			writeError(w, requestID, http.StatusBadRequest, "invalid_request", "请求格式不正确。")
+			return
+		}
+	}
+
+	result, err := s.schedules.RunNow(r.Context(), accessToken, r.PathValue("scheduleID"))
+	if err != nil {
+		s.writeScheduleError(w, requestID, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]schedule.ManualPrintResult{"result": result})
 }
 
 func (s *Server) handleTogglePrintSchedule(w http.ResponseWriter, r *http.Request, requestID string) {

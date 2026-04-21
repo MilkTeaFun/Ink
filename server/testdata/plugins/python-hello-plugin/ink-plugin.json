@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "source",
   "pluginKey": "python-hello-source",
   "name": "Python Hello Source",
@@ -7,6 +7,10 @@
   "description": "Returns a configurable greeting for local plugin upload testing.",
   "runtime": {
     "type": "python"
+  },
+  "fetchPolicy": {
+    "type": "fixed_interval",
+    "minutes": 30
   },
   "entrypoints": {
     "validate": {
@@ -31,9 +35,7 @@
       "type": "secret",
       "required": false,
       "description": "Optional token kept only in encrypted binding storage."
-    }
-  ],
-  "scheduleConfigSchema": [
+    },
     {
       "key": "message",
       "label": "Message",

@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
-import type { PluginFieldSpec } from "@/types/plugins";
-import { buildPluginFieldDefaults, getPluginFieldDefaultValue } from "@/utils/plugins";
 import { getPrintStatusBadgeClass, getSourceStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
@@ -38,9 +36,27 @@ const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone ||
 const scheduleHour = ref(19);
 const scheduleMinute = ref(30);
 const scheduleWeekdays = ref<number[]>([]);
-const scheduleConfigDraft = ref<Record<string, unknown>>({});
+const scheduleBatchSize = ref(1);
 const scheduleDeviceId = ref("");
 const scheduleError = ref("");
+
+function getInvalidBatchSizeMessage() {
+  return String.fromCharCode(
+    27599,
+    27425,
+    25171,
+    21360,
+    26465,
+    25968,
+    24517,
+    39035,
+    26159,
+    27491,
+    25972,
+    25968,
+    12290,
+  );
+}
 
 const connectedPlugins = computed(() =>
   workspaceStore.availablePlugins.filter(
@@ -56,25 +72,6 @@ const selectedSchedulePlugin = computed(
     connectedPlugins.value.find(
       (plugin) => plugin.installation.id === schedulePluginInstallationId.value,
     ) ?? null,
-);
-
-watch(
-  () => selectedSchedulePlugin.value?.installation.id ?? "",
-  (pluginID, previousPluginID) => {
-    if (!pluginID) {
-      scheduleConfigDraft.value = {};
-      return;
-    }
-
-    if (pluginID === previousPluginID) {
-      return;
-    }
-
-    scheduleConfigDraft.value = buildPluginFieldDefaults(
-      selectedSchedulePlugin.value?.manifest.scheduleConfigSchema ?? [],
-    );
-  },
-  { immediate: true },
 );
 
 function handlePrintDeviceChange(jobId: string, event: Event) {
@@ -93,37 +90,6 @@ async function handleScheduleDelete(scheduleId: string) {
   }
 
   await workspaceStore.deleteSchedule(scheduleId);
-}
-
-function scheduleFieldValue(field: PluginFieldSpec) {
-  return scheduleConfigDraft.value[field.key] ?? getPluginFieldDefaultValue(field);
-}
-
-function updateScheduleField(field: PluginFieldSpec, value: unknown) {
-  scheduleConfigDraft.value = {
-    ...scheduleConfigDraft.value,
-    [field.key]:
-      field.type === "number" && value !== ""
-        ? Number(value)
-        : field.type === "checkbox"
-          ? Boolean(value)
-          : value,
-  };
-}
-
-function handleScheduleFieldInput(field: PluginFieldSpec, event: Event) {
-  const target = event.target as HTMLInputElement | HTMLTextAreaElement | null;
-  updateScheduleField(field, target?.value ?? "");
-}
-
-function handleScheduleFieldSelect(field: PluginFieldSpec, event: Event) {
-  const target = event.target as HTMLSelectElement | null;
-  updateScheduleField(field, target?.value ?? "");
-}
-
-function handleScheduleFieldCheckbox(field: PluginFieldSpec, event: Event) {
-  const target = event.target as HTMLInputElement | null;
-  updateScheduleField(field, target?.checked ?? false);
 }
 
 function toggleWeekday(weekday: number) {
@@ -183,9 +149,7 @@ function openScheduleDialog() {
   scheduleHour.value = 19;
   scheduleMinute.value = 30;
   scheduleWeekdays.value = [];
-  scheduleConfigDraft.value = buildPluginFieldDefaults(
-    connectedPlugins.value[0]?.manifest.scheduleConfigSchema ?? [],
-  );
+  scheduleBatchSize.value = 1;
   scheduleDeviceId.value = workspaceStore.defaultDeviceId;
   scheduleError.value = "";
 }
@@ -218,6 +182,11 @@ async function submitScheduleDialog() {
       return;
     }
 
+    if (!Number.isInteger(scheduleBatchSize.value) || scheduleBatchSize.value <= 0) {
+      scheduleError.value = getInvalidBatchSizeMessage();
+      return;
+    }
+
     const created = await workspaceStore.createSchedule({
       title: scheduleTitle.value,
       deviceId: scheduleDeviceId.value || workspaceStore.defaultDeviceId,
@@ -227,7 +196,7 @@ async function submitScheduleDialog() {
       hour: scheduleHour.value,
       minute: scheduleMinute.value,
       weekdays: scheduleWeekdays.value,
-      scheduleConfig: scheduleConfigDraft.value,
+      batchSize: scheduleBatchSize.value,
     });
 
     if (!created) {
@@ -403,6 +372,9 @@ async function submitScheduleDialog() {
                   </p>
                   <p v-if="task.nextRunAt" class="mt-1 text-xs text-stone-500">
                     下次执行 {{ workspaceStore.formatPrintTime(task.nextRunAt) }}
+                  </p>
+                  <p v-if="workspaceStore.isAuthenticated" class="mt-1 text-xs text-stone-500">
+                    每次打印 {{ task.printPolicy.batchSize }} 条，按已抓取内容的最早顺序递送。
                   </p>
                   <p
                     v-if="task.lastError"
@@ -714,87 +686,65 @@ async function submitScheduleDialog() {
               </span>
             </div>
 
-            <div
-              v-if="selectedSchedulePlugin.manifest.scheduleConfigSchema.length === 0"
-              class="mt-4 rounded-lg border border-dashed border-stone-200 bg-white px-4 py-3 text-sm text-stone-500"
-            >
-              这个插件没有本次任务的额外参数。
-            </div>
+            <div class="mt-4 grid gap-4 md:grid-cols-2">
+              <div class="rounded-lg border border-dashed border-stone-200 bg-white px-4 py-3">
+                <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                  抓取频率
+                </p>
+                <p class="mt-1 text-sm text-stone-900">
+                  每 {{ selectedSchedulePlugin.manifest.fetchPolicy.minutes }} 分钟抓取一次
+                </p>
+                <p class="mt-1 text-xs text-stone-500">
+                  抓取由插件 binding 独立执行，定时任务只消费已抓取内容。
+                </p>
+              </div>
 
-            <div v-else class="mt-4 grid gap-4 md:grid-cols-2">
-              <div
-                v-for="field in selectedSchedulePlugin.manifest.scheduleConfigSchema"
-                :key="field.key"
-                class="block"
-                :class="{ 'md:col-span-2': field.type === 'textarea' }"
-              >
-                <span class="mb-2 block text-sm font-medium text-stone-900">
-                  {{ field.label }}
-                  <span v-if="field.required" class="text-rose-500">*</span>
-                </span>
-
-                <textarea
-                  v-if="field.type === 'textarea'"
-                  :value="String(scheduleFieldValue(field) ?? '')"
-                  rows="4"
-                  :placeholder="field.description || ''"
-                  class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                  @input="handleScheduleFieldInput(field, $event)"
-                />
-
-                <select
-                  v-else-if="field.type === 'select'"
-                  :value="String(scheduleFieldValue(field) ?? '')"
-                  class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                  @change="handleScheduleFieldSelect(field, $event)"
+              <div class="rounded-lg border border-dashed border-stone-200 bg-white px-4 py-3">
+                <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                  抓取状态
+                </p>
+                <p class="mt-1 text-sm text-stone-900">
+                  {{
+                    selectedSchedulePlugin.binding?.lastFetchAt
+                      ? `最近抓取 ${workspaceStore.formatPrintTime(selectedSchedulePlugin.binding.lastFetchAt)}`
+                      : "尚未抓取过"
+                  }}
+                </p>
+                <p class="mt-1 text-xs text-stone-500">
+                  {{
+                    selectedSchedulePlugin.binding?.nextFetchAt
+                      ? `下次抓取 ${workspaceStore.formatPrintTime(selectedSchedulePlugin.binding.nextFetchAt)}`
+                      : "当前未安排自动抓取"
+                  }}
+                </p>
+                <p
+                  v-if="selectedSchedulePlugin.binding?.lastFetchError"
+                  class="mt-2 text-xs text-rose-700"
                 >
-                  <option
-                    v-for="option in field.options ?? []"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-
-                <label
-                  v-else-if="field.type === 'checkbox'"
-                  class="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3"
-                >
-                  <input
-                    :checked="Boolean(scheduleFieldValue(field))"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
-                    @change="handleScheduleFieldCheckbox(field, $event)"
-                  />
-                  <span class="text-sm text-stone-700">
-                    {{ field.description || "启用此选项" }}
-                  </span>
-                </label>
-
-                <input
-                  v-else
-                  :value="scheduleFieldValue(field)"
-                  :type="
-                    field.type === 'secret'
-                      ? 'password'
-                      : field.type === 'number'
-                        ? 'number'
-                        : field.type === 'url'
-                          ? 'url'
-                          : 'text'
-                  "
-                  :placeholder="field.description || ''"
-                  autocomplete="off"
-                  class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                  @input="handleScheduleFieldInput(field, $event)"
-                />
-
-                <span v-if="field.description" class="mt-2 block text-xs text-stone-500">
-                  {{ field.description }}
-                </span>
+                  {{ selectedSchedulePlugin.binding.lastFetchError }}
+                </p>
               </div>
             </div>
+
+            <label class="mt-4 block">
+              <span class="mb-2 block text-sm font-medium text-stone-900">每次打印条数</span>
+              <input
+                v-model.number="scheduleBatchSize"
+                type="number"
+                min="1"
+                class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+              />
+              <span class="mt-2 block text-xs text-stone-500">
+                每次 schedule tick 会按最早抓取、尚未由此任务递送的内容，最多打印这几个条目。
+              </span>
+            </label>
+          </div>
+
+          <div
+            v-else
+            class="rounded-xl border border-dashed border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-500"
+          >
+            请选择一个已连接插件，然后设置这个任务每次打印多少条已抓取内容。
           </div>
         </template>
 
