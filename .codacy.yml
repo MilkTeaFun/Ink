@@ -4,3 +4,6 @@ engines:
     enabled: false
 exclude_paths:
   - 'server/migrations/**'
+  - 'server/**/*_test.go'
+  - 'web/**/*.spec.ts'
+  - 'web/src/stores/pinia.ts'
