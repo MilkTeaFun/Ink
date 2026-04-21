@@ -19,6 +19,7 @@ import type {
   fetchPlugin,
   fetchPlugins,
   fetchPrintSchedules,
+  installPluginFromGit,
   savePluginBinding,
   testPluginBinding,
   togglePrintSchedule,
@@ -87,6 +88,7 @@ vi.mock("@/services/plugins", () => ({
   fetchPlugin: vi.fn<typeof fetchPlugin>(),
   fetchPlugins: vi.fn<typeof fetchPlugins>(),
   fetchPrintSchedules: vi.fn<typeof fetchPrintSchedules>(),
+  installPluginFromGit: vi.fn<typeof installPluginFromGit>(),
   savePluginBinding: vi.fn<typeof savePluginBinding>(),
   testPluginBinding: vi.fn<typeof testPluginBinding>(),
   togglePrintSchedule: vi.fn<typeof togglePrintSchedule>(),
@@ -99,15 +101,18 @@ function createPluginDetails(overrides?: Record<string, unknown>) {
     installation: {
       id: "plugin-installation-1",
       pluginKey: "demo-source",
-      sourceType: "upload" as const,
+      sourceType: "git" as const,
       displayName: "Demo Source",
       version: "1.0.0",
       runtimeType: "node" as const,
       status: "ready" as const,
+      repoUrl: "https://github.com/example/demo-source.git",
+      repoRef: "main",
+      repoCommitSha: "abc123",
       ...(overrides?.installation as Record<string, unknown> | undefined),
     },
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: "source" as const,
       pluginKey: "demo-source",
       name: "Demo Source",
@@ -115,6 +120,10 @@ function createPluginDetails(overrides?: Record<string, unknown>) {
       description: "A demo source plugin.",
       runtime: {
         type: "node" as const,
+      },
+      fetchPolicy: {
+        type: "fixed_interval" as const,
+        minutes: 15,
       },
       entrypoints: {
         validate: {
@@ -132,25 +141,6 @@ function createPluginDetails(overrides?: Record<string, unknown>) {
           required: true,
         },
       ],
-      scheduleConfigSchema: [
-        {
-          key: "mode",
-          label: "Mode",
-          type: "select" as const,
-          required: true,
-          options: [
-            {
-              label: "Brief",
-              value: "brief",
-            },
-            {
-              label: "Full",
-              value: "full",
-            },
-          ],
-          defaultValue: "brief",
-        },
-      ],
       ...(overrides?.manifest as Record<string, unknown> | undefined),
     },
     binding: {
@@ -160,6 +150,8 @@ function createPluginDetails(overrides?: Record<string, unknown>) {
       config: {
         feedUrl: "https://example.com/feed",
       },
+      lastFetchAt: new Date("2026-04-10T00:20:00.000Z").toISOString(),
+      nextFetchAt: new Date("2026-04-10T00:35:00.000Z").toISOString(),
       ...(overrides?.binding as Record<string, unknown> | undefined),
     },
   };
@@ -177,8 +169,8 @@ function createScheduleView(overrides?: Record<string, unknown>) {
     hour: 8,
     minute: 30,
     weekdays: [],
-    scheduleConfig: {
-      mode: "brief",
+    printPolicy: {
+      batchSize: 1,
     },
     deviceId: "device-1",
     enabled: true,
@@ -415,6 +407,48 @@ describe("workspace store plugin flows", () => {
     expect(store.availablePlugins[0]?.installation.status).toBe("disabled");
   });
 
+  it("supports authenticated plugin installation from git", async () => {
+    const store = authenticateStore("admin");
+
+    vi.mocked(pluginService.installPluginFromGit).mockResolvedValueOnce(
+      createPluginDetails({
+        installation: {
+          id: "plugin-installation-2",
+          repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+          repoRef: "main",
+          repoSubdir: "plugins/hello-node",
+        },
+      }),
+    );
+    vi.mocked(pluginService.fetchAdminPlugins).mockResolvedValueOnce({
+      plugins: [
+        createPluginDetails({
+          installation: {
+            id: "plugin-installation-2",
+            repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+            repoRef: "main",
+            repoSubdir: "plugins/hello-node",
+          },
+        }),
+      ],
+    });
+
+    const installed = await store.installPluginRepository({
+      repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+      repoRef: "main",
+      repoSubdir: "plugins/hello-node",
+    });
+
+    expect(installed?.installation.repoSubdir).toBe("plugins/hello-node");
+    expect(pluginService.installPluginFromGit).toHaveBeenCalledWith("access-token", {
+      repoUrl: "https://github.com/MilkTeaFun/Ink-plugin.git",
+      repoRef: "main",
+      repoSubdir: "plugins/hello-node",
+    });
+    expect(store.availablePlugins[0]?.installation.id).toBe("plugin-installation-2");
+    expect(store.pluginGitInstallLoading).toBe(false);
+  });
+
   it("supports authenticated schedule creation, device updates, toggles, and deletion", async () => {
     const store = authenticateStore();
     store.devices = [
@@ -454,9 +488,7 @@ describe("workspace store plugin flows", () => {
       hour: 20,
       minute: 15,
       weekdays: [1, 3, 5],
-      scheduleConfig: {
-        mode: "full",
-      },
+      batchSize: 2,
       deviceId: "device-1",
     });
 

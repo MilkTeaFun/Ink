@@ -15,44 +15,62 @@ import (
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
-// --- test doubles --------------------------------------------------------
-
-type memInboxRepo struct {
-	mu    sync.Mutex
-	items map[string]inbox.Item
+type memoryRepo struct {
+	mu         sync.Mutex
+	items      map[string]inbox.Item
+	deliveries map[string]Delivery
 }
 
-func newMemInboxRepo() *memInboxRepo {
-	return &memInboxRepo{items: map[string]inbox.Item{}}
+func newMemoryRepo() *memoryRepo {
+	return &memoryRepo{
+		items:      map[string]inbox.Item{},
+		deliveries: map[string]Delivery{},
+	}
 }
 
-func (r *memInboxRepo) InsertItem(_ context.Context, item inbox.Item) (bool, error) {
+func deliveryKey(scheduleID string, itemID string) string {
+	return scheduleID + ":" + itemID
+}
+
+func (r *memoryRepo) ListFailedBySchedule(_ context.Context, scheduleID string, limit int) ([]DeliveryItem, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, existing := range r.items {
-		if existing.PluginBindingID == item.PluginBindingID && existing.ExternalID == item.ExternalID {
-			return false, nil
+
+	result := []DeliveryItem{}
+	for _, delivery := range r.deliveries {
+		if delivery.PrintScheduleID != scheduleID {
+			continue
 		}
+		if delivery.Status != DeliveryStatusFailed {
+			continue
+		}
+		if delivery.AttemptCount >= MaxDeliveryAttempts {
+			continue
+		}
+
+		item := r.items[delivery.PluginItemID]
+		result = append(result, DeliveryItem{
+			Delivery: delivery,
+			Item:     item,
+		})
 	}
-	r.items[item.ID] = item
-	return true, nil
+	sort.Slice(result, func(i int, j int) bool {
+		if result[i].Item.CreatedAt.Equal(result[j].Item.CreatedAt) {
+			return result[i].Delivery.UpdatedAt.Before(result[j].Delivery.UpdatedAt)
+		}
+		return result[i].Item.CreatedAt.Before(result[j].Item.CreatedAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
 }
 
-func (r *memInboxRepo) FindInboxItemByID(_ context.Context, itemID string) (*inbox.Item, error) {
+func (r *memoryRepo) ListUndeliveredBySchedule(_ context.Context, scheduleID string, bindingID string, limit int) ([]inbox.Item, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	item, ok := r.items[itemID]
-	if !ok {
-		return nil, nil
-	}
-	copy := item
-	return &copy, nil
-}
 
-func (r *memInboxRepo) ListPendingByBinding(_ context.Context, bindingID string, limit int) ([]inbox.Item, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]inbox.Item, 0)
+	result := []inbox.Item{}
 	for _, item := range r.items {
 		if item.PluginBindingID != bindingID {
 			continue
@@ -60,82 +78,46 @@ func (r *memInboxRepo) ListPendingByBinding(_ context.Context, bindingID string,
 		if item.Status != inbox.StatusPending {
 			continue
 		}
-		out = append(out, item)
+		if _, exists := r.deliveries[deliveryKey(scheduleID, item.ID)]; exists {
+			continue
+		}
+		result = append(result, item)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
+	sort.Slice(result, func(i int, j int) bool {
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
 	}
-	return out, nil
+	return result, nil
 }
 
-func (r *memInboxRepo) ListPendingBindingIDs(_ context.Context, limit int) ([]string, error) {
+func (r *memoryRepo) SaveDelivery(_ context.Context, delivery Delivery) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	oldest := map[string]time.Time{}
-	for _, item := range r.items {
-		if item.Status != inbox.StatusPending {
-			continue
-		}
-		current, exists := oldest[item.PluginBindingID]
-		if !exists || item.CreatedAt.Before(current) {
-			oldest[item.PluginBindingID] = item.CreatedAt
-		}
-	}
-
-	ids := make([]string, 0, len(oldest))
-	for bindingID := range oldest {
-		ids = append(ids, bindingID)
-	}
-	sort.Slice(ids, func(i, j int) bool { return oldest[ids[i]].Before(oldest[ids[j]]) })
-	if limit > 0 && len(ids) > limit {
-		ids = ids[:limit]
-	}
-	return ids, nil
-}
-
-func (r *memInboxRepo) ListRetryable(_ context.Context, olderThan time.Time, limit int) ([]inbox.Item, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]inbox.Item, 0)
-	for _, item := range r.items {
-		if item.Status != inbox.StatusFailed {
-			continue
-		}
-		if item.AttemptCount >= inbox.MaxDispatchAttempts {
-			continue
-		}
-		if !item.UpdatedAt.Before(olderThan) {
-			continue
-		}
-		out = append(out, item)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.Before(out[j].UpdatedAt) })
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
-	}
-	return out, nil
-}
-
-func (r *memInboxRepo) UpdateStatus(_ context.Context, item inbox.Item) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	existing, ok := r.items[item.ID]
-	if !ok {
-		return errors.New("not found")
-	}
-	existing.Status = item.Status
-	existing.AttemptCount = item.AttemptCount
-	existing.LastError = item.LastError
-	existing.PrintJobID = item.PrintJobID
-	existing.UpdatedAt = item.UpdatedAt
-	r.items[item.ID] = existing
+	r.deliveries[deliveryKey(delivery.PrintScheduleID, delivery.PluginItemID)] = delivery
 	return nil
 }
 
-func (r *memInboxRepo) DeletePrintedOlderThan(_ context.Context, _ time.Time) (int64, error) {
-	return 0, nil
+func (r *memoryRepo) CountPrintedInLast24h(_ context.Context, bindingID string, since time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for _, delivery := range r.deliveries {
+		if delivery.Status != DeliveryStatusPrinted {
+			continue
+		}
+		if delivery.DeliveredAt == nil || delivery.DeliveredAt.Before(since) {
+			continue
+		}
+		item := r.items[delivery.PluginItemID]
+		if item.PluginBindingID == bindingID {
+			count++
+		}
+	}
+	return count, nil
 }
 
 type incrementingIDs struct {
@@ -146,39 +128,17 @@ type incrementingIDs struct {
 func (g *incrementingIDs) New(prefix string) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	g.count++
 	return fmt.Sprintf("%s-%d", prefix, g.count), nil
 }
 
-type fixedClock struct{ now time.Time }
-
-func (c *fixedClock) Now() time.Time { return c.now }
-
-type stubPluginRuntime struct {
-	binding      plugins.Binding
-	installation plugins.Installation
-	manifest     plugins.Manifest
+type fixedClock struct {
+	now time.Time
 }
 
-func (s *stubPluginRuntime) GetBindingByID(_ context.Context, _ string) (plugins.Binding, map[string]string, error) {
-	return s.binding, map[string]string{}, nil
-}
-
-func (s *stubPluginRuntime) GetInstallation(_ context.Context, _ string) (plugins.Installation, plugins.Manifest, error) {
-	return s.installation, s.manifest, nil
-}
-
-type stubWorkspace struct{}
-
-func (stubWorkspace) FindByUserID(_ context.Context, _ string) (*workspace.State, error) {
-	state := workspace.EmptyState()
-	return &state, nil
-}
-
-type stubCounter struct{ printedToday int }
-
-func (s stubCounter) CountPrintedInLast24h(_ context.Context, _ string, _ time.Time) (int, error) {
-	return s.printedToday, nil
+func (c fixedClock) Now() time.Time {
+	return c.now
 }
 
 type stubPrinter struct {
@@ -192,6 +152,7 @@ type stubPrinter struct {
 func (p *stubPrinter) CreatePrintJobForUser(_ context.Context, _ string, input printer.CreateJobInput) (workspace.PrintJob, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	if p.failNext != nil {
 		err := p.failNext
 		if p.failOnce {
@@ -199,375 +160,153 @@ func (p *stubPrinter) CreatePrintJobForUser(_ context.Context, _ string, input p
 		}
 		return workspace.PrintJob{}, err
 	}
+
 	p.nextID++
 	p.created = append(p.created, input)
 	return workspace.PrintJob{ID: fmt.Sprintf("job-%d", p.nextID)}, nil
 }
 
-// --- helpers -------------------------------------------------------------
+type stubWorkspace struct{}
 
-func newTestService(t *testing.T, binding plugins.Binding, counter DailyCounter, p PrinterJobCreator, clk Clock) (*Service, *inbox.Service, *memInboxRepo) {
-	t.Helper()
-	return newTestServiceWithRetryBackoff(t, binding, counter, p, clk, DefaultRetryBackoff)
+func (stubWorkspace) FindByUserID(_ context.Context, _ string) (*workspace.State, error) {
+	state := workspace.EmptyState()
+	return &state, nil
 }
 
-func newTestServiceWithRetryBackoff(t *testing.T, binding plugins.Binding, counter DailyCounter, p PrinterJobCreator, clk Clock, retryBackoff time.Duration) (*Service, *inbox.Service, *memInboxRepo) {
-	t.Helper()
-	repo := newMemInboxRepo()
-	inboxService := inbox.NewService(repo, &incrementingIDs{}, clk)
-	runtime := &stubPluginRuntime{
-		binding:      binding,
-		installation: plugins.Installation{ID: binding.PluginInstallationID, DisplayName: "Hello Plugin"},
-	}
-	return NewService(inboxService, runtime, p, stubWorkspace{}, counter, clk, retryBackoff), inboxService, repo
-}
-
-func ingestItem(t *testing.T, svc *inbox.Service, bindingID, deviceID, externalID, title string) inbox.Item {
-	t.Helper()
-	items := []plugins.Item{{
-		ExternalID:  externalID,
-		Title:       title,
-		SourceLabel: "Hello Plugin",
-		Blocks:      []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: "body"}},
-	}}
-	result, err := svc.Ingest(context.Background(), inbox.IngestInput{
+func buildItem(id string, bindingID string, title string, createdAt time.Time) inbox.Item {
+	return inbox.Item{
+		ID:                   id,
 		UserID:               "user-1",
 		PluginInstallationID: "install-1",
 		PluginBindingID:      bindingID,
-		DeviceID:             deviceID,
-		SourceLabelFallback:  "Hello Plugin",
-		Items:                items,
-	})
-	if err != nil {
-		t.Fatalf("ingest: %v", err)
+		ExternalID:           id,
+		Title:                title,
+		SourceLabel:          "Fixture Source",
+		Status:               inbox.StatusPending,
+		Blocks:               []plugins.ContentBlock{{Type: plugins.BlockParagraph, Text: title}},
+		FetchedAt:            createdAt,
+		CreatedAt:            createdAt,
+		UpdatedAt:            createdAt,
 	}
-	if result.Inserted != 1 {
-		t.Fatalf("expected 1 inserted, got %d", result.Inserted)
-	}
-	// Fetch back to get the full item with its generated ID.
-	pending, err := svc.ListPendingByBinding(context.Background(), bindingID, 10)
-	if err != nil {
-		t.Fatalf("list pending: %v", err)
-	}
-	for _, p := range pending {
-		if p.ExternalID == externalID {
-			return p
-		}
-	}
-	t.Fatalf("ingested item %s not found", externalID)
-	return inbox.Item{}
 }
 
-// --- tests ---------------------------------------------------------------
+func newService(now time.Time, repo *memoryRepo, printerStub *stubPrinter) *Service {
+	return NewService(repo, printerStub, stubWorkspace{}, &incrementingIDs{}, fixedClock{now: now})
+}
 
-func TestFlushBindingPrintsItemsAndRespectsPerRunLimit(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      2,
-		MaxPrintsPerDay:      10,
+func buildScheduleRunInput(scheduleID string, batchSize int) ScheduleRunInput {
+	return ScheduleRunInput{
+		ScheduleID:   scheduleID,
+		Binding:      plugins.Binding{ID: "binding-1", UserID: "user-1", MaxPrintsPerRun: 10, MaxPrintsPerDay: 10},
+		Installation: plugins.Installation{DisplayName: "Fixture Source"},
+		DeviceID:     "device-1",
+		BatchSize:    batchSize,
 	}
-	printerStub := &stubPrinter{}
-	svc, ibx, _ := newTestService(t, binding, stubCounter{}, printerStub, clk)
+}
 
-	for i := 0; i < 5; i++ {
-		ingestItem(t, ibx, binding.ID, "dev-1", fmt.Sprintf("ext-%d", i), fmt.Sprintf("Item %d", i))
-	}
+func mustRunSchedule(t *testing.T, service *Service, input ScheduleRunInput) ScheduleRunResult {
+	t.Helper()
 
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
+	result, err := service.RunSchedule(context.Background(), input)
 	if err != nil {
-		t.Fatalf("flush: %v", err)
+		t.Fatalf("run schedule: %v", err)
 	}
-	if result.Printed != 2 {
-		t.Fatalf("expected 2 printed (per-run cap), got %d", result.Printed)
+	return result
+}
+
+func assertRunCounts(t *testing.T, result ScheduleRunResult, printed int, failed int, skipped int) {
+	t.Helper()
+	if result.Printed != printed || result.Failed != failed || result.Skipped != skipped {
+		t.Fatalf("unexpected run result: %+v", result)
+	}
+}
+
+func assertDeliveryPresence(t *testing.T, repo *memoryRepo, scheduleID string, itemID string, want bool) {
+	t.Helper()
+	_, exists := repo.deliveries[deliveryKey(scheduleID, itemID)]
+	if exists != want {
+		t.Fatalf("unexpected delivery presence for %s/%s: got=%t want=%t", scheduleID, itemID, exists, want)
+	}
+}
+
+func TestRunSchedulePrintsOldestUndeliveredItemsUpToBatchSize(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	repo := newMemoryRepo()
+	repo.items["item-1"] = buildItem("item-1", "binding-1", "Oldest", now.Add(-3*time.Minute))
+	repo.items["item-2"] = buildItem("item-2", "binding-1", "Middle", now.Add(-2*time.Minute))
+	repo.items["item-3"] = buildItem("item-3", "binding-1", "Newest", now.Add(-1*time.Minute))
+
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+	result := mustRunSchedule(t, service, buildScheduleRunInput("schedule-1", 2))
+	assertRunCounts(t, result, 2, 0, 0)
+	if len(printerStub.created) != 2 {
+		t.Fatalf("expected 2 print jobs, got %d", len(printerStub.created))
+	}
+	if printerStub.created[0].Title != "Oldest" || printerStub.created[1].Title != "Middle" {
+		t.Fatalf("expected oldest items first, got %+v", printerStub.created)
+	}
+	assertDeliveryPresence(t, repo, "schedule-1", "item-1", true)
+	assertDeliveryPresence(t, repo, "schedule-1", "item-2", true)
+	assertDeliveryPresence(t, repo, "schedule-1", "item-3", false)
+}
+
+func TestRunScheduleAllowsDifferentSchedulesToPrintSameCollectedItem(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	repo := newMemoryRepo()
+	repo.items["item-1"] = buildItem("item-1", "binding-1", "Shared Item", now.Add(-1*time.Minute))
+
+	printerStub := &stubPrinter{}
+	service := newService(now, repo, printerStub)
+	first := mustRunSchedule(t, service, buildScheduleRunInput("schedule-1", 1))
+	second := mustRunSchedule(t, service, buildScheduleRunInput("schedule-2", 1))
+
+	if first.Printed != 1 || second.Printed != 1 {
+		t.Fatalf("expected both schedules to print the shared item, got first=%+v second=%+v", first, second)
 	}
 	if len(printerStub.created) != 2 {
 		t.Fatalf("expected 2 print jobs, got %d", len(printerStub.created))
 	}
-	if len(result.PrintJobIDs) != 2 {
-		t.Fatalf("expected 2 job ids, got %d", len(result.PrintJobIDs))
-	}
+	assertDeliveryPresence(t, repo, "schedule-1", "item-1", true)
+	assertDeliveryPresence(t, repo, "schedule-2", "item-1", true)
 }
 
-func TestFlushBindingRespectsPerDayLimit(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      10,
-		MaxPrintsPerDay:      3,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, _ := newTestService(t, binding, stubCounter{printedToday: 2}, printerStub, clk)
+func TestRunScheduleRetriesFailedDeliveriesWithoutDuplicatingRows(t *testing.T) {
+	t.Parallel()
 
-	for i := 0; i < 5; i++ {
-		ingestItem(t, ibx, binding.ID, "dev-1", fmt.Sprintf("ext-%d", i), fmt.Sprintf("Item %d", i))
-	}
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	repo := newMemoryRepo()
+	repo.items["item-1"] = buildItem("item-1", "binding-1", "Retry Me", now.Add(-1*time.Minute))
 
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
+	printerStub := &stubPrinter{
+		failNext: errors.New("printer offline"),
+		failOnce: true,
 	}
-	if result.Printed != 1 {
-		t.Fatalf("expected 1 printed (daily cap remaining), got %d", result.Printed)
-	}
-}
+	service := newService(now, repo, printerStub)
+	input := buildScheduleRunInput("schedule-1", 1)
+	first := mustRunSchedule(t, service, input)
+	assertRunCounts(t, first, 0, 1, 0)
 
-func TestFlushBindingSkipsWhenDailyCapReached(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      10,
-		MaxPrintsPerDay:      3,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, _ := newTestService(t, binding, stubCounter{printedToday: 3}, printerStub, clk)
-	ingestItem(t, ibx, binding.ID, "dev-1", "ext-0", "Item 0")
-
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if result.Printed != 0 {
-		t.Fatalf("expected 0 printed when daily cap reached, got %d", result.Printed)
-	}
-	if len(printerStub.created) != 0 {
-		t.Fatalf("printer should not have been called")
-	}
-}
-
-func TestFlushBindingMarksItemFailedOnPrinterError(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{failNext: errors.New("printer down")}
-	svc, ibx, repo := newTestService(t, binding, stubCounter{}, printerStub, clk)
-	item := ingestItem(t, ibx, binding.ID, "dev-1", "ext-0", "Item 0")
-
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if result.Failed != 1 || result.Printed != 0 {
-		t.Fatalf("expected 1 failed, got %+v", result)
-	}
-	stored, _ := repo.FindInboxItemByID(context.Background(), item.ID)
-	if stored == nil || stored.Status != inbox.StatusFailed || stored.AttemptCount != 1 {
-		t.Fatalf("expected item in failed with attempt=1, got %+v", stored)
-	}
-}
-
-func TestFlushBindingFailsItemWithoutDevice(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, repo := newTestService(t, binding, stubCounter{}, printerStub, clk)
-	item := ingestItem(t, ibx, binding.ID, "", "ext-0", "Item 0")
-
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if result.Failed != 1 || result.Printed != 0 {
-		t.Fatalf("expected 1 failed due to missing device, got %+v", result)
-	}
-	stored, _ := repo.FindInboxItemByID(context.Background(), item.ID)
-	if stored == nil || stored.Status != inbox.StatusFailed {
-		t.Fatalf("expected item failed, got %+v", stored)
-	}
-	if stored.LastError == nil || *stored.LastError != "no device bound for item" {
-		t.Fatalf("expected missing-device error, got %v", stored.LastError)
-	}
-}
-
-func TestFlushBindingIgnoresExhaustedFailedItems(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, repo := newTestService(t, binding, stubCounter{}, printerStub, clk)
-	item := ingestItem(t, ibx, binding.ID, "dev-1", "ext-old", "Old Item")
-
-	// Bump attempts to the ceiling.
-	for i := 0; i < inbox.MaxDispatchAttempts; i++ {
-		if err := ibx.MarkFailed(context.Background(), item, "boom"); err != nil {
-			t.Fatalf("mark failed: %v", err)
-		}
-		refreshed, _ := repo.FindInboxItemByID(context.Background(), item.ID)
-		item = *refreshed
+	failedDelivery := repo.deliveries[deliveryKey("schedule-1", "item-1")]
+	if failedDelivery.Status != DeliveryStatusFailed || failedDelivery.AttemptCount != 1 {
+		t.Fatalf("expected failed delivery with one attempt, got %+v", failedDelivery)
 	}
 
-	ingestItem(t, ibx, binding.ID, "dev-1", "ext-new", "New Item")
+	second := mustRunSchedule(t, service, input)
+	assertRunCounts(t, second, 1, 0, 0)
 
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
+	retried := repo.deliveries[deliveryKey("schedule-1", "item-1")]
+	if retried.ID != failedDelivery.ID {
+		t.Fatalf("expected retry to reuse delivery row, got old=%s new=%s", failedDelivery.ID, retried.ID)
 	}
-	if result.Printed != 1 || result.Skipped != 0 {
-		t.Fatalf("expected only the fresh pending item to print, got %+v", result)
+	if retried.Status != DeliveryStatusPrinted || retried.AttemptCount != 2 {
+		t.Fatalf("unexpected retried delivery state: %+v", retried)
 	}
-	if len(printerStub.created) != 1 {
-		t.Fatalf("expected 1 print job for the pending item, got %d", len(printerStub.created))
-	}
-	if printerStub.created[0].Title != "New Item" {
-		t.Fatalf("expected the pending item to print, got %+v", printerStub.created[0])
-	}
-}
-
-func TestDrainPendingFlushesBacklogAfterPerRunCap(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      1,
-		MaxPrintsPerDay:      10,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, _ := newTestService(t, binding, stubCounter{}, printerStub, clk)
-
-	ingestItem(t, ibx, binding.ID, "dev-1", "ext-0", "Item 0")
-	ingestItem(t, ibx, binding.ID, "dev-1", "ext-1", "Item 1")
-
-	first, err := svc.FlushBinding(context.Background(), binding.ID, "dev-1")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if first.Printed != 1 {
-		t.Fatalf("expected initial flush to honor per-run cap, got %+v", first)
-	}
-
-	drained, err := svc.DrainPending(context.Background(), 10)
-	if err != nil {
-		t.Fatalf("drain pending: %v", err)
-	}
-	if drained.Printed != 1 {
-		t.Fatalf("expected backlog drain to print the remaining item, got %+v", drained)
-	}
-}
-
-func TestRetryFailedDispatchesAcrossBindings(t *testing.T) {
-	past := time.Now().UTC().Add(-1 * time.Hour)
-	clk := &fixedClock{now: past.Add(30 * time.Minute)}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, repo := newTestService(t, binding, stubCounter{}, printerStub, clk)
-	item := ingestItem(t, ibx, binding.ID, "dev-1", "ext-0", "Item 0")
-
-	// Simulate a past failure older than the 15m retry cutoff.
-	clk.now = past
-	if err := ibx.MarkFailed(context.Background(), item, "transient"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-	clk.now = past.Add(30 * time.Minute)
-
-	result, err := svc.RetryFailed(context.Background(), 10)
-	if err != nil {
-		t.Fatalf("retry: %v", err)
-	}
-	if result.Printed != 1 {
-		t.Fatalf("expected 1 printed on retry, got %+v", result)
-	}
-	stored, _ := repo.FindInboxItemByID(context.Background(), item.ID)
-	if stored == nil || stored.Status != inbox.StatusPrinted {
-		t.Fatalf("expected item to move to printed, got %+v", stored)
-	}
-}
-
-func TestRetryFailedRespectsConfiguredBackoff(t *testing.T) {
-	past := time.Now().UTC().Add(-30 * time.Minute)
-	clk := &fixedClock{now: past}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, repo := newTestServiceWithRetryBackoff(t, binding, stubCounter{}, printerStub, clk, 45*time.Minute)
-	item := ingestItem(t, ibx, binding.ID, "dev-1", "ext-0", "Item 0")
-
-	if err := ibx.MarkFailed(context.Background(), item, "transient"); err != nil {
-		t.Fatalf("mark failed: %v", err)
-	}
-
-	result, err := svc.RetryFailed(context.Background(), 10)
-	if err != nil {
-		t.Fatalf("retry: %v", err)
-	}
-	if result.Printed != 0 {
-		t.Fatalf("expected retry to wait for configured backoff, got %+v", result)
-	}
-	stored, _ := repo.FindInboxItemByID(context.Background(), item.ID)
-	if stored == nil || stored.Status != inbox.StatusFailed {
-		t.Fatalf("expected item to remain failed until backoff passes, got %+v", stored)
-	}
-	if len(printerStub.created) != 0 {
-		t.Fatalf("printer should not be called before retry backoff expires")
-	}
-}
-
-func TestFlushBindingPrefersCurrentDefaultDevice(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	binding := plugins.Binding{
-		ID:                   "binding-1",
-		PluginInstallationID: "install-1",
-		UserID:               "user-1",
-		MaxPrintsPerRun:      5,
-		MaxPrintsPerDay:      5,
-	}
-	printerStub := &stubPrinter{}
-	svc, ibx, _ := newTestService(t, binding, stubCounter{}, printerStub, clk)
-
-	ingestItem(t, ibx, binding.ID, "dev-old", "ext-0", "Item 0")
-
-	result, err := svc.FlushBinding(context.Background(), binding.ID, "dev-new")
-	if err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if result.Printed != 1 {
-		t.Fatalf("expected item to print, got %+v", result)
-	}
-	if len(printerStub.created) != 1 {
-		t.Fatalf("expected 1 print job, got %d", len(printerStub.created))
-	}
-	if printerStub.created[0].PrinterBindingID != "dev-new" {
-		t.Fatalf("expected current default device to win, got %+v", printerStub.created[0])
-	}
-}
-
-func TestFlushBindingRejectsEmptyID(t *testing.T) {
-	clk := &fixedClock{now: time.Now().UTC()}
-	svc, _, _ := newTestService(t, plugins.Binding{ID: "binding-1"}, stubCounter{}, &stubPrinter{}, clk)
-	if _, err := svc.FlushBinding(context.Background(), "   ", "dev-1"); err == nil {
-		t.Fatalf("expected error for empty binding id")
+	if len(repo.deliveries) != 1 {
+		t.Fatalf("expected one delivery row after retry, got %d", len(repo.deliveries))
 	}
 }

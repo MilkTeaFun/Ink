@@ -1,11 +1,7 @@
-// Package dispatch takes pending plugin items out of the inbox and turns them
-// into printer jobs. It enforces per-binding rate limits, tracks per-item
-// retry budgets, and wires the inbox state machine to the printer service.
 package dispatch
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,267 +12,142 @@ import (
 	"github.com/ruhuang/ink/server/internal/workspace"
 )
 
-// PrinterJobCreator is the subset of printer.Service the dispatcher needs.
+type DeliveryStatus string
+
+const (
+	DeliveryStatusPrinted DeliveryStatus = "printed"
+	DeliveryStatusFailed  DeliveryStatus = "failed"
+
+	DefaultDailyCap     = 50
+	MaxDeliveryAttempts = 3
+)
+
+type Delivery struct {
+	ID              string
+	PrintScheduleID string
+	PluginItemID    string
+	Status          DeliveryStatus
+	AttemptCount    int
+	LastError       *string
+	PrintJobID      *string
+	DeliveredAt     *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type DeliveryItem struct {
+	Delivery Delivery
+	Item     inbox.Item
+}
+
+type ScheduleRunInput struct {
+	ScheduleID   string
+	Binding      plugins.Binding
+	Installation plugins.Installation
+	DeviceID     string
+	BatchSize    int
+}
+
+type ScheduleRunResult struct {
+	Printed     int      `json:"printedCount"`
+	Failed      int      `json:"failedCount"`
+	Skipped     int      `json:"skippedCount"`
+	PrintJobIDs []string `json:"printJobIds"`
+}
+
+type Repository interface {
+	ListFailedBySchedule(ctx context.Context, scheduleID string, limit int) ([]DeliveryItem, error)
+	ListUndeliveredBySchedule(ctx context.Context, scheduleID string, bindingID string, limit int) ([]inbox.Item, error)
+	SaveDelivery(ctx context.Context, delivery Delivery) error
+	CountPrintedInLast24h(ctx context.Context, bindingID string, since time.Time) (int, error)
+}
+
 type PrinterJobCreator interface {
 	CreatePrintJobForUser(ctx context.Context, userID string, input printer.CreateJobInput) (workspace.PrintJob, error)
 }
 
-// PluginRuntime exposes the plugin lookups the dispatcher uses when turning
-// items back into print jobs.
-type PluginRuntime interface {
-	GetBindingByID(ctx context.Context, bindingID string) (plugins.Binding, map[string]string, error)
-	GetInstallation(ctx context.Context, installationID string) (plugins.Installation, plugins.Manifest, error)
-}
-
-// WorkspaceRepository mirrors the workspace lookup the scheduler already uses.
 type WorkspaceRepository interface {
 	FindByUserID(ctx context.Context, userID string) (*workspace.State, error)
 }
 
-// Clock returns wall time.
+type IDGenerator interface {
+	New(prefix string) (string, error)
+}
+
 type Clock interface {
 	Now() time.Time
 }
 
-// DefaultBatchSize is the maximum number of items the dispatcher will pull
-// from the inbox per FlushBinding invocation when the caller does not set a
-// per-binding limit.
-const DefaultBatchSize = 20
-
-// DefaultDailyCap limits printing to avoid thermal paper runaway when a
-// binding has not configured its own MaxPrintsPerDay.
-const DefaultDailyCap = 50
-
-// DefaultRetryBackoff is the minimum delay between failed dispatch attempts.
-const DefaultRetryBackoff = 15 * time.Minute
-
-// DailyCounter returns how many items a binding has already printed within
-// the rolling 24h window. Implementations are typically backed by the inbox
-// repository using a count query.
-type DailyCounter interface {
-	CountPrintedInLast24h(ctx context.Context, bindingID string, since time.Time) (int, error)
-}
-
-// Service dispatches items out of the inbox into print jobs.
 type Service struct {
-	inbox        *inbox.Service
-	plugins      PluginRuntime
-	printer      PrinterJobCreator
-	workspace    WorkspaceRepository
-	counter      DailyCounter
-	clock        Clock
-	retryBackoff time.Duration
+	repo      Repository
+	printer   PrinterJobCreator
+	workspace WorkspaceRepository
+	ids       IDGenerator
+	clock     Clock
 }
 
-// NewService builds a dispatcher.
 func NewService(
-	inboxService *inbox.Service,
-	pluginRuntime PluginRuntime,
+	repo Repository,
 	printerCreator PrinterJobCreator,
 	workspaceRepo WorkspaceRepository,
-	counter DailyCounter,
+	ids IDGenerator,
 	clock Clock,
-	retryBackoff time.Duration,
 ) *Service {
-	if retryBackoff <= 0 {
-		retryBackoff = DefaultRetryBackoff
-	}
 	return &Service{
-		inbox:        inboxService,
-		plugins:      pluginRuntime,
-		printer:      printerCreator,
-		workspace:    workspaceRepo,
-		counter:      counter,
-		clock:        clock,
-		retryBackoff: retryBackoff,
+		repo:      repo,
+		printer:   printerCreator,
+		workspace: workspaceRepo,
+		ids:       ids,
+		clock:     clock,
 	}
 }
 
-// FlushResult reports what happened during a flush.
-type FlushResult struct {
-	Printed     int
-	Failed      int
-	Skipped     int
-	PrintJobIDs []string
-}
-
-// FlushBinding drains pending items for a binding into the printer up to the
-// configured rate limits. It is safe to call from both schedule processors
-// and the manual trigger endpoint.
-func (s *Service) FlushBinding(ctx context.Context, bindingID string, defaultDeviceID string) (FlushResult, error) {
-	return s.dispatchPending(ctx, bindingID, defaultDeviceID, 0)
-}
-
-// DrainPending flushes pending items across bindings so backlog created by a
-// previous over-budget fetch can continue draining even when the source goes
-// quiet. The limit caps the total number of items processed in one pass.
-func (s *Service) DrainPending(ctx context.Context, limit int) (FlushResult, error) {
-	if limit <= 0 {
-		limit = DefaultBatchSize
-	}
-
-	bindingIDs, err := s.inbox.ListPendingBindingIDs(ctx, limit)
-	if err != nil {
-		return FlushResult{}, err
-	}
-
-	aggregate := FlushResult{}
-	remaining := limit
-	for _, bindingID := range bindingIDs {
-		if remaining <= 0 {
-			break
-		}
-		result, err := s.dispatchPending(ctx, bindingID, "", remaining)
-		if err != nil {
-			continue
-		}
-		mergeFlushResult(&aggregate, result)
-		processed := result.Printed + result.Failed + result.Skipped
-		if processed > 0 {
-			remaining -= processed
-		}
-	}
-	return aggregate, nil
-}
-
-// dispatchBudget returns the number of items the dispatcher is allowed to
-// print for the given binding right now, respecting both the per-run and
-// per-day caps. A non-positive return means the binding is saturated and
-// callers should skip.
-func (s *Service) dispatchBudget(ctx context.Context, binding plugins.Binding) (int, error) {
-	perRun := binding.MaxPrintsPerRun
-	if perRun <= 0 {
-		perRun = DefaultBatchSize
-	}
-	perDay := binding.MaxPrintsPerDay
-	if perDay <= 0 {
-		perDay = DefaultDailyCap
-	}
-	printedToday, err := s.counter.CountPrintedInLast24h(ctx, binding.ID, s.clock.Now().Add(-24*time.Hour))
-	if err != nil {
-		return 0, err
-	}
-	remainingDay := perDay - printedToday
-	if remainingDay <= 0 {
-		return 0, nil
-	}
-	if remainingDay < perRun {
-		return remainingDay, nil
-	}
-	return perRun, nil
-}
-
-func (s *Service) resolveDispatchContext(ctx context.Context, bindingID string) (plugins.Binding, plugins.Installation, error) {
-	binding, _, err := s.plugins.GetBindingByID(ctx, bindingID)
-	if err != nil {
-		return plugins.Binding{}, plugins.Installation{}, err
-	}
-	installation, _, err := s.plugins.GetInstallation(ctx, binding.PluginInstallationID)
-	if err != nil {
-		return plugins.Binding{}, plugins.Installation{}, err
-	}
-	return binding, installation, nil
-}
-
-func (s *Service) dispatchPending(ctx context.Context, bindingID string, defaultDeviceID string, limit int) (FlushResult, error) {
-	result := FlushResult{}
-	if strings.TrimSpace(bindingID) == "" {
-		return result, errors.New("binding id is required")
-	}
-
-	binding, installation, err := s.resolveDispatchContext(ctx, bindingID)
+func (s *Service) RunSchedule(ctx context.Context, input ScheduleRunInput) (ScheduleRunResult, error) {
+	result := ScheduleRunResult{}
+	scheduleID, deviceID, err := normalizeScheduleRunInput(input)
 	if err != nil {
 		return result, err
 	}
+	input.ScheduleID = scheduleID
+	input.DeviceID = deviceID
 
-	budget, err := s.dispatchBudget(ctx, binding)
+	budget, err := s.dispatchBudget(ctx, input.Binding, input.BatchSize)
 	if err != nil {
 		return result, err
-	}
-	if limit > 0 && budget > limit {
-		budget = limit
 	}
 	if budget <= 0 {
 		return result, nil
 	}
 
-	items, err := s.inbox.ListPendingByBinding(ctx, bindingID, budget)
+	candidates, err := s.loadScheduleCandidates(ctx, scheduleID, input.Binding.ID, budget)
 	if err != nil {
 		return result, err
 	}
 
-	return s.dispatchItems(ctx, binding, installation, items, defaultDeviceID)
-}
-
-// RetryFailed pulls retryable failed items across all bindings and attempts
-// to flush them. It is intended to be called periodically from a background
-// runner.
-func (s *Service) RetryFailed(ctx context.Context, limit int) (FlushResult, error) {
-	if limit <= 0 {
-		limit = DefaultBatchSize
-	}
-	cutoff := s.clock.Now().Add(-s.retryBackoff)
-	items, err := s.inbox.ListRetryable(ctx, cutoff, limit)
-	if err != nil {
-		return FlushResult{}, err
-	}
-
-	byBinding := map[string][]inbox.Item{}
-	for _, item := range items {
-		byBinding[item.PluginBindingID] = append(byBinding[item.PluginBindingID], item)
-	}
-
-	aggregate := FlushResult{}
-	for bindingID, batch := range byBinding {
-		result, ok := s.retryBindingBatch(ctx, bindingID, batch)
-		if !ok {
-			continue
+	sendConfirmation := s.resolveSendConfirmation(ctx, input.Binding.UserID)
+	for _, candidate := range candidates {
+		outcome, jobID, err := s.dispatchOne(ctx, input, candidate, sendConfirmation)
+		if err != nil {
+			return result, err
 		}
-		mergeFlushResult(&aggregate, result)
+		result.record(outcome, jobID)
 	}
-	return aggregate, nil
+
+	return result, nil
 }
 
-// retryBindingBatch flushes one binding's retry batch respecting the per-run
-// and per-day caps. Returns (result, true) on success; (_, false) signals the
-// binding should be skipped (missing binding/installation or budget lookup
-// failure). Skipped-because-budget-exhausted is reported inside the result.
-func (s *Service) retryBindingBatch(ctx context.Context, bindingID string, batch []inbox.Item) (FlushResult, bool) {
-	binding, installation, err := s.resolveDispatchContext(ctx, bindingID)
+func (s *Service) dispatchBudget(ctx context.Context, binding plugins.Binding, batchSize int) (int, error) {
+	perRun := resolvePerRunLimit(binding.MaxPrintsPerRun, batchSize)
+	remainingDay, err := s.remainingDailyBudget(ctx, binding)
 	if err != nil {
-		return FlushResult{}, false
+		return 0, err
 	}
-	budget, err := s.dispatchBudget(ctx, binding)
-	if err != nil {
-		return FlushResult{}, false
+	if remainingDay <= 0 {
+		return 0, nil
 	}
-	if budget <= 0 {
-		return FlushResult{Skipped: len(batch)}, true
-	}
-	skipped := 0
-	if len(batch) > budget {
-		skipped = len(batch) - budget
-		batch = batch[:budget]
-	}
-	result, err := s.dispatchItems(ctx, binding, installation, batch, "")
-	if err != nil {
-		return FlushResult{}, false
-	}
-	result.Skipped += skipped
-	return result, true
+	return minInt(perRun, remainingDay), nil
 }
 
-func mergeFlushResult(dst *FlushResult, src FlushResult) {
-	dst.Printed += src.Printed
-	dst.Failed += src.Failed
-	dst.Skipped += src.Skipped
-	dst.PrintJobIDs = append(dst.PrintJobIDs, src.PrintJobIDs...)
-}
-
-// resolveSendConfirmation loads the caller's workspace preferences and
-// returns whether print jobs should wait for user confirmation before
-// submission. Missing workspace or lookup errors fall back to the platform
-// default, which is true.
 func (s *Service) resolveSendConfirmation(ctx context.Context, userID string) bool {
 	if s.workspace == nil {
 		return workspace.EmptyState().Preferences.SendConfirmationEnabled
@@ -291,96 +162,174 @@ func (s *Service) resolveSendConfirmation(ctx context.Context, userID string) bo
 	return workspace.NormalizeState(*state).Preferences.SendConfirmationEnabled
 }
 
-// pickDeviceID chooses the device id for a given item, preferring the caller's
-// current default and only falling back to the stored inbox snapshot when the
-// caller has no fresher routing information.
-func pickDeviceID(item inbox.Item, defaultDeviceID string) string {
-	if trimmed := strings.TrimSpace(defaultDeviceID); trimmed != "" {
-		return trimmed
-	}
-	if item.DeviceID != nil && strings.TrimSpace(*item.DeviceID) != "" {
-		return strings.TrimSpace(*item.DeviceID)
-	}
-	return ""
-}
-
-// dispatchOne attempts to print one item. It returns the outcome so the
-// caller can aggregate results. Any inbox status transition is performed
-// here so dispatchItems stays a thin loop.
-type dispatchOutcome int
-
-const (
-	outcomePrinted dispatchOutcome = iota
-	outcomeFailed
-	outcomeSkipped
-)
-
 func (s *Service) dispatchOne(
 	ctx context.Context,
-	binding plugins.Binding,
-	installation plugins.Installation,
-	item inbox.Item,
-	defaultDeviceID string,
+	input ScheduleRunInput,
+	current DeliveryItem,
 	sendConfirmation bool,
-) (dispatchOutcome, string) {
-	if item.AttemptCount >= inbox.MaxDispatchAttempts {
-		return outcomeSkipped, ""
+) (DeliveryStatus, string, error) {
+	if current.Delivery.ID != "" && current.Delivery.AttemptCount >= MaxDeliveryAttempts {
+		return "", "", nil
 	}
 
-	rendered, err := printer.RenderBlocksToText(item.Blocks)
+	rendered, err := printer.RenderBlocksToText(current.Item.Blocks)
 	if err != nil {
-		_ = s.inbox.MarkFailed(ctx, item, fmt.Sprintf("render: %s", err.Error()))
-		return outcomeFailed, ""
+		return s.saveFailed(ctx, current, input.ScheduleID, fmt.Sprintf("render: %s", err.Error()))
 	}
 
-	source := strings.TrimSpace(item.SourceLabel)
+	source := strings.TrimSpace(current.Item.SourceLabel)
 	if source == "" {
-		source = installation.DisplayName
+		source = input.Installation.DisplayName
 	}
 
-	deviceID := pickDeviceID(item, defaultDeviceID)
-	if strings.TrimSpace(deviceID) == "" {
-		_ = s.inbox.MarkFailed(ctx, item, "no device bound for item")
-		return outcomeFailed, ""
-	}
-
-	job, err := s.printer.CreatePrintJobForUser(ctx, binding.UserID, printer.CreateJobInput{
-		Title:             item.Title,
+	job, err := s.printer.CreatePrintJobForUser(ctx, input.Binding.UserID, printer.CreateJobInput{
+		Title:             current.Item.Title,
 		Source:            source,
 		Content:           rendered,
-		PrinterBindingID:  deviceID,
+		PrinterBindingID:  input.DeviceID,
 		SubmitImmediately: !sendConfirmation,
 	})
 	if err != nil {
-		_ = s.inbox.MarkFailed(ctx, item, err.Error())
-		return outcomeFailed, ""
+		return s.saveFailed(ctx, current, input.ScheduleID, err.Error())
 	}
-	if err := s.inbox.MarkPrinted(ctx, item, job.ID); err != nil {
-		return outcomeFailed, ""
+
+	now := s.clock.Now()
+	delivery, err := s.buildDelivery(current, input.ScheduleID)
+	if err != nil {
+		return "", "", err
 	}
-	return outcomePrinted, job.ID
+	delivery.Status = DeliveryStatusPrinted
+	delivery.AttemptCount++
+	delivery.LastError = nil
+	delivery.UpdatedAt = now
+	delivery.DeliveredAt = &now
+	delivery.PrintJobID = &job.ID
+	if err := s.repo.SaveDelivery(ctx, delivery); err != nil {
+		return "", "", err
+	}
+	return DeliveryStatusPrinted, job.ID, nil
 }
 
-func (s *Service) dispatchItems(ctx context.Context, binding plugins.Binding, installation plugins.Installation, items []inbox.Item, defaultDeviceID string) (FlushResult, error) {
-	result := FlushResult{}
-	if len(items) == 0 {
-		return result, nil
+func (s *Service) saveFailed(ctx context.Context, current DeliveryItem, scheduleID string, reason string) (DeliveryStatus, string, error) {
+	now := s.clock.Now()
+	delivery, err := s.buildDelivery(current, scheduleID)
+	if err != nil {
+		return "", "", err
 	}
+	trimmed := strings.TrimSpace(reason)
+	if trimmed == "" {
+		trimmed = "dispatch failed"
+	}
+	delivery.Status = DeliveryStatusFailed
+	delivery.AttemptCount++
+	delivery.LastError = &trimmed
+	delivery.PrintJobID = nil
+	delivery.DeliveredAt = nil
+	delivery.UpdatedAt = now
+	if err := s.repo.SaveDelivery(ctx, delivery); err != nil {
+		return "", "", err
+	}
+	return DeliveryStatusFailed, "", nil
+}
 
-	sendConfirmation := s.resolveSendConfirmation(ctx, binding.UserID)
+func (s *Service) buildDelivery(current DeliveryItem, scheduleID string) (Delivery, error) {
+	if current.Delivery.ID != "" {
+		return current.Delivery, nil
+	}
+	id, err := s.ids.New("delivery")
+	if err != nil {
+		return Delivery{}, err
+	}
+	now := s.clock.Now()
+	return Delivery{
+		ID:              id,
+		PrintScheduleID: scheduleID,
+		PluginItemID:    current.Item.ID,
+		AttemptCount:    0,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}, nil
+}
 
+func normalizeScheduleRunInput(input ScheduleRunInput) (string, string, error) {
+	scheduleID := strings.TrimSpace(input.ScheduleID)
+	if scheduleID == "" {
+		return "", "", fmt.Errorf("schedule id is required")
+	}
+	deviceID := strings.TrimSpace(input.DeviceID)
+	if deviceID == "" {
+		return "", "", fmt.Errorf("device id is required")
+	}
+	return scheduleID, deviceID, nil
+}
+
+func (s *Service) loadScheduleCandidates(
+	ctx context.Context,
+	scheduleID string,
+	bindingID string,
+	budget int,
+) ([]DeliveryItem, error) {
+	failed, err := s.repo.ListFailedBySchedule(ctx, scheduleID, budget)
+	if err != nil {
+		return nil, err
+	}
+	candidates := make([]DeliveryItem, 0, budget)
+	candidates = append(candidates, failed...)
+	remaining := budget - len(candidates)
+	if remaining <= 0 {
+		return candidates, nil
+	}
+	items, err := s.repo.ListUndeliveredBySchedule(ctx, scheduleID, bindingID, remaining)
+	if err != nil {
+		return nil, err
+	}
 	for _, item := range items {
-		outcome, jobID := s.dispatchOne(ctx, binding, installation, item, defaultDeviceID, sendConfirmation)
-		switch outcome {
-		case outcomePrinted:
-			result.Printed++
-			result.PrintJobIDs = append(result.PrintJobIDs, jobID)
-		case outcomeFailed:
-			result.Failed++
-		case outcomeSkipped:
-			result.Skipped++
-		}
+		candidates = append(candidates, DeliveryItem{Item: item})
 	}
+	return candidates, nil
+}
 
-	return result, nil
+func resolvePerRunLimit(maxPerRun int, batchSize int) int {
+	perRun := maxPerRun
+	if perRun <= 0 {
+		perRun = batchSize
+	}
+	if perRun <= 0 {
+		perRun = 1
+	}
+	if batchSize > 0 {
+		perRun = minInt(perRun, batchSize)
+	}
+	return perRun
+}
+
+func (s *Service) remainingDailyBudget(ctx context.Context, binding plugins.Binding) (int, error) {
+	perDay := binding.MaxPrintsPerDay
+	if perDay <= 0 {
+		perDay = DefaultDailyCap
+	}
+	printedToday, err := s.repo.CountPrintedInLast24h(ctx, binding.ID, s.clock.Now().Add(-24*time.Hour))
+	if err != nil {
+		return 0, err
+	}
+	return perDay - printedToday, nil
+}
+
+func minInt(left int, right int) int {
+	if right < left {
+		return right
+	}
+	return left
+}
+
+func (r *ScheduleRunResult) record(outcome DeliveryStatus, jobID string) {
+	switch outcome {
+	case DeliveryStatusPrinted:
+		r.Printed++
+		r.PrintJobIDs = append(r.PrintJobIDs, jobID)
+	case DeliveryStatusFailed:
+		r.Failed++
+	default:
+		r.Skipped++
+	}
 }

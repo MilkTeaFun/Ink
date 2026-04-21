@@ -47,6 +47,7 @@ type Repository interface {
 	ListPluginBindingsByUserID(ctx context.Context, userID string) ([]Binding, error)
 	FindPluginBindingByInstallationAndUserID(ctx context.Context, installationID string, userID string) (*Binding, error)
 	FindPluginBindingByID(ctx context.Context, bindingID string) (*Binding, error)
+	ClaimBindingsDueForFetch(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]Binding, error)
 	SavePluginBinding(ctx context.Context, binding Binding) error
 	UpdatePluginBindingCursor(ctx context.Context, bindingID string, cursor *string, updatedAt time.Time) error
 }
@@ -94,7 +95,6 @@ type validationPayload struct {
 type fetchPayload struct {
 	WorkspaceConfig map[string]any    `json:"workspaceConfig"`
 	Secrets         map[string]string `json:"secrets"`
-	ScheduleConfig  map[string]any    `json:"scheduleConfig"`
 	Cursor          *string           `json:"cursor"`
 	Trigger         FetchTrigger      `json:"trigger"`
 }
@@ -635,6 +635,10 @@ func (s *Service) SaveBinding(ctx context.Context, accessToken string, installat
 		binding.ID = existing.ID
 		binding.CreatedAt = existing.CreatedAt
 		binding.Status = existing.Status
+		binding.NextFetchAt = existing.NextFetchAt
+		binding.LastFetchAt = existing.LastFetchAt
+		binding.FetchLeaseUntil = existing.FetchLeaseUntil
+		binding.LastFetchError = existing.LastFetchError
 	}
 	if binding.ID == "" {
 		binding.ID, err = s.ids.New("binding")
@@ -659,10 +663,16 @@ func (s *Service) SaveBinding(ctx context.Context, accessToken string, installat
 		binding.Status = BindingStatusConnected
 		binding.LastValidatedAt = &now
 		binding.LastError = nil
+		binding.NextFetchAt = &now
+		binding.FetchLeaseUntil = nil
+		binding.LastFetchError = nil
 	} else {
 		binding.Status = BindingStatusDisconnected
 		binding.LastValidatedAt = nil
 		binding.LastError = nil
+		binding.NextFetchAt = nil
+		binding.FetchLeaseUntil = nil
+		binding.LastFetchError = nil
 	}
 
 	if err := s.repo.SavePluginBinding(ctx, binding); err != nil {
@@ -754,7 +764,7 @@ func (s *Service) GetBindingForUser(ctx context.Context, installationID string, 
 
 // ExecuteFetch invokes the plugin's fetch entrypoint and returns a normalised
 // list of items. The caller is responsible for persisting items and the cursor.
-func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, binding Binding, secrets map[string]string, scheduleConfig map[string]any, trigger FetchTrigger) (FetchOutput, error) {
+func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, binding Binding, secrets map[string]string, trigger FetchTrigger) (FetchOutput, error) {
 	manifest, err := ParseManifest(installation.ManifestJSON)
 	if err != nil {
 		return FetchOutput{}, err
@@ -763,7 +773,6 @@ func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, b
 	payload := fetchPayload{
 		WorkspaceConfig: cloneMap(binding.Config),
 		Secrets:         secrets,
-		ScheduleConfig:  cloneMap(scheduleConfig),
 		Cursor:          binding.Cursor,
 		Trigger:         trigger,
 	}
@@ -798,6 +807,48 @@ func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, b
 // next invocation can pass it back to the plugin verbatim.
 func (s *Service) UpdateBindingCursor(ctx context.Context, bindingID string, cursor *string) error {
 	return s.repo.UpdatePluginBindingCursor(ctx, bindingID, cursor, s.clock.Now())
+}
+
+func (s *Service) ClaimDueBindings(ctx context.Context, now time.Time, leaseUntil time.Time, limit int) ([]Binding, error) {
+	return s.repo.ClaimBindingsDueForFetch(ctx, now, leaseUntil, limit)
+}
+
+func (s *Service) RecordFetchSuccess(ctx context.Context, bindingID string, cursor *string, fetchedAt time.Time, nextFetchAt time.Time) error {
+	binding, err := s.repo.FindPluginBindingByID(ctx, bindingID)
+	if err != nil {
+		return err
+	}
+	if binding == nil {
+		return ErrNotFound
+	}
+
+	binding.Cursor = cursor
+	binding.LastFetchAt = &fetchedAt
+	binding.NextFetchAt = &nextFetchAt
+	binding.FetchLeaseUntil = nil
+	binding.LastFetchError = nil
+	binding.UpdatedAt = fetchedAt
+	return s.repo.SavePluginBinding(ctx, *binding)
+}
+
+func (s *Service) RecordFetchFailure(ctx context.Context, bindingID string, message string, attemptedAt time.Time, nextFetchAt time.Time) error {
+	binding, err := s.repo.FindPluginBindingByID(ctx, bindingID)
+	if err != nil {
+		return err
+	}
+	if binding == nil {
+		return ErrNotFound
+	}
+
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		trimmed = "plugin fetch failed"
+	}
+	binding.FetchLeaseUntil = nil
+	binding.NextFetchAt = &nextFetchAt
+	binding.LastFetchError = &trimmed
+	binding.UpdatedAt = attemptedAt
+	return s.repo.SavePluginBinding(ctx, *binding)
 }
 
 // GetBindingByID loads a binding (plus decrypted secrets) without requiring a
@@ -907,9 +958,14 @@ func (s *Service) detailsFromInstallation(installation Installation, binding *Bi
 			Status:          binding.Status,
 			Config:          cloneMap(binding.Config),
 			LastValidatedAt: binding.LastValidatedAt,
+			NextFetchAt:     binding.NextFetchAt,
+			LastFetchAt:     binding.LastFetchAt,
 		}
 		if binding.LastError != nil {
 			details.Binding.LastError = *binding.LastError
+		}
+		if binding.LastFetchError != nil {
+			details.Binding.LastFetchError = *binding.LastFetchError
 		}
 	}
 

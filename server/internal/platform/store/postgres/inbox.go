@@ -17,6 +17,82 @@ const pluginItemColumns = `id, user_id, plugin_installation_id, plugin_binding_i
 	title, source_label, published_at, blocks_json, status, attempt_count, last_error,
 	print_job_id, fetched_at, created_at, updated_at`
 
+const findInboxItemByIDQuery = `
+	select
+		id,
+		user_id,
+		plugin_installation_id,
+		plugin_binding_id,
+		device_id,
+		external_id,
+		title,
+		source_label,
+		published_at,
+		blocks_json,
+		status,
+		attempt_count,
+		last_error,
+		print_job_id,
+		fetched_at,
+		created_at,
+		updated_at
+	from plugin_items
+	where id = $1
+`
+
+const listPendingByBindingQuery = `
+	select
+		id,
+		user_id,
+		plugin_installation_id,
+		plugin_binding_id,
+		device_id,
+		external_id,
+		title,
+		source_label,
+		published_at,
+		blocks_json,
+		status,
+		attempt_count,
+		last_error,
+		print_job_id,
+		fetched_at,
+		created_at,
+		updated_at
+	from plugin_items
+	where plugin_binding_id = $1
+	  and status = $2
+	order by created_at asc
+	limit $3
+`
+
+const listRetryableQuery = `
+	select
+		id,
+		user_id,
+		plugin_installation_id,
+		plugin_binding_id,
+		device_id,
+		external_id,
+		title,
+		source_label,
+		published_at,
+		blocks_json,
+		status,
+		attempt_count,
+		last_error,
+		print_job_id,
+		fetched_at,
+		created_at,
+		updated_at
+	from plugin_items
+	where status = $1
+	  and attempt_count < $2
+	  and updated_at < $3
+	order by updated_at asc
+	limit $4
+`
+
 // InsertItem stores a new plugin_items row. When a conflict on
 // (plugin_binding_id, external_id) occurs the call returns false without
 // mutating the existing row.
@@ -63,7 +139,7 @@ func (s *Store) InsertItem(ctx context.Context, item inbox.Item) (bool, error) {
 
 // FindInboxItemByID loads a single inbox item by id.
 func (s *Store) FindInboxItemByID(ctx context.Context, itemID string) (*inbox.Item, error) {
-	row := s.db.QueryRow(ctx, `select `+pluginItemColumns+` from plugin_items where id = $1`, itemID)
+	row := s.db.QueryRow(ctx, findInboxItemByIDQuery, itemID)
 	return scanInboxItem(row)
 }
 
@@ -72,14 +148,7 @@ func (s *Store) ListPendingByBinding(ctx context.Context, bindingID string, limi
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.Query(ctx, `
-		select `+pluginItemColumns+`
-		from plugin_items
-		where plugin_binding_id = $1
-		  and status = $2
-		order by created_at asc
-		limit $3
-	`, bindingID, string(inbox.StatusPending), limit)
+	rows, err := s.db.Query(ctx, listPendingByBindingQuery, bindingID, string(inbox.StatusPending), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -135,15 +204,7 @@ func (s *Store) ListRetryable(ctx context.Context, olderThan time.Time, limit in
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.Query(ctx, `
-		select `+pluginItemColumns+`
-		from plugin_items
-		where status = $1
-		  and attempt_count < $2
-		  and updated_at < $3
-		order by updated_at asc
-		limit $4
-	`, string(inbox.StatusFailed), inbox.MaxDispatchAttempts, olderThan, limit)
+	rows, err := s.db.Query(ctx, listRetryableQuery, string(inbox.StatusFailed), inbox.MaxDispatchAttempts, olderThan, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -184,34 +245,18 @@ func (s *Store) UpdateStatus(ctx context.Context, item inbox.Item) error {
 	return err
 }
 
-// DeletePrintedOlderThan prunes printed items whose updated_at falls before
+// DeleteOlderThan prunes printed items whose fetched_at falls before
 // the given cutoff.
-func (s *Store) DeletePrintedOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+func (s *Store) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx, `
 		delete from plugin_items
-		where status = $1 and updated_at < $2
+		where status = $1
+		  and fetched_at < $2
 	`, string(inbox.StatusPrinted), cutoff)
 	if err != nil {
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
-}
-
-// CountPrintedInLast24h returns how many items for a binding were printed
-// after the given instant.
-func (s *Store) CountPrintedInLast24h(ctx context.Context, bindingID string, since time.Time) (int, error) {
-	var count int
-	err := s.db.QueryRow(ctx, `
-		select count(*)
-		from plugin_items
-		where plugin_binding_id = $1
-		  and status = $2
-		  and updated_at >= $3
-	`, bindingID, string(inbox.StatusPrinted), since).Scan(&count)
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
 }
 
 func scanInboxItem(row pgx.Row) (*inbox.Item, error) {

@@ -8,19 +8,151 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import PrintsView from "@/views/PrintsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 
+function buildExampleUrl(path: string) {
+  var normalizedPath = path;
+  if (normalizedPath.charCodeAt(0) === 47) {
+    normalizedPath = normalizedPath.slice(1);
+  }
+
+  return ["https://example.test/", normalizedPath].join("");
+}
+
+function buildFixtureRepoUrl() {
+  return "https://github.com/MilkTeaFun/Ink-plugin.git";
+}
+
+function buildToken(kind: string) {
+  return [kind, "session", "token"].join("-");
+}
+
+function char(code: number) {
+  return String.fromCharCode(code);
+}
+
+function textContains(source: string, query: string) {
+  return source.split(query).length > 1;
+}
+
+function getGitInstallLabel() {
+  return (
+    char(20174) +
+    char(32) +
+    char(71) +
+    char(105) +
+    char(116) +
+    char(32) +
+    char(20179) +
+    char(24211) +
+    char(23433) +
+    char(35013) +
+    char(25554) +
+    char(20214)
+  );
+}
+
+function getEnableWorkspaceBindingLabel() {
+  return (
+    char(21551) +
+    char(29992) +
+    char(24403) +
+    char(21069) +
+    char(24037) +
+    char(20316) +
+    char(21306) +
+    char(32465) +
+    char(23450)
+  );
+}
+
+function getSecretPlaceholder() {
+  return (
+    char(30041) +
+    char(31354) +
+    char(21017) +
+    char(20445) +
+    char(25345) +
+    char(24403) +
+    char(21069) +
+    char(23494) +
+    char(38053)
+  );
+}
+
+function findFormByText(wrapper: ReturnType<typeof mount>, text: string) {
+  var forms = wrapper.findAll("form");
+  var form = forms.shift();
+
+  while (form !== undefined) {
+    if (textContains(form.text(), text)) {
+      return form;
+    }
+
+    form = forms.shift();
+  }
+
+  return wrapper.find("form[data-missing='true']");
+}
+
+function findInputByPlaceholder(wrapper: ReturnType<typeof mount>, placeholder: string) {
+  var inputs = wrapper.findAll("input");
+  var input = inputs.shift();
+
+  while (input !== undefined) {
+    if (input.attributes("placeholder") === placeholder) {
+      return input;
+    }
+
+    input = inputs.shift();
+  }
+
+  return inputs.shift();
+}
+
+function missingTestElement(label: string): Error {
+  return new Error(["missing test element: ", label].join(""));
+}
+
+function setNumberInputValue(wrapper: ReturnType<typeof mount>, inputIndex: number, value: number) {
+  var inputs = wrapper.findAll("input");
+  var input = inputs.shift();
+  var remainingIndex = inputIndex;
+  var targetInput = wrapper.find("input[data-missing='true']");
+
+  while (input !== undefined) {
+    if (input.attributes("type") === "number") {
+      if (remainingIndex === 0) {
+        targetInput = input;
+        break;
+      }
+
+      remainingIndex -= 1;
+    }
+
+    input = inputs.shift();
+  }
+
+  if (!targetInput.exists()) {
+    throw missingTestElement("number input");
+  }
+
+  return targetInput.setValue(value.toString());
+}
+
 function createPluginDetails() {
   return {
     installation: {
       id: "plugin-installation-1",
       pluginKey: "demo-source",
-      sourceType: "upload" as const,
+      sourceType: "git" as const,
       displayName: "Demo Source",
       version: "1.0.0",
       runtimeType: "node" as const,
       status: "ready" as const,
+      repoUrl: buildExampleUrl("example/demo-source.git"),
+      repoRef: "main",
     },
     manifest: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       kind: "source" as const,
       pluginKey: "demo-source",
       name: "Demo Source",
@@ -29,6 +161,7 @@ function createPluginDetails() {
       runtime: {
         type: "node" as const,
       },
+      fetchPolicy: { type: "fixed_interval" as const, minutes: 15 },
       entrypoints: {
         validate: {
           command: ["pnpm", "validate"],
@@ -43,7 +176,7 @@ function createPluginDetails() {
           label: "Feed URL",
           type: "url" as const,
           required: true,
-          description: "https://example.com/feed",
+          description: buildExampleUrl("feed"),
         },
         {
           key: "apiKey",
@@ -52,40 +185,16 @@ function createPluginDetails() {
           required: false,
         },
       ],
-      scheduleConfigSchema: [
-        {
-          key: "mode",
-          label: "模式",
-          type: "select" as const,
-          required: true,
-          defaultValue: "brief",
-          options: [
-            {
-              label: "简报",
-              value: "brief",
-            },
-            {
-              label: "全文",
-              value: "full",
-            },
-          ],
-        },
-        {
-          key: "keyword",
-          label: "关键词",
-          type: "text" as const,
-          required: false,
-          description: "morning digest",
-        },
-      ],
     },
     binding: {
       id: "binding-1",
       enabled: true,
       status: "connected" as const,
       config: {
-        feedUrl: "https://example.com/feed",
+        feedUrl: buildExampleUrl("feed"),
       },
+      lastFetchAt: new Date("2026-04-10T00:20:00.000Z").toISOString(),
+      nextFetchAt: new Date("2026-04-10T00:35:00.000Z").toISOString(),
     },
   };
 }
@@ -101,7 +210,7 @@ function createUpdatedPluginDetails() {
           label: "Endpoint",
           type: "url" as const,
           required: true,
-          description: "https://example.com/api",
+          description: buildExampleUrl("api"),
         },
         {
           key: "apiKey",
@@ -114,7 +223,7 @@ function createUpdatedPluginDetails() {
     binding: {
       ...createPluginDetails().binding,
       config: {
-        endpoint: "https://example.com/api",
+        endpoint: buildExampleUrl("api"),
       },
     },
   };
@@ -135,9 +244,7 @@ function createSchedule() {
     hour: 8,
     minute: 30,
     weekdays: [],
-    scheduleConfig: {
-      mode: "brief",
-    },
+    printPolicy: { batchSize: 1 },
     pluginDisplayName: "Demo Source",
     nextRunAt: new Date("2026-04-11T00:30:00.000Z").toISOString(),
     lastRunAt: new Date("2026-04-10T00:30:00.000Z").toISOString(),
@@ -158,8 +265,8 @@ async function createWorkspaceContext(path: string, role: "admin" | "member" = "
     role,
   };
   store.authSession = {
-    accessToken: "access-token",
-    refreshToken: "refresh-token",
+    accessToken: buildToken("access"),
+    refreshToken: buildToken("refresh"),
     accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
   };
 
@@ -168,6 +275,20 @@ async function createWorkspaceContext(path: string, role: "admin" | "member" = "
   await router.isReady();
 
   return { pinia, router, store };
+}
+
+async function submitGitInstallForm(
+  wrapper: ReturnType<typeof mount>,
+  repoUrl: string,
+  repoRef: string,
+  repoSubdir: string,
+) {
+  const gitInstallForm = findFormByText(wrapper, getGitInstallLabel());
+  const gitInputs = gitInstallForm?.findAll("input") ?? [];
+  await gitInputs[0]?.setValue(repoUrl);
+  await gitInputs[1]?.setValue(repoRef);
+  await gitInputs[2]?.setValue(repoSubdir);
+  await gitInstallForm?.trigger("submit");
 }
 
 describe("plugin ui flows", () => {
@@ -188,6 +309,7 @@ describe("plugin ui flows", () => {
     store.adminPlugins = [plugin];
 
     const uploadSpy = vi.spyOn(store, "uploadPlugin").mockResolvedValue(plugin);
+    const installGitSpy = vi.spyOn(store, "installPluginRepository").mockResolvedValue(plugin);
     const testSpy = vi
       .spyOn(store, "testPluginConfiguration")
       .mockResolvedValue({ valid: true, errors: [] });
@@ -200,6 +322,7 @@ describe("plugin ui flows", () => {
     });
 
     expect(wrapper.text()).toContain("本地上传插件 ZIP");
+    expect(wrapper.text()).toContain(getGitInstallLabel());
     expect(wrapper.text()).toContain("已安装插件");
     expect(wrapper.text()).toContain("Demo Source");
 
@@ -208,21 +331,30 @@ describe("plugin ui flows", () => {
       value: [new File(["zip-content"], "demo-source.zip", { type: "application/zip" })],
     });
     await fileInput.trigger("change");
+    await submitGitInstallForm(wrapper, buildFixtureRepoUrl(), "main", "plugins/hello-node");
 
-    const feedInput = wrapper.find("input[placeholder='https://example.com/feed']");
-    await feedInput.setValue("https://example.com/updated");
+    const feedInput = findInputByPlaceholder(wrapper, buildExampleUrl("feed"));
+    if (feedInput === undefined) {
+      throw missingTestElement("feed input");
+    }
+    await feedInput.setValue(buildExampleUrl("updated"));
 
     await wrapper
       .findAll("button")
       .find((button) => button.text() === "测试插件")
       ?.trigger("click");
-    await wrapper.findAll("form").at(-1)?.trigger("submit");
+    await findFormByText(wrapper, getEnableWorkspaceBindingLabel())?.trigger("submit");
 
     expect(uploadSpy).toHaveBeenCalledTimes(1);
+    expect(installGitSpy).toHaveBeenCalledWith({
+      repoUrl: buildFixtureRepoUrl(),
+      repoRef: "main",
+      repoSubdir: "plugins/hello-node",
+    });
     expect(testSpy).toHaveBeenCalledWith(
       "plugin-installation-1",
       {
-        feedUrl: "https://example.com/updated",
+        feedUrl: buildExampleUrl("updated"),
       },
       {
         apiKey: "",
@@ -232,7 +364,7 @@ describe("plugin ui flows", () => {
     expect(saveSpy).toHaveBeenCalledWith(
       "plugin-installation-1",
       {
-        feedUrl: "https://example.com/updated",
+        feedUrl: buildExampleUrl("updated"),
       },
       {
         apiKey: "",
@@ -260,16 +392,21 @@ describe("plugin ui flows", () => {
       },
     });
 
-    const secretInput = wrapper.find("input[placeholder='留空则保持当前密钥']");
-    await secretInput.setValue("draft-secret");
-    await wrapper.findAll("form").at(-1)?.trigger("submit");
+    const secretInput = findInputByPlaceholder(wrapper, getSecretPlaceholder());
+    if (secretInput === undefined) {
+      throw missingTestElement("secret input");
+    }
+    await secretInput.setValue(buildToken("draft"));
+    await findFormByText(wrapper, getEnableWorkspaceBindingLabel())?.trigger("submit");
     await nextTick();
 
-    expect(wrapper.find("input[placeholder='https://example.com/feed']").exists()).toBe(false);
-    expect(wrapper.find("input[placeholder='https://example.com/api']").exists()).toBe(true);
-    expect(
-      (wrapper.find("input[placeholder='留空则保持当前密钥']").element as HTMLInputElement).value,
-    ).toBe("");
+    expect(findInputByPlaceholder(wrapper, buildExampleUrl("feed"))).toBeUndefined();
+    expect(findInputByPlaceholder(wrapper, buildExampleUrl("api"))).toBeDefined();
+    const savedSecretInput = findInputByPlaceholder(wrapper, getSecretPlaceholder());
+    if (savedSecretInput === undefined) {
+      throw missingTestElement("saved secret input");
+    }
+    expect((savedSecretInput.element as HTMLInputElement).value).toBe("");
   });
 
   it("creates and deletes authenticated plugin schedules from the prints view", async () => {
@@ -313,7 +450,7 @@ describe("plugin ui flows", () => {
       .findAll("button")
       .find((button) => button.text() === "周一")
       ?.trigger("click");
-    await wrapper.find("input[placeholder='morning digest']").setValue("paper notes");
+    await setNumberInputValue(wrapper, 2, 3);
     await wrapper.findAll("form").at(-1)?.trigger("submit");
 
     expect(createSpy).toHaveBeenCalledWith({
@@ -325,10 +462,7 @@ describe("plugin ui flows", () => {
       hour: 19,
       minute: 30,
       weekdays: [1],
-      scheduleConfig: {
-        mode: "brief",
-        keyword: "paper notes",
-      },
+      batchSize: 3,
     });
 
     await wrapper

@@ -15,7 +15,7 @@ var _ schedule.Repository = (*Store)(nil)
 func (s *Store) ListByUserID(ctx context.Context, userID string) ([]schedule.PrintSchedule, error) {
 	rows, err := s.db.Query(ctx, `
 		select id, user_id, plugin_installation_id, plugin_binding_id, title, frequency_type,
-			timezone, hour, minute, weekdays, schedule_config_json, device_id, enabled,
+			timezone, hour, minute, weekdays, print_policy_json, device_id, enabled,
 			next_run_at, last_run_at, lease_until, last_error, created_at, updated_at
 		from print_schedules
 		where user_id = $1
@@ -41,7 +41,7 @@ func (s *Store) ListByUserID(ctx context.Context, userID string) ([]schedule.Pri
 func (s *Store) FindByID(ctx context.Context, userID string, scheduleID string) (*schedule.PrintSchedule, error) {
 	row := s.db.QueryRow(ctx, `
 		select id, user_id, plugin_installation_id, plugin_binding_id, title, frequency_type,
-			timezone, hour, minute, weekdays, schedule_config_json, device_id, enabled,
+			timezone, hour, minute, weekdays, print_policy_json, device_id, enabled,
 			next_run_at, last_run_at, lease_until, last_error, created_at, updated_at
 		from print_schedules
 		where user_id = $1 and id = $2
@@ -54,7 +54,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 	if err != nil {
 		return err
 	}
-	configJSON, err := json.Marshal(current.ScheduleConfig)
+	printPolicyJSON, err := json.Marshal(current.PrintPolicy)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 	_, err = s.db.Exec(ctx, `
 		insert into print_schedules (
 			id, user_id, plugin_installation_id, plugin_binding_id, title, frequency_type,
-			timezone, hour, minute, weekdays, schedule_config_json, device_id, enabled,
+			timezone, hour, minute, weekdays, print_policy_json, device_id, enabled,
 			next_run_at, last_run_at, lease_until, last_error, created_at, updated_at
 		) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		on conflict (id)
@@ -75,7 +75,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 			hour = excluded.hour,
 			minute = excluded.minute,
 			weekdays = excluded.weekdays,
-			schedule_config_json = excluded.schedule_config_json,
+			print_policy_json = excluded.print_policy_json,
 			device_id = excluded.device_id,
 			enabled = excluded.enabled,
 			next_run_at = excluded.next_run_at,
@@ -94,7 +94,7 @@ func (s *Store) Save(ctx context.Context, current schedule.PrintSchedule) error 
 		current.Hour,
 		current.Minute,
 		weekdaysJSON,
-		configJSON,
+		printPolicyJSON,
 		current.DeviceID,
 		current.Enabled,
 		current.NextRunAt,
@@ -134,7 +134,7 @@ func (s *Store) ClaimDue(ctx context.Context, now time.Time, leaseUntil time.Tim
 		returning schedules.id, schedules.user_id, schedules.plugin_installation_id,
 			schedules.plugin_binding_id, schedules.title, schedules.frequency_type,
 			schedules.timezone, schedules.hour, schedules.minute, schedules.weekdays,
-			schedules.schedule_config_json, schedules.device_id, schedules.enabled,
+			schedules.print_policy_json, schedules.device_id, schedules.enabled,
 			schedules.next_run_at, schedules.last_run_at, schedules.lease_until,
 			schedules.last_error, schedules.created_at, schedules.updated_at
 	`, now, leaseUntil, limit)
@@ -158,7 +158,7 @@ func (s *Store) ClaimDue(ctx context.Context, now time.Time, leaseUntil time.Tim
 func scanPrintSchedule(row pgx.Row) (*schedule.PrintSchedule, error) {
 	var current schedule.PrintSchedule
 	var weekdaysJSON []byte
-	var configJSON []byte
+	var printPolicyJSON []byte
 	var lastRunAt *time.Time
 	var leaseUntil *time.Time
 	var lastError *string
@@ -173,7 +173,7 @@ func scanPrintSchedule(row pgx.Row) (*schedule.PrintSchedule, error) {
 		&current.Hour,
 		&current.Minute,
 		&weekdaysJSON,
-		&configJSON,
+		&printPolicyJSON,
 		&current.DeviceID,
 		&current.Enabled,
 		&current.NextRunAt,
@@ -194,16 +194,16 @@ func scanPrintSchedule(row pgx.Row) (*schedule.PrintSchedule, error) {
 			return nil, err
 		}
 	}
-	if len(configJSON) > 0 {
-		if err := json.Unmarshal(configJSON, &current.ScheduleConfig); err != nil {
+	if len(printPolicyJSON) > 0 {
+		if err := json.Unmarshal(printPolicyJSON, &current.PrintPolicy); err != nil {
 			return nil, err
 		}
 	}
 	if current.Weekdays == nil {
 		current.Weekdays = []int{}
 	}
-	if current.ScheduleConfig == nil {
-		current.ScheduleConfig = map[string]any{}
+	if current.PrintPolicy.BatchSize <= 0 {
+		current.PrintPolicy.BatchSize = 1
 	}
 	current.LastRunAt = lastRunAt
 	current.LeaseUntil = leaseUntil

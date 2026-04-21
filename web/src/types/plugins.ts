@@ -35,6 +35,10 @@ export interface PluginManifest {
   runtime: {
     type: "node" | "python";
   };
+  fetchPolicy: {
+    type: "fixed_interval";
+    minutes: number;
+  };
   entrypoints: {
     validate: {
       command: string[];
@@ -44,19 +48,22 @@ export interface PluginManifest {
     };
   };
   workspaceConfigSchema: PluginFieldSpec[];
-  scheduleConfigSchema: PluginFieldSpec[];
 }
 
 export interface PluginInstallationSummary {
   id: string;
   pluginKey: string;
-  sourceType: "upload";
+  sourceType: "upload" | "git";
   displayName: string;
   version: string;
   runtimeType: "node" | "python";
   status: PluginInstallationStatus;
   lastError?: string;
   description?: string;
+  repoUrl?: string;
+  repoRef?: string;
+  repoCommitSha?: string;
+  repoSubdir?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -68,6 +75,9 @@ export interface PluginBindingSummary {
   config: Record<string, unknown>;
   lastValidatedAt?: string;
   lastError?: string;
+  nextFetchAt?: string;
+  lastFetchAt?: string;
+  lastFetchError?: string;
 }
 
 export interface PluginDetails {
@@ -97,7 +107,9 @@ export interface PrintScheduleView {
   hour: number;
   minute: number;
   weekdays: number[];
-  scheduleConfig: Record<string, unknown>;
+  printPolicy: {
+    batchSize: number;
+  };
   deviceId: string;
   enabled: boolean;
   nextRunAt?: string;

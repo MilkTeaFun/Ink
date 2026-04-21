@@ -135,13 +135,13 @@ func (r *memoryRepo) UpdateStatus(_ context.Context, item Item) error {
 	return nil
 }
 
-func (r *memoryRepo) DeletePrintedOlderThan(_ context.Context, cutoff time.Time) (int64, error) {
+func (r *memoryRepo) DeleteOlderThan(_ context.Context, cutoff time.Time) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	removed := int64(0)
 	for id, item := range r.items {
-		if item.Status == StatusPrinted && item.UpdatedAt.Before(cutoff) {
+		if item.Status == StatusPrinted && item.FetchedAt.Before(cutoff) {
 			delete(r.items, id)
 			removed++
 		}
@@ -321,13 +321,17 @@ func TestMarkFailedMovesItemToRetryable(t *testing.T) {
 	if len(retryable) != 1 {
 		t.Fatalf("expected 1 retryable item, got %d", len(retryable))
 	}
-	r := retryable[0]
-	if r.AttemptCount != 1 || r.LastError == nil || *r.LastError != "network down" {
-		t.Fatalf("unexpected retryable state: %+v", r)
+	assertRetryableItem(t, retryable[0], 1, "network down")
+}
+
+func assertRetryableItem(t *testing.T, item Item, attemptCount int, lastError string) {
+	t.Helper()
+	if item.AttemptCount != attemptCount || item.LastError == nil || *item.LastError != lastError {
+		t.Fatalf("unexpected retryable state: %+v", item)
 	}
 }
 
-func TestPurgePrintedOlderThan(t *testing.T) {
+func TestPurgeOlderThan(t *testing.T) {
 	t.Parallel()
 
 	repo := newMemoryRepo()
@@ -347,7 +351,7 @@ func TestPurgePrintedOlderThan(t *testing.T) {
 
 	// Now advance clock and purge with cutoff in the future.
 	service.clock = fixedClock{now: now.Add(31 * 24 * time.Hour)}
-	removed, err := service.PurgePrinted(context.Background(), now.Add(30*24*time.Hour))
+	removed, err := service.PurgeOlderThan(context.Background(), now.Add(30*24*time.Hour))
 	if err != nil {
 		t.Fatalf("purge: %v", err)
 	}

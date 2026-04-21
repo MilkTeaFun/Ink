@@ -21,10 +21,10 @@ type ItemStatus string
 
 const (
 	// StatusPending is the initial state when an item has been ingested but
-	// has not yet produced a print job.
+	// has not yet been invalidated or expired.
 	StatusPending ItemStatus = "pending"
-	// StatusPrinted indicates the dispatcher has successfully created a
-	// print job for this item.
+	// StatusPrinted is kept for legacy rows created before delivery tracking
+	// moved to print_schedule_deliveries.
 	StatusPrinted ItemStatus = "printed"
 	// StatusInvalid indicates the item failed block validation on ingest
 	// and will never be dispatched.
@@ -69,7 +69,7 @@ type Repository interface {
 	ListPendingBindingIDs(ctx context.Context, limit int) ([]string, error)
 	ListRetryable(ctx context.Context, olderThan time.Time, limit int) ([]Item, error)
 	UpdateStatus(ctx context.Context, item Item) error
-	DeletePrintedOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 // IDGenerator mints new IDs prefixed by kind.
@@ -254,7 +254,7 @@ func (s *Service) ListRetryable(ctx context.Context, olderThan time.Time, limit 
 	return s.repo.ListRetryable(ctx, olderThan, limit)
 }
 
-// PurgePrinted removes printed items older than cutoff.
-func (s *Service) PurgePrinted(ctx context.Context, cutoff time.Time) (int64, error) {
-	return s.repo.DeletePrintedOlderThan(ctx, cutoff)
+// PurgeOlderThan removes collected items older than cutoff.
+func (s *Service) PurgeOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	return s.repo.DeleteOlderThan(ctx, cutoff)
 }

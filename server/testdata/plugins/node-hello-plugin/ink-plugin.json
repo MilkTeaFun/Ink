@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "source",
   "pluginKey": "node-hello-source",
   "name": "Node Hello Source",
@@ -7,6 +7,10 @@
   "description": "Returns a configurable greeting for local plugin upload testing.",
   "runtime": {
     "type": "node"
+  },
+  "fetchPolicy": {
+    "type": "fixed_interval",
+    "minutes": 15
   },
   "entrypoints": {
     "validate": {
@@ -38,9 +42,7 @@
       "type": "checkbox",
       "required": false,
       "defaultValue": true
-    }
-  ],
-  "scheduleConfigSchema": [
+    },
     {
       "key": "message",
       "label": "Message",

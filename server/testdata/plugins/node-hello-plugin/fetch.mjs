@@ -12,11 +12,9 @@ async function readJSON() {
 
 const payload = await readJSON();
 const sourceName = String(payload.workspaceConfig?.sourceName ?? "Node Hello Source").trim();
-const message = String(
-  payload.scheduleConfig?.message ?? "Hello from the Node fixture plugin.",
-).trim();
-const tone = String(payload.scheduleConfig?.tone ?? "plain").trim();
-const repeatValue = Number.parseInt(String(payload.scheduleConfig?.repeat ?? "1"), 10);
+const message = String(payload.workspaceConfig?.message ?? "Hello from the Node fixture plugin.").trim();
+const tone = String(payload.workspaceConfig?.tone ?? "plain").trim();
+const repeatValue = Number.parseInt(String(payload.workspaceConfig?.repeat ?? "1"), 10);
 const repeat = Number.isFinite(repeatValue) && repeatValue > 0 ? repeatValue : 1;
 const includeTriggeredAt = Boolean(payload.workspaceConfig?.includeTriggeredAt);
 
