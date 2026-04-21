@@ -245,7 +245,7 @@ func assertInstallPersisted(t *testing.T, installations []Installation, pluginRo
 func TestInstallFromGit(t *testing.T) {
 	t.Parallel()
 
-	fixture := filepath.Join("..", "..", "testdata", "plugins", "node-hello-plugin")
+	fixture := filepath.Join("..", "..", "testdata", "plugins", "python-hello-plugin")
 	cloner := &stubGitCloner{fixtureDir: fixture, commitSHA: "deadbeef"}
 	service, repo, pluginRoot := newGitTestService(t, cloner, []string{"github.com"})
 
@@ -312,11 +312,11 @@ func TestInstallFromGitDisabledWithoutCloner(t *testing.T) {
 func TestInstallFromGitSubdir(t *testing.T) {
 	t.Parallel()
 
-	// Build a fixture that places the plugin inside plugins/hello-node/ so
+	// Build a fixture that places the plugin inside plugins/hello-python/ so
 	// the service must honor the subdir parameter.
 	fixtureRoot := t.TempDir()
-	target := filepath.Join(fixtureRoot, "plugins", "hello-node")
-	if err := copyTree(filepath.Join("..", "..", "testdata", "plugins", "node-hello-plugin"), target); err != nil {
+	target := filepath.Join(fixtureRoot, "plugins", "hello-python")
+	if err := copyTree(filepath.Join("..", "..", "testdata", "plugins", "python-hello-plugin"), target); err != nil {
 		t.Fatalf("copy fixture: %v", err)
 	}
 
@@ -325,12 +325,12 @@ func TestInstallFromGitSubdir(t *testing.T) {
 
 	details, err := service.InstallFromGit(context.Background(), "admin-token", GitInstallInput{
 		RepoURL: "https://github.com/owner/repo.git",
-		Subdir:  "plugins/hello-node",
+		Subdir:  "plugins/hello-python",
 	})
 	if err != nil {
 		t.Fatalf("InstallFromGit with subdir failed: %v", err)
 	}
-	if details.Installation.RepoSubdir != filepath.Join("plugins", "hello-node") {
+	if details.Installation.RepoSubdir != filepath.Join("plugins", "hello-python") {
 		t.Fatalf("RepoSubdir = %q", details.Installation.RepoSubdir)
 	}
 }
