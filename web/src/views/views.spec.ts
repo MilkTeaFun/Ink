@@ -565,6 +565,7 @@ describe("workspace views", () => {
     expect(selects).toHaveLength(1);
     expect(wrapper.text()).toContain("AI 服务");
     expect(wrapper.text()).toContain("仅管理员可修改");
+    expect(wrapper.text()).toContain("当前接入状态");
   });
 
   it("toggles the tutorial tab from settings", async () => {
@@ -599,6 +600,11 @@ describe("workspace views", () => {
       },
     });
 
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "编辑 AI 配置")
+      ?.trigger("click");
+    await flushPromises();
     await wrapper.find("input[placeholder='例如：OpenAI Compatible']").setValue("Acme AI");
     await wrapper
       .find("input[placeholder='例如：https://api.openai.com/v1']")
@@ -606,8 +612,9 @@ describe("workspace views", () => {
     await wrapper.find("input[placeholder='例如：gpt-4.1-mini']").setValue("gpt-4.1-mini");
     await wrapper.find("input[placeholder='输入新的服务端密钥']").setValue("secret-key");
 
-    const aiForm = wrapper.findAll("form").find((form) => form.text().includes("管理员配置"));
+    const aiForm = wrapper.findAll("form").find((form) => form.text().includes("保存 AI 配置"));
     await aiForm?.trigger("submit");
+    await flushPromises();
 
     expect(store.aiConfigSummary.bound).toBe(true);
     expect(store.aiConfigSummary.providerName).toBe("Acme AI");
@@ -632,6 +639,12 @@ describe("workspace views", () => {
         plugins: [pinia, router],
       },
     });
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "修改密码")
+      ?.trigger("click");
+    await flushPromises();
 
     const passwordInputs = wrapper.findAll("input[type='password']");
     await passwordInputs[0].setValue("demo-password");
@@ -666,5 +679,15 @@ describe("workspace views", () => {
     expect(wrapper.text()).toContain("创建新账号");
     expect(wrapper.text()).toContain("管理员");
     expect(wrapper.text()).toContain("管理员配置");
+    expect(wrapper.text()).toContain("编辑 AI 配置");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "创建账号")
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("为成员创建独立登录账号");
+    expect(wrapper.find("input[placeholder='例如：alice']").exists()).toBe(true);
   });
 });

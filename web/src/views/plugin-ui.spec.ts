@@ -33,37 +33,6 @@ function textContains(source: string, query: string) {
   return source.split(query).length > 1;
 }
 
-function getGitInstallLabel() {
-  return (
-    char(20174) +
-    char(32) +
-    char(71) +
-    char(105) +
-    char(116) +
-    char(32) +
-    char(20179) +
-    char(24211) +
-    char(23433) +
-    char(35013) +
-    char(25554) +
-    char(20214)
-  );
-}
-
-function getEnableWorkspaceBindingLabel() {
-  return (
-    char(21551) +
-    char(29992) +
-    char(24403) +
-    char(21069) +
-    char(24037) +
-    char(20316) +
-    char(21306) +
-    char(32465) +
-    char(23450)
-  );
-}
-
 function getSecretPlaceholder() {
   return (
     char(30041) +
@@ -283,12 +252,29 @@ async function submitGitInstallForm(
   repoRef: string,
   repoSubdir: string,
 ) {
-  const gitInstallForm = findFormByText(wrapper, getGitInstallLabel());
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text() === "打开安装窗口")
+    ?.trigger("click");
+  await nextTick();
+
+  const gitInstallForm = findFormByText(wrapper, "从 Git 安装");
   const gitInputs = gitInstallForm?.findAll("input") ?? [];
   await gitInputs[0]?.setValue(repoUrl);
   await gitInputs[1]?.setValue(repoRef);
   await gitInputs[2]?.setValue(repoSubdir);
   await gitInstallForm?.trigger("submit");
+}
+
+async function openPluginConfigDialog(wrapper: ReturnType<typeof mount>, pluginName: string) {
+  const card = wrapper
+    .findAll("div.rounded-2xl")
+    .find((element) => element.text().includes(pluginName));
+  await card
+    ?.findAll("button")
+    .find((button) => button.text() === "配置插件")
+    ?.trigger("click");
+  await nextTick();
 }
 
 describe("plugin ui flows", () => {
@@ -322,8 +308,8 @@ describe("plugin ui flows", () => {
     });
 
     expect(wrapper.text()).toContain("本地上传插件 ZIP");
-    expect(wrapper.text()).toContain(getGitInstallLabel());
-    expect(wrapper.text()).toContain("已安装插件");
+    expect(wrapper.text()).toContain("打开安装窗口");
+    expect(wrapper.text()).toContain("插件工作台");
     expect(wrapper.text()).toContain("Demo Source");
 
     const fileInput = wrapper.find("input[type='file']");
@@ -332,6 +318,7 @@ describe("plugin ui flows", () => {
     });
     await fileInput.trigger("change");
     await submitGitInstallForm(wrapper, buildFixtureRepoUrl(), "main", "plugins/hello-node");
+    await openPluginConfigDialog(wrapper, "Demo Source");
 
     const feedInput = findInputByPlaceholder(wrapper, buildExampleUrl("feed"));
     if (feedInput === undefined) {
@@ -343,7 +330,7 @@ describe("plugin ui flows", () => {
       .findAll("button")
       .find((button) => button.text() === "测试插件")
       ?.trigger("click");
-    await findFormByText(wrapper, getEnableWorkspaceBindingLabel())?.trigger("submit");
+    await findFormByText(wrapper, "保存配置")?.trigger("submit");
 
     expect(uploadSpy).toHaveBeenCalledTimes(1);
     expect(installGitSpy).toHaveBeenCalledWith({
@@ -392,12 +379,14 @@ describe("plugin ui flows", () => {
       },
     });
 
+    await openPluginConfigDialog(wrapper, "Demo Source");
+
     const secretInput = findInputByPlaceholder(wrapper, getSecretPlaceholder());
     if (secretInput === undefined) {
       throw missingTestElement("secret input");
     }
     await secretInput.setValue(buildToken("draft"));
-    await findFormByText(wrapper, getEnableWorkspaceBindingLabel())?.trigger("submit");
+    await findFormByText(wrapper, "保存配置")?.trigger("submit");
     await nextTick();
 
     expect(findInputByPlaceholder(wrapper, buildExampleUrl("feed"))).toBeUndefined();
