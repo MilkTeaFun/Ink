@@ -219,14 +219,29 @@ func (c fakeClock) Now() time.Time {
 	return c.now
 }
 
+type installPassthroughRunner struct{}
+
+func (installPassthroughRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte) ([]byte, []byte, error) {
+	if len(command) >= 2 {
+		if command[0] == "uv" && strings.Join(command[1:], " ") == "sync --frozen" {
+			return nil, nil, nil
+		}
+		if command[0] == "pnpm" && strings.Join(command[1:], " ") == "install --frozen-lockfile" {
+			return nil, nil, nil
+		}
+	}
+
+	return execRunner{}.Run(ctx, workdir, command, stdin)
+}
+
 func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	repo := newMemoryRepo()
 	pluginRoot := t.TempDir()
-	fixtureDir := filepath.Join("..", "..", "testdata", "plugins", "node-hello-plugin")
-	zipPath := filepath.Join(t.TempDir(), "node-hello-plugin.zip")
+	fixtureDir := filepath.Join("..", "..", "testdata", "plugins", "python-hello-plugin")
+	zipPath := filepath.Join(t.TempDir(), "python-hello-plugin.zip")
 	if err := zipDirectory(fixtureDir, zipPath, true); err != nil {
 		t.Fatalf("zip fixture: %v", err)
 	}
@@ -237,7 +252,7 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		fakeEncryptor{},
 		&fakeIDGenerator{},
 		fakeClock{now: time.Date(2026, 4, 10, 2, 0, 0, 0, time.UTC)},
-		nil,
+		installPassthroughRunner{},
 		pluginRoot,
 		5*time.Second,
 		30*time.Second,
@@ -253,7 +268,7 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		_ = file.Close()
 	}()
 
-	uploaded, err := service.UploadPlugin(ctx, "admin-token", "node-hello-plugin.zip", file)
+	uploaded, err := service.UploadPlugin(ctx, "admin-token", "python-hello-plugin.zip", file)
 	if err != nil {
 		t.Fatalf("upload plugin: %v", err)
 	}
@@ -261,7 +276,7 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	if uploaded.Installation.Status != InstallationStatusReady {
 		t.Fatalf("expected ready installation, got %s", uploaded.Installation.Status)
 	}
-	if uploaded.Installation.PluginKey != "node-hello-source" {
+	if uploaded.Installation.PluginKey != "python-hello-source" {
 		t.Fatalf("unexpected plugin key: %s", uploaded.Installation.PluginKey)
 	}
 
@@ -269,8 +284,8 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get installation: %v", err)
 	}
-	if manifest.Runtime.Type != "node" {
-		t.Fatalf("expected node runtime, got %s", manifest.Runtime.Type)
+	if manifest.Runtime.Type != "python" {
+		t.Fatalf("expected python runtime, got %s", manifest.Runtime.Type)
 	}
 	if _, err := os.Stat(filepath.Join(installation.CurrentPath, "ink-plugin.json")); err != nil {
 		t.Fatalf("expected installed manifest: %v", err)
@@ -279,11 +294,9 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	saved, err := service.SaveBinding(ctx, "member-token", installation.ID, BindingInput{
 		Enabled: true,
 		Config: map[string]any{
-			"sourceName":         "Fixture Source",
-			"includeTriggeredAt": true,
-			"message":            "Hello plugin",
-			"tone":               "verbose",
-			"repeat":             2,
+			"sourceName": "Fixture Source",
+			"message":    "Hello plugin",
+			"uppercase":  true,
 		},
 		Secrets: map[string]string{
 			"apiToken": "super-secret",
@@ -339,24 +352,22 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 	if item.SourceLabel != "Fixture Source" {
 		t.Fatalf("unexpected source label: %s", item.SourceLabel)
 	}
-	if len(item.Blocks) < 2 {
-		t.Fatalf("expected heading + paragraphs, got %d blocks", len(item.Blocks))
+	if len(item.Blocks) != 2 {
+		t.Fatalf("expected heading + paragraph, got %d blocks", len(item.Blocks))
 	}
 	paragraphs := 0
-	var triggeredParagraph string
+	var paragraphText string
 	for _, block := range item.Blocks {
 		if block.Type == BlockParagraph {
 			paragraphs++
-			if strings.HasPrefix(block.Text, "Triggered at:") {
-				triggeredParagraph = block.Text
-			}
+			paragraphText = block.Text
 		}
 	}
-	if paragraphs < 2 {
-		t.Fatalf("expected at least 2 paragraph blocks, got %d", paragraphs)
+	if paragraphs != 1 {
+		t.Fatalf("expected 1 paragraph block, got %d", paragraphs)
 	}
-	if triggeredParagraph != "Triggered at: 2026-04-10T02:00:00Z" {
-		t.Fatalf("expected triggered-at paragraph, got %q", triggeredParagraph)
+	if paragraphText != "HELLO PLUGIN" {
+		t.Fatalf("expected uppercased message paragraph, got %q", paragraphText)
 	}
 	if result.Cursor == nil || *result.Cursor != "2026-04-10T02:00:00Z" {
 		t.Fatalf("unexpected cursor: %v", result.Cursor)
