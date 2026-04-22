@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -53,6 +54,9 @@ func (r *FetchRunner) Start(ctx context.Context) {
 func (r *FetchRunner) runOnce(ctx context.Context) {
 	processed, err := r.processor.ProcessDue(ctx, r.limit)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
 		r.logger.Error("plugin fetch processor failed", "error", err)
 		return
 	}

@@ -41,21 +41,7 @@ const scheduleDeviceId = ref("");
 const scheduleError = ref("");
 
 function getInvalidBatchSizeMessage() {
-  return String.fromCharCode(
-    27599,
-    27425,
-    25171,
-    21360,
-    26465,
-    25968,
-    24517,
-    39035,
-    26159,
-    27491,
-    25972,
-    25968,
-    12290,
-  );
+  return "每次打印条数必须是正整数。";
 }
 
 const connectedPlugins = computed(() =>
@@ -373,7 +359,10 @@ async function submitScheduleDialog() {
                   <p v-if="task.nextRunAt" class="mt-1 text-xs text-stone-500">
                     下次执行 {{ workspaceStore.formatPrintTime(task.nextRunAt) }}
                   </p>
-                  <p v-if="workspaceStore.isAuthenticated" class="mt-1 text-xs text-stone-500">
+                  <p
+                    v-if="workspaceStore.isAuthenticated && task.printPolicy?.batchSize"
+                    class="mt-1 text-xs text-stone-500"
+                  >
                     每次打印 {{ task.printPolicy.batchSize }} 条，按已抓取内容的最早顺序递送。
                   </p>
                   <p

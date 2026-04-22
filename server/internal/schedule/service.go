@@ -247,9 +247,9 @@ func (s *Service) RunNow(ctx context.Context, accessToken string, scheduleID str
 		return ManualPrintResult{}, ErrNotFound
 	}
 
-	installation, binding, ok := s.resolveScheduleRun(ctx, *current)
+	installation, binding, reason, ok := s.resolveScheduleRun(ctx, *current)
 	if !ok {
-		return ManualPrintResult{}, fmt.Errorf("%w: %s", ErrInvalidInput, derefString(current.LastError))
+		return ManualPrintResult{}, fmt.Errorf("%w: %s", ErrInvalidInput, reason)
 	}
 
 	result, err := s.dispatcher.RunSchedule(ctx, dispatch.ScheduleRunInput{
@@ -284,28 +284,30 @@ func (s *Service) failSchedule(ctx context.Context, current PrintSchedule, messa
 	_ = s.repo.Save(ctx, current)
 }
 
-func (s *Service) resolveScheduleRun(ctx context.Context, current PrintSchedule) (plugins.Installation, plugins.Binding, bool) {
+func (s *Service) resolveScheduleRun(ctx context.Context, current PrintSchedule) (plugins.Installation, plugins.Binding, string, bool) {
 	installation, _, err := s.plugins.GetInstallation(ctx, current.PluginInstallationID)
 	if err != nil {
 		s.failSchedule(ctx, current, err.Error())
-		return plugins.Installation{}, plugins.Binding{}, false
+		return plugins.Installation{}, plugins.Binding{}, err.Error(), false
 	}
 	if installation.Status != plugins.InstallationStatusReady {
-		s.failSchedule(ctx, current, "插件当前不可用")
-		return plugins.Installation{}, plugins.Binding{}, false
+		reason := "插件当前不可用"
+		s.failSchedule(ctx, current, reason)
+		return plugins.Installation{}, plugins.Binding{}, reason, false
 	}
 
 	binding, _, err := s.plugins.GetBindingForUser(ctx, current.PluginInstallationID, current.UserID)
 	if err != nil {
 		s.failSchedule(ctx, current, err.Error())
-		return plugins.Installation{}, plugins.Binding{}, false
+		return plugins.Installation{}, plugins.Binding{}, err.Error(), false
 	}
 	if !binding.Enabled || binding.Status != plugins.BindingStatusConnected {
-		s.failSchedule(ctx, current, "插件连接未启用")
-		return plugins.Installation{}, plugins.Binding{}, false
+		reason := "插件连接未启用"
+		s.failSchedule(ctx, current, reason)
+		return plugins.Installation{}, plugins.Binding{}, reason, false
 	}
 
-	return installation, binding, true
+	return installation, binding, "", true
 }
 
 func advanceScheduleTimings(current *PrintSchedule, now time.Time) {
@@ -322,7 +324,7 @@ func advanceScheduleTimings(current *PrintSchedule, now time.Time) {
 func (s *Service) processSchedule(ctx context.Context, current PrintSchedule, now time.Time) {
 	advanceScheduleTimings(&current, now)
 
-	installation, binding, ok := s.resolveScheduleRun(ctx, current)
+	installation, binding, _, ok := s.resolveScheduleRun(ctx, current)
 	if !ok {
 		return
 	}

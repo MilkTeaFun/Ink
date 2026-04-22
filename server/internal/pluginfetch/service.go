@@ -145,14 +145,14 @@ func (s *Service) resolveManualRunBinding(ctx context.Context, installationID st
 		return resolvedBinding{}, err
 	}
 	if installation.Status != plugins.InstallationStatusReady {
-		return resolvedBinding{}, fmt.Errorf("plugin is not ready")
+		return resolvedBinding{}, fmt.Errorf("%w: plugin is not ready", plugins.ErrInvalidInput)
 	}
 	binding, secrets, err := s.plugins.GetBindingForUser(ctx, installation.ID, userID)
 	if err != nil {
 		return resolvedBinding{}, err
 	}
 	if !binding.Enabled || binding.Status != plugins.BindingStatusConnected {
-		return resolvedBinding{}, fmt.Errorf("plugin binding must be enabled")
+		return resolvedBinding{}, fmt.Errorf("%w: plugin binding must be enabled", plugins.ErrInvalidInput)
 	}
 	return resolvedBinding{
 		installation: installation,

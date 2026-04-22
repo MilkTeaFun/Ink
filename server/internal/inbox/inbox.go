@@ -9,7 +9,10 @@ package inbox
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -143,11 +146,11 @@ func buildItem(itemID string, input IngestInput, raw plugins.Item, now time.Time
 
 	status, lastError := validateRawItem(externalID, title, raw.Blocks)
 
-	// Even invalid items still need a stable external id so they can be
-	// looked up later; fall back to the generated item id.
+	// Invalid items still need a stable external id so repeated bad plugin
+	// payloads dedupe instead of inserting a fresh row on every fetch.
 	effectiveExternalID := externalID
 	if effectiveExternalID == "" {
-		effectiveExternalID = itemID
+		effectiveExternalID = invalidExternalID(input, raw)
 	}
 
 	var deviceID *string
@@ -173,6 +176,25 @@ func buildItem(itemID string, input IngestInput, raw plugins.Item, now time.Time
 		CreatedAt:            now,
 		UpdatedAt:            now,
 	}
+}
+
+func invalidExternalID(input IngestInput, raw plugins.Item) string {
+	blocksJSON, err := json.Marshal(raw.Blocks)
+	if err != nil {
+		blocksJSON = []byte("[]")
+	}
+	publishedAt := ""
+	if raw.PublishedAt != nil {
+		publishedAt = raw.PublishedAt.UTC().Format(time.RFC3339Nano)
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(input.PluginBindingID),
+		strings.TrimSpace(raw.Title),
+		strings.TrimSpace(raw.SourceLabel),
+		publishedAt,
+		string(blocksJSON),
+	}, "\n")))
+	return fmt.Sprintf("invalid:%x", sum)
 }
 
 // Ingest persists a batch of plugin items. Each item is validated and either

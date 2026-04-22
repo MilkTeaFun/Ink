@@ -17,6 +17,11 @@ const pluginBindingColumns = `id, plugin_installation_id, user_id, enabled, conf
 			status, last_validated_at, last_error, next_fetch_at, last_fetch_at,
 			fetch_lease_until, last_fetch_error, created_at, updated_at`
 
+const pluginBindingColumnsQualified = `bindings.id, bindings.plugin_installation_id, bindings.user_id, bindings.enabled, bindings.config_json, bindings.secret_ciphertext,
+			bindings.secret_nonce, bindings.cursor_json, bindings.max_prints_per_run, bindings.max_prints_per_day,
+			bindings.status, bindings.last_validated_at, bindings.last_error, bindings.next_fetch_at, bindings.last_fetch_at,
+			bindings.fetch_lease_until, bindings.last_fetch_error, bindings.created_at, bindings.updated_at`
+
 const pluginInstallationColumns = `id, plugin_key, source_type, display_name, version, runtime_type, manifest_json,
 			current_path, status, last_error, installed_by, repo_url, repo_ref, repo_commit_sha,
 			repo_subdir, created_at, updated_at`
@@ -241,7 +246,7 @@ func (s *Store) ClaimBindingsDueForFetch(ctx context.Context, now time.Time, lea
 		set fetch_lease_until = $4, updated_at = $2
 		from due
 		where bindings.id = due.id
-		returning `+pluginBindingColumns+`
+		returning `+pluginBindingColumnsQualified+`
 	`, string(plugins.BindingStatusConnected), now, limit, leaseUntil)
 	if err != nil {
 		return nil, err

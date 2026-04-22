@@ -536,9 +536,9 @@ func (s *Server) handleUploadPlugin(w http.ResponseWriter, r *http.Request, requ
 }
 
 type installPluginFromGitRequest struct {
-	RepoURL string `json:"repoUrl"`
-	Ref     string `json:"ref"`
-	Subdir  string `json:"subdir"`
+	RepoURL    string `json:"repoUrl"`
+	RepoRef    string `json:"repoRef"`
+	RepoSubdir string `json:"repoSubdir"`
 }
 
 func (s *Server) handleInstallPluginFromGit(w http.ResponseWriter, r *http.Request, requestID string) {
@@ -556,8 +556,8 @@ func (s *Server) handleInstallPluginFromGit(w http.ResponseWriter, r *http.Reque
 
 	details, err := s.plugins.InstallFromGit(r.Context(), accessToken, plugins.GitInstallInput{
 		RepoURL: req.RepoURL,
-		Ref:     req.Ref,
-		Subdir:  req.Subdir,
+		Ref:     req.RepoRef,
+		Subdir:  req.RepoSubdir,
 	})
 	if err != nil {
 		s.writePluginError(w, requestID, err)

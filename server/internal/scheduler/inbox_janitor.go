@@ -11,6 +11,12 @@ type Clock interface {
 	Now() time.Time
 }
 
+type systemClock struct{}
+
+func (systemClock) Now() time.Time {
+	return time.Now()
+}
+
 // InboxPurger deletes collected inbox items older than a cutoff.
 type InboxPurger interface {
 	PurgeOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
@@ -28,6 +34,9 @@ type InboxJanitor struct {
 func NewInboxJanitor(purger InboxPurger, clock Clock, logger *slog.Logger, interval time.Duration, retention time.Duration) *InboxJanitor {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if clock == nil {
+		clock = systemClock{}
 	}
 	return &InboxJanitor{
 		purger:    purger,

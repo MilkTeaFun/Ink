@@ -247,15 +247,19 @@ async function handlePluginUpload(event: Event) {
 async function handlePluginInstallFromGit() {
   pluginGitInstallError.value = "";
 
-  if (!pluginGitRepoUrl.value.trim()) {
+  const repoUrl = pluginGitRepoUrl.value.trim();
+  const repoRef = pluginGitRepoRef.value.trim();
+  const repoSubdir = pluginGitRepoSubdir.value.trim();
+
+  if (!repoUrl) {
     pluginGitInstallError.value = "请输入 Git 仓库地址。";
     return;
   }
 
   const installed = await workspaceStore.installPluginRepository({
-    repoUrl: pluginGitRepoUrl.value,
-    repoRef: pluginGitRepoRef.value,
-    repoSubdir: pluginGitRepoSubdir.value,
+    repoUrl,
+    repoRef,
+    repoSubdir,
   });
   if (!installed) {
     pluginGitInstallError.value = workspaceStore.pluginActionError;
@@ -267,8 +271,6 @@ async function handlePluginInstallFromGit() {
   pluginGitRepoSubdir.value = "";
   pluginGitInstallDialogOpen.value = false;
 }
-
-void handlePluginInstallFromGit;
 
 async function handlePluginDisable(installationId: string) {
   await workspaceStore.disablePluginInstallation(installationId);
@@ -317,7 +319,6 @@ async function handlePluginSave(plugin: PluginDetails) {
 
   if (saved) {
     pluginSecretDrafts.value[plugin.installation.id] = createPluginDraftState(plugin).secrets;
-    pluginTestMessages.value[plugin.installation.id] = "配置已保存。";
     closePluginConfigDialog();
   }
 }

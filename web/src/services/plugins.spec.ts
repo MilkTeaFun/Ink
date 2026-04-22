@@ -306,9 +306,11 @@ describe("plugins service", () => {
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBeInstanceOf(FormData);
     expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/admin/plugins/install-from-git");
     expect(fetchMock.mock.calls[8]?.[0]).toBe("/api/v1/print-schedules");
+    expect(fetchMock.mock.calls[10]?.[1]?.method).toBe("PUT");
     expect(fetchMock.mock.calls[11]?.[0]).toBe("/api/v1/plugins/plugin-installation-1/run");
     expect(fetchMock.mock.calls[12]?.[0]).toBe("/api/v1/print-schedules/schedule-1/run");
     expect(fetchMock.mock.calls[14]?.[0]).toBe("/api/v1/print-schedules/schedule-1");
+    expect(fetchMock.mock.calls[14]?.[1]?.method).toBe("DELETE");
   });
 
   it("maps api and network failures into AuthApiError", async () => {
