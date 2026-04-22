@@ -54,7 +54,8 @@ const pluginGitInstallError = ref("");
 const pluginGitRepoUrl = ref("");
 const pluginGitRepoRef = ref("");
 const pluginGitRepoSubdir = ref("");
-const pluginGitInstallDialogOpen = ref(false);
+const pluginAddDialogOpen = ref(false);
+const pluginAddMode = ref<"zip" | "github">("zip");
 const activePluginConfigId = ref<string | null>(null);
 const pluginEnabledDrafts = ref<Record<string, boolean>>({});
 const pluginDrafts = ref<Record<string, Record<string, unknown>>>({});
@@ -237,7 +238,10 @@ async function handlePluginUpload(event: Event) {
   const uploaded = await workspaceStore.uploadPlugin(file);
   if (!uploaded) {
     pluginUploadError.value = workspaceStore.pluginActionError;
+    return;
   }
+
+  pluginAddDialogOpen.value = false;
 
   if (target) {
     target.value = "";
@@ -269,20 +273,22 @@ async function handlePluginInstallFromGit() {
   pluginGitRepoUrl.value = "";
   pluginGitRepoRef.value = "";
   pluginGitRepoSubdir.value = "";
-  pluginGitInstallDialogOpen.value = false;
+  pluginAddDialogOpen.value = false;
 }
 
 async function handlePluginDisable(installationId: string) {
   await workspaceStore.disablePluginInstallation(installationId);
 }
 
-function openPluginGitInstallDialog() {
+function openPluginAddDialog(mode: "zip" | "github" = "zip") {
+  pluginUploadError.value = "";
   pluginGitInstallError.value = "";
-  pluginGitInstallDialogOpen.value = true;
+  pluginAddMode.value = mode;
+  pluginAddDialogOpen.value = true;
 }
 
-function closePluginGitInstallDialog() {
-  pluginGitInstallDialogOpen.value = false;
+function closePluginAddDialog() {
+  pluginAddDialogOpen.value = false;
 }
 
 function openPluginConfigDialog(plugin: PluginDetails) {
@@ -478,8 +484,8 @@ function closeAccountCreationDialog() {
   resetAccountCreationForm();
 }
 
-void openPluginGitInstallDialog;
-void closePluginGitInstallDialog;
+void openPluginAddDialog;
+void closePluginAddDialog;
 void openPluginConfigDialog;
 void openAIConfigDialog;
 void closeAIConfigDialog;
@@ -906,23 +912,21 @@ void closeAccountCreationDialog;
             </div>
 
             <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">当前接入状态</p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    {{
-                      workspaceStore.aiConfigSummary.bound
-                        ? "问答会通过服务端代理转发到你配置的 OpenAI 兼容模型。"
-                        : "当前还没有可用于登录用户的真实 AI 服务。"
-                    }}
-                  </p>
-                </div>
+              <div class="flex flex-wrap items-center justify-between gap-3">
                 <span
                   class="ui-status-badge"
                   :class="getServiceBindingStatusBadgeClass(workspaceStore.aiConfigSummary.bound)"
                 >
-                  {{ workspaceStore.aiConfigSummary.bound ? "已连接" : "未连接" }}
+                  {{ workspaceStore.aiConfigSummary.bound ? "已配置" : "未配置" }}
                 </span>
+                <button
+                  v-if="workspaceStore.isAdmin"
+                  type="button"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  @click="openAIConfigDialog"
+                >
+                  编辑 AI 配置
+                </button>
               </div>
 
               <div class="mt-4 grid gap-4 md:grid-cols-2">
@@ -931,75 +935,29 @@ void closeAccountCreationDialog;
                     服务商
                   </p>
                   <p class="mt-1 text-sm text-stone-900">
-                    {{ workspaceStore.aiConfigSummary.providerName || AI_PROVIDER_NAME_FALLBACK }}
+                    {{
+                      workspaceStore.aiConfigSummary.bound
+                        ? workspaceStore.aiConfigSummary.providerName || AI_PROVIDER_NAME_FALLBACK
+                        : "未配置"
+                    }}
                   </p>
                 </div>
                 <div>
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">模型</p>
                   <p class="mt-1 text-sm text-stone-900">
-                    {{ workspaceStore.aiConfigSummary.model || AI_MODEL_FALLBACK }}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    API URL
-                  </p>
-                  <p class="mt-1 text-sm break-all text-stone-900">
-                    {{ workspaceStore.aiConfigSummary.baseUrl || "尚未设置" }}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    API Key
-                  </p>
-                  <p class="mt-1 text-sm text-stone-900">
                     {{
-                      workspaceStore.aiConfigSummary.keyConfigured
-                        ? "已在服务端加密保存"
-                        : "尚未配置"
+                      workspaceStore.aiConfigSummary.bound
+                        ? workspaceStore.aiConfigSummary.model || AI_MODEL_FALLBACK
+                        : "未配置"
                     }}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div
-              v-if="workspaceStore.isAdmin"
-              class="rounded-xl border border-stone-200 bg-white p-4"
-            >
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">管理员配置</p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    编辑动作收进独立窗口，设置页只保留当前服务摘要。
-                  </p>
-                </div>
-                <div class="flex items-center gap-3">
-                  <span class="ui-status-badge self-start" :class="getUserRoleBadgeClass('admin')">
-                    {{ getUserRoleLabel("admin") }}
-                  </span>
-                  <button
-                    type="button"
-                    class="ui-btn-primary px-4 py-2 text-sm"
-                    @click="openAIConfigDialog"
-                  >
-                    编辑 AI 配置
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <p class="text-sm font-medium text-stone-900">仅管理员可修改</p>
-              <p class="mt-1 text-sm text-stone-500">
-                当前账号只能查看 AI 接入摘要，不能读取或编辑服务端保存的 API Key。
-              </p>
-            </div>
-
             <AppDialog
               :open="aiConfigDialogOpen"
-              title="编辑 AI 配置"
-              description="保存供应商、API URL、模型和服务端密钥。已保存的 Key 不会回显。"
+              title="AI 配置"
               @close="closeAIConfigDialog"
             >
               <form class="space-y-4" @submit.prevent="handleAIConfigSubmit">
@@ -1047,10 +1005,6 @@ void closeAccountCreationDialog;
                   </label>
                 </div>
 
-                <p class="text-sm text-stone-500">
-                  API Key 只会通过后端保存到服务端加密存储，前端只支持新增或替换，不支持读取回显。
-                </p>
-
                 <p
                   v-if="aiConfigErrorMessage"
                   class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
@@ -1088,85 +1042,22 @@ void closeAccountCreationDialog;
         </div>
         <div class="min-w-0 space-y-4">
           <template v-if="workspaceStore.isAuthenticated">
-            <section
-              v-if="workspaceStore.isAdmin"
-              class="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
-            >
-              <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">本地上传插件 ZIP</p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    上传后会自动校验 manifest、安装依赖，并把成功版本切换为当前可用版本。
-                  </p>
-                </div>
-                <label class="ui-btn-secondary inline-flex cursor-pointer px-4 py-2 text-sm">
-                  <input
-                    type="file"
-                    accept=".zip,application/zip"
-                    class="hidden"
-                    :disabled="workspaceStore.pluginUploadLoading"
-                    @change="handlePluginUpload"
-                  />
-                  {{ workspaceStore.pluginUploadLoading ? "上传中..." : "选择本地 ZIP" }}
-                </label>
-              </div>
-
-              <p
-                v-if="workspaceStore.pluginUploadLoading && workspaceStore.pluginUploadingName"
-                class="mt-3 text-sm text-stone-500"
-              >
-                正在处理 {{ workspaceStore.pluginUploadingName }}
-              </p>
-
-              <p
-                v-if="pluginUploadError"
-                class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
-              >
-                {{ pluginUploadError }}
-              </p>
-            </section>
-
-            <section
-              v-if="workspaceStore.isAdmin"
-              class="rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
-            >
-              <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p class="text-sm font-medium text-stone-900">从 Git 仓库安装插件</p>
-                  <p class="mt-1 text-sm text-stone-500">
-                    改为在弹窗里填写仓库、分支和子目录，避免设置页被长表单撑开。
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="ui-btn-secondary px-4 py-2 text-sm"
-                  @click="openPluginGitInstallDialog"
-                >
-                  打开安装窗口
-                </button>
-              </div>
-            </section>
-
             <section class="ui-settings-group">
-              <div class="ui-settings-row !items-start">
-                <div class="ui-settings-copy">
-                  <p class="text-sm font-medium text-stone-900">插件工作台</p>
-                  <p class="mt-0.5 text-sm text-stone-500">
-                    页面只保留摘要和入口，具体安装与配置在独立窗口中完成，避免插件多时界面臃肿。
-                  </p>
-                </div>
+              <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4">
+                <p class="text-sm font-medium text-stone-900">已安装插件</p>
+                <button
+                  v-if="workspaceStore.isAdmin"
+                  type="button"
+                  class="ui-btn-primary px-4 py-2 text-sm"
+                  @click="openPluginAddDialog()"
+                >
+                  添加插件
+                </button>
               </div>
 
               <div v-if="pluginInstallations.length === 0" class="ui-settings-row !items-start">
                 <div class="ui-settings-copy">
-                  <p class="text-sm font-medium text-stone-900">还没有已安装插件</p>
-                  <p class="mt-0.5 text-sm text-stone-500">
-                    {{
-                      workspaceStore.isAdmin
-                        ? "先上传 ZIP 或从 Git 安装一个插件。"
-                        : "管理员安装插件后，这里会出现插件卡片。"
-                    }}
-                  </p>
+                  <p class="text-sm font-medium text-stone-900">还没有插件</p>
                 </div>
               </div>
 
@@ -1195,49 +1086,11 @@ void closeAccountCreationDialog;
                         {{ getPluginBindingStatusLabel(plugin) }}
                       </span>
                     </div>
-                    <p class="mt-1 text-sm text-stone-500">
-                      {{ plugin.manifest.description || plugin.installation.description }}
+                    <p class="mt-2 text-xs text-stone-500">
+                      {{ plugin.installation.sourceType === "git" ? "GitHub" : "ZIP" }} · v{{
+                        plugin.installation.version
+                      }}
                     </p>
-                    <div class="mt-4 grid gap-3 md:grid-cols-3">
-                      <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                        <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                          来源
-                        </p>
-                        <p class="mt-1 text-sm text-stone-900">
-                          {{ plugin.installation.sourceType === "git" ? "Git 仓库" : "本地上传" }}
-                        </p>
-                        <p class="mt-1 text-xs text-stone-500">
-                          {{ plugin.installation.runtimeType === "node" ? "Node.js" : "Python" }} ·
-                          v{{ plugin.installation.version }}
-                        </p>
-                      </div>
-                      <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                        <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                          抓取节奏
-                        </p>
-                        <p class="mt-1 text-sm text-stone-900">
-                          每 {{ plugin.manifest.fetchPolicy.minutes }} 分钟抓取一次
-                        </p>
-                        <p class="mt-1 text-xs text-stone-500">
-                          {{
-                            plugin.binding?.nextFetchAt
-                              ? `下次抓取 ${new Date(plugin.binding.nextFetchAt).toLocaleString()}`
-                              : "尚未启用工作区绑定"
-                          }}
-                        </p>
-                      </div>
-                      <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
-                        <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                          标识
-                        </p>
-                        <p class="mt-1 text-sm text-stone-900">
-                          {{ plugin.installation.pluginKey }}
-                        </p>
-                        <p class="mt-1 text-xs break-all text-stone-500">
-                          {{ plugin.installation.repoUrl || "无 Git 地址" }}
-                        </p>
-                      </div>
-                    </div>
                     <p
                       v-if="plugin.binding?.lastError || plugin.installation.lastError"
                       class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
@@ -1282,76 +1135,129 @@ void closeAccountCreationDialog;
             </section>
 
             <AppDialog
-              :open="pluginGitInstallDialogOpen"
-              title="从 Git 安装插件"
-              description="推荐直接安装单仓库单插件。只有仓库里放了多个插件时，才需要填写插件子目录。"
-              @close="closePluginGitInstallDialog"
+              :open="pluginAddDialogOpen"
+              title="添加插件"
+              @close="closePluginAddDialog"
             >
-              <form class="space-y-4" @submit.prevent="handlePluginInstallFromGit">
-                <div class="grid gap-4">
-                  <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">仓库地址</span>
-                    <input
-                      v-model="pluginGitRepoUrl"
-                      type="url"
-                      placeholder="例如：https://github.com/MilkTeaFun/Ink-plugin.git"
-                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                    />
-                  </label>
-
-                  <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">
-                      分支 / Tag / Commit
-                    </span>
-                    <input
-                      v-model="pluginGitRepoRef"
-                      type="text"
-                      placeholder="默认 main"
-                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                    />
-                  </label>
-
-                  <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">
-                      插件子目录（高级可选）
-                    </span>
-                    <input
-                      v-model="pluginGitRepoSubdir"
-                      type="text"
-                      placeholder="例如：plugins/acme-source"
-                      class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                    />
-                  </label>
-                </div>
-
-                <p class="text-sm text-stone-500">
-                  推荐留空。只有仓库根目录不是插件目录时，才填写“插件子目录”。
-                </p>
-
-                <p
-                  v-if="pluginGitInstallError"
-                  class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
-                >
-                  {{ pluginGitInstallError }}
-                </p>
-
-                <div class="flex justify-end gap-3">
+              <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    class="ui-btn-secondary px-4 py-2 text-sm"
-                    @click="closePluginGitInstallDialog"
+                    class="ui-btn-secondary justify-center py-2 text-sm"
+                    :class="
+                      pluginAddMode === 'zip'
+                        ? 'border-stone-300 bg-white text-stone-900 ring-1 ring-stone-200/70'
+                        : 'border-transparent bg-transparent text-stone-600 shadow-none hover:border-stone-200 hover:bg-white'
+                    "
+                    :aria-pressed="pluginAddMode === 'zip'"
+                    @click="pluginAddMode = 'zip'"
                   >
-                    取消
+                    ZIP 上传
                   </button>
                   <button
-                    type="submit"
-                    class="ui-btn-primary px-4 py-2 text-sm"
-                    :disabled="workspaceStore.pluginGitInstallLoading"
+                    type="button"
+                    class="ui-btn-secondary justify-center py-2 text-sm"
+                    :class="
+                      pluginAddMode === 'github'
+                        ? 'border-stone-300 bg-white text-stone-900 ring-1 ring-stone-200/70'
+                        : 'border-transparent bg-transparent text-stone-600 shadow-none hover:border-stone-200 hover:bg-white'
+                    "
+                    :aria-pressed="pluginAddMode === 'github'"
+                    @click="pluginAddMode = 'github'"
                   >
-                    {{ workspaceStore.pluginGitInstallLoading ? "安装中..." : "从 Git 安装" }}
+                    GitHub 导入
                   </button>
                 </div>
-              </form>
+
+                <div v-if="pluginAddMode === 'zip'" class="space-y-4">
+                  <label class="ui-btn-primary inline-flex w-full cursor-pointer justify-center px-4 py-2 text-sm">
+                    <input
+                      type="file"
+                      accept=".zip,application/zip"
+                      class="hidden"
+                      :disabled="workspaceStore.pluginUploadLoading"
+                      @change="handlePluginUpload"
+                    />
+                    {{ workspaceStore.pluginUploadLoading ? "上传中..." : "选择 ZIP 文件" }}
+                  </label>
+
+                  <p
+                    v-if="workspaceStore.pluginUploadLoading && workspaceStore.pluginUploadingName"
+                    class="text-sm text-stone-500"
+                  >
+                    正在处理 {{ workspaceStore.pluginUploadingName }}
+                  </p>
+
+                  <p
+                    v-if="pluginUploadError"
+                    class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                  >
+                    {{ pluginUploadError }}
+                  </p>
+                </div>
+
+                <form
+                  v-else
+                  class="space-y-4"
+                  @submit.prevent="handlePluginInstallFromGit"
+                >
+                  <div class="grid gap-4">
+                    <label class="block">
+                      <span class="mb-2 block text-sm font-medium text-stone-900">仓库地址</span>
+                      <input
+                        v-model="pluginGitRepoUrl"
+                        type="url"
+                        placeholder="例如：https://github.com/MilkTeaFun/Ink-plugin.git"
+                        class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                      />
+                    </label>
+
+                    <label class="block">
+                      <span class="mb-2 block text-sm font-medium text-stone-900">分支</span>
+                      <input
+                        v-model="pluginGitRepoRef"
+                        type="text"
+                        placeholder="默认 main"
+                        class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                      />
+                    </label>
+
+                    <label class="block">
+                      <span class="mb-2 block text-sm font-medium text-stone-900">子目录</span>
+                      <input
+                        v-model="pluginGitRepoSubdir"
+                        type="text"
+                        placeholder="例如：plugins/acme-source"
+                        class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  <p
+                    v-if="pluginGitInstallError"
+                    class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"
+                  >
+                    {{ pluginGitInstallError }}
+                  </p>
+
+                  <div class="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      class="ui-btn-secondary px-4 py-2 text-sm"
+                      @click="closePluginAddDialog"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      class="ui-btn-primary px-4 py-2 text-sm"
+                      :disabled="workspaceStore.pluginGitInstallLoading"
+                    >
+                      {{ workspaceStore.pluginGitInstallLoading ? "导入中..." : "导入插件" }}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </AppDialog>
 
             <AppDialog

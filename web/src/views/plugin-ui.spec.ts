@@ -254,11 +254,16 @@ async function submitGitInstallForm(
 ) {
   await wrapper
     .findAll("button")
-    .find((button) => button.text() === "打开安装窗口")
+    .find((button) => button.text() === "添加插件")
+    ?.trigger("click");
+  await nextTick();
+  await wrapper
+    .findAll("button")
+    .find((button) => button.text() === "GitHub 导入")
     ?.trigger("click");
   await nextTick();
 
-  const gitInstallForm = findFormByText(wrapper, "从 Git 安装");
+  const gitInstallForm = findFormByText(wrapper, "导入插件");
   const gitInputs = gitInstallForm?.findAll("input") ?? [];
   await gitInputs[0]?.setValue(repoUrl);
   await gitInputs[1]?.setValue(repoRef);
@@ -307,10 +312,15 @@ describe("plugin ui flows", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("本地上传插件 ZIP");
-    expect(wrapper.text()).toContain("打开安装窗口");
-    expect(wrapper.text()).toContain("插件工作台");
+    expect(wrapper.text()).toContain("添加插件");
+    expect(wrapper.text()).toContain("已安装插件");
     expect(wrapper.text()).toContain("Demo Source");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "添加插件")
+      ?.trigger("click");
+    await nextTick();
 
     const fileInput = wrapper.find("input[type='file']");
     Object.defineProperty(fileInput.element, "files", {

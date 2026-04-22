@@ -564,8 +564,8 @@ describe("workspace views", () => {
     expect(store.activeDeviceLabel).toBe("卧室咕咕机");
     expect(selects).toHaveLength(1);
     expect(wrapper.text()).toContain("AI 服务");
-    expect(wrapper.text()).toContain("仅管理员可修改");
-    expect(wrapper.text()).toContain("当前接入状态");
+    expect(wrapper.text()).toContain("未配置");
+    expect(wrapper.text()).toContain("服务商");
   });
 
   it("toggles the tutorial tab from settings", async () => {
@@ -628,8 +628,9 @@ describe("workspace views", () => {
       },
     });
 
-    expect(wrapper.text()).toContain("仅管理员可修改");
-    expect(wrapper.text()).toContain("当前接入状态");
+    expect(wrapper.text()).toContain("AI 服务");
+    expect(wrapper.text()).toContain("未配置");
+    expect(wrapper.text()).not.toContain("编辑 AI 配置");
   });
 
   it("submits the password change form and returns to login", async () => {
@@ -678,7 +679,6 @@ describe("workspace views", () => {
 
     expect(wrapper.text()).toContain("创建新账号");
     expect(wrapper.text()).toContain("管理员");
-    expect(wrapper.text()).toContain("管理员配置");
     expect(wrapper.text()).toContain("编辑 AI 配置");
 
     await wrapper
