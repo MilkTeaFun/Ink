@@ -955,11 +955,7 @@ void closeAccountCreationDialog;
               </div>
             </div>
 
-            <AppDialog
-              :open="aiConfigDialogOpen"
-              title="AI 配置"
-              @close="closeAIConfigDialog"
-            >
+            <AppDialog :open="aiConfigDialogOpen" title="AI 配置" @close="closeAIConfigDialog">
               <form class="space-y-4" @submit.prevent="handleAIConfigSubmit">
                 <div class="grid gap-4 md:grid-cols-2">
                   <label class="block">
@@ -1043,7 +1039,9 @@ void closeAccountCreationDialog;
         <div class="min-w-0 space-y-4">
           <template v-if="workspaceStore.isAuthenticated">
             <section class="ui-settings-group">
-              <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4">
+              <div
+                class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
+              >
                 <p class="text-sm font-medium text-stone-900">已安装插件</p>
                 <button
                   v-if="workspaceStore.isAdmin"
@@ -1134,11 +1132,7 @@ void closeAccountCreationDialog;
               </div>
             </section>
 
-            <AppDialog
-              :open="pluginAddDialogOpen"
-              title="添加插件"
-              @close="closePluginAddDialog"
-            >
+            <AppDialog :open="pluginAddDialogOpen" title="添加插件" @close="closePluginAddDialog">
               <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-2">
                   <button
@@ -1170,7 +1164,9 @@ void closeAccountCreationDialog;
                 </div>
 
                 <div v-if="pluginAddMode === 'zip'" class="space-y-4">
-                  <label class="ui-btn-primary inline-flex w-full cursor-pointer justify-center px-4 py-2 text-sm">
+                  <label
+                    class="ui-btn-primary inline-flex w-full cursor-pointer justify-center px-4 py-2 text-sm"
+                  >
                     <input
                       type="file"
                       accept=".zip,application/zip"
@@ -1196,11 +1192,7 @@ void closeAccountCreationDialog;
                   </p>
                 </div>
 
-                <form
-                  v-else
-                  class="space-y-4"
-                  @submit.prevent="handlePluginInstallFromGit"
-                >
+                <form v-else class="space-y-4" @submit.prevent="handlePluginInstallFromGit">
                   <div class="grid gap-4">
                     <label class="block">
                       <span class="mb-2 block text-sm font-medium text-stone-900">仓库地址</span>
