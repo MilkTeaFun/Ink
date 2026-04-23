@@ -35,6 +35,7 @@ describe("workspace service", () => {
               tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
+              locale: "system",
             },
             serviceBinding: {
               providerName: null,
@@ -60,6 +61,7 @@ describe("workspace service", () => {
               tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
+              locale: "system",
             },
             serviceBinding: {
               providerName: null,
@@ -91,6 +93,7 @@ describe("workspace service", () => {
           tutorialTabEnabled: true,
           theme: "light",
           defaultDeviceId: "",
+          locale: "system",
         },
         serviceBinding: {
           providerName: null,

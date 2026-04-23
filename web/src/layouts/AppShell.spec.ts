@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 
+import { translate } from "@/i18n";
 import AppShell from "@/layouts/AppShell.vue";
 import { createTestRouter, navigationItems } from "@/router";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -47,10 +48,10 @@ describe("AppShell", () => {
     expect(desktopNavLinks).toHaveLength(navigationItems.length);
     expect(mobileNavLinks).toHaveLength(navigationItems.length);
     expect(desktopNavLinks.map((link) => link.text().replace(/\d+/g, ""))).toEqual(
-      navigationItems.map((item) => item.label),
+      navigationItems.map((item) => translate(item.labelKey)),
     );
     expect(mobileNavLinks.map((link) => link.text().replace(/\s*·\s*\d+/g, ""))).toEqual(
-      navigationItems.map((item) => item.label),
+      navigationItems.map((item) => translate(item.labelKey)),
     );
   });
 

@@ -69,6 +69,7 @@ vi.mock("@/services/workspace", () => ({
       tutorialTabEnabled: true,
       theme: "light",
       defaultDeviceId: "",
+      locale: "system",
     },
     serviceBinding: {
       providerName: null,
@@ -378,6 +379,7 @@ describe("workspace store", () => {
           tutorialTabEnabled: true,
           theme: "soft",
           defaultDeviceId: "",
+          locale: "system",
         },
         serviceBinding: {
           providerName: null,

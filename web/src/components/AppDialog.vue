@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 const props = defineProps<{
   open: boolean;
   title: string;
   description?: string;
 }>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   close: [];
@@ -130,7 +133,7 @@ onBeforeUnmount(() => {
             ref="closeButtonRef"
             type="button"
             class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 transition-colors hover:border-stone-300 hover:text-stone-900"
-            aria-label="关闭窗口"
+            :aria-label="t('common.actions.closeWindow')"
             @click="emit('close')"
           >
             ×

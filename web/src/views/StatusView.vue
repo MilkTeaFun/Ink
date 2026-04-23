@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
@@ -7,6 +8,7 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import { getDeviceStatusBadgeClass, getPrintStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
+const { t } = useI18n();
 const addDeviceOpen = ref(false);
 const deviceName = ref("");
 const deviceNote = ref("");
@@ -31,12 +33,12 @@ async function submitAddDevice() {
   addDeviceError.value = "";
 
   if (!deviceName.value.trim()) {
-    addDeviceError.value = "请输入设备名称。";
+    addDeviceError.value = t("status.dialog.errors.nameRequired");
     return;
   }
 
   if (workspaceStore.isAuthenticated && !deviceIdentifier.value.trim()) {
-    addDeviceError.value = "请输入咕咕机设备编号。";
+    addDeviceError.value = t("status.dialog.errors.identifierRequired");
     return;
   }
 
@@ -48,7 +50,9 @@ async function submitAddDevice() {
   });
   if (!created) {
     addDeviceError.value =
-      workspaceStore.flashTone === "error" ? workspaceStore.flashMessage : "绑定设备失败。";
+      workspaceStore.flashTone === "error"
+        ? workspaceStore.flashMessage
+        : t("status.dialog.errors.createFailed");
     return;
   }
   closeAddDeviceDialog();
@@ -58,7 +62,9 @@ async function submitAddDevice() {
 <template>
   <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
     <div>
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设备</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+        {{ t("navigation.status.label") }}
+      </h2>
     </div>
 
     <div class="rounded-2xl border border-stone-200 bg-white shadow-sm">
@@ -79,13 +85,15 @@ async function submitAddDevice() {
             v-if="workspaceStore.printerSyncError"
             class="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
           >
-            <p class="text-sm font-medium text-amber-900">设备同步异常</p>
+            <p class="text-sm font-medium text-amber-900">{{ t("status.syncErrorTitle") }}</p>
             <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
           </div>
 
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">已绑定设备</h3>
+              <h3 class="text-base leading-6 font-semibold text-stone-900">
+                {{ t("status.boundDevices") }}
+              </h3>
             </div>
             <div class="flex items-center gap-2">
               <button
@@ -93,7 +101,7 @@ async function submitAddDevice() {
                 class="ui-btn-secondary px-3 py-1.5 text-sm"
                 @click="openAddDeviceDialog"
               >
-                添加设备
+                {{ t("status.actions.addDevice") }}
               </button>
             </div>
           </div>
@@ -102,12 +110,14 @@ async function submitAddDevice() {
             v-if="workspaceStore.devices.length === 0"
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
-            <h4 class="text-base font-semibold text-stone-900">还没有绑定任何咕咕机</h4>
+            <h4 class="text-base font-semibold text-stone-900">
+              {{ t("status.emptyDevices.title") }}
+            </h4>
             <p class="mt-2 text-sm text-stone-500">
               {{
                 workspaceStore.isAuthenticated
-                  ? "登录成功后会弹出绑定说明，按提示填写设备编号就能完成真实绑定。"
-                  : "当前未登录时展示的是演示工作区；登录后，这里会切到你账号自己的真实设备列表。"
+                  ? t("status.emptyDevices.authenticated")
+                  : t("status.emptyDevices.anonymous")
               }}
             </p>
           </div>
@@ -127,7 +137,11 @@ async function submitAddDevice() {
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-stone-900">{{ device.name }}</p>
                   <p class="mt-0.5 text-sm text-stone-500">
-                    {{ device.id === workspaceStore.defaultDeviceId ? "默认设备 · " : "" }}
+                    {{
+                      device.id === workspaceStore.defaultDeviceId
+                        ? t("status.defaultDevicePrefix")
+                        : ""
+                    }}
                     {{ device.note }}
                   </p>
                 </div>
@@ -143,7 +157,7 @@ async function submitAddDevice() {
                   class="ui-btn-secondary px-3 py-1.5 text-sm"
                   @click="workspaceStore.setDefaultDevice(device.id)"
                 >
-                  设为默认
+                  {{ t("status.actions.setDefault") }}
                 </button>
                 <button
                   v-if="device.status !== 'offline'"
@@ -153,10 +167,10 @@ async function submitAddDevice() {
                 >
                   {{
                     device.status === "pending"
-                      ? "移除"
+                      ? t("status.actions.remove")
                       : workspaceStore.isAuthenticated
-                        ? "删除"
-                        : "解绑"
+                        ? t("common.actions.delete")
+                        : t("status.actions.unbind")
                   }}
                 </button>
               </div>
@@ -167,10 +181,12 @@ async function submitAddDevice() {
         <section>
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">自动打印</h3>
+              <h3 class="text-base leading-6 font-semibold text-stone-900">
+                {{ t("status.autoPrint") }}
+              </h3>
             </div>
             <RouterLink to="/prints" class="ui-btn-secondary px-3 py-1.5 text-sm">
-              前往打印
+              {{ t("status.actions.goToPrints") }}
             </RouterLink>
           </div>
 
@@ -178,7 +194,9 @@ async function submitAddDevice() {
             v-if="workspaceStore.activeSchedules.length === 0"
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
-            <h4 class="text-base font-semibold text-stone-900">还没有自动打印计划</h4>
+            <h4 class="text-base font-semibold text-stone-900">
+              {{ t("status.emptySchedules") }}
+            </h4>
           </div>
 
           <div v-else class="ui-list-card">
@@ -199,7 +217,11 @@ async function submitAddDevice() {
                 type="button"
                 class="ui-toggle"
                 :class="{ 'is-on': task.enabled }"
-                :aria-label="`${task.enabled ? '关闭' : '开启'}${task.title}`"
+                :aria-label="
+                  t(task.enabled ? 'status.actions.disableTask' : 'status.actions.enableTask', {
+                    title: task.title,
+                  })
+                "
                 :aria-pressed="task.enabled"
                 @click="workspaceStore.toggleSchedule(task.id)"
               >
@@ -213,7 +235,9 @@ async function submitAddDevice() {
       <aside>
         <div class="mb-4">
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">最近打印</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("status.recentPrints") }}
+            </h3>
           </div>
         </div>
 
@@ -247,41 +271,47 @@ async function submitAddDevice() {
 
     <AppDialog
       :open="addDeviceOpen"
-      title="添加设备"
+      :title="t('status.dialog.title')"
       :description="
         workspaceStore.isAuthenticated
-          ? '登录后会把设备真实绑定到当前账号下，并可继续设为默认或删除。'
-          : '当前为演示模式，添加后只会保存在本地示例数据里。'
+          ? t('status.dialog.description.authenticated')
+          : t('status.dialog.description.anonymous')
       "
       @close="closeAddDeviceDialog"
     >
       <form class="space-y-4" @submit.prevent="submitAddDevice">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">设备名称</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("status.dialog.fields.name") }}
+          </span>
           <input
             v-model="deviceName"
             type="text"
-            placeholder="例如：客厅咕咕机"
+            :placeholder="t('status.dialog.placeholders.name')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">设备备注</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("status.dialog.fields.note") }}
+          </span>
           <input
             v-model="deviceNote"
             type="text"
-            placeholder="例如：窗边打印机"
+            :placeholder="t('status.dialog.placeholders.note')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
         <label v-if="workspaceStore.isAuthenticated" class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">咕咕机设备编号</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("status.dialog.fields.identifier") }}
+          </span>
           <input
             v-model="deviceIdentifier"
             type="text"
-            placeholder="例如：xxxxxx"
+            :placeholder="t('status.dialog.placeholders.identifier')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
@@ -294,7 +324,7 @@ async function submitAddDevice() {
             type="checkbox"
             class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-900"
           />
-          <span class="text-sm text-stone-900">设为默认设备</span>
+          <span class="text-sm text-stone-900">{{ t("status.dialog.fields.setDefault") }}</span>
         </label>
 
         <p v-if="addDeviceError" class="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -307,9 +337,11 @@ async function submitAddDevice() {
             class="ui-btn-secondary px-4 py-2 text-sm"
             @click="closeAddDeviceDialog"
           >
-            取消
+            {{ t("common.actions.cancel") }}
           </button>
-          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">添加设备</button>
+          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">
+            {{ t("status.actions.addDevice") }}
+          </button>
         </div>
       </form>
     </AppDialog>

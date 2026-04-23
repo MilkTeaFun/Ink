@@ -7,6 +7,8 @@ type PrintStatus string
 type ConversationMessageRole string
 type ThemeMode string
 type SourceConnectionStatus string
+type LocaleCode string
+type LocalePreference string
 
 const (
 	DeviceStatusConnected DeviceStatus = "connected"
@@ -23,6 +25,11 @@ const (
 	ConversationRoleAssistant ConversationMessageRole = "assistant"
 
 	ThemeModeLight ThemeMode = "light"
+
+	LocaleCodeZhCN LocaleCode = "zh-CN"
+	LocaleCodeEnUS LocaleCode = "en-US"
+
+	LocalePreferenceSystem LocalePreference = "system"
 
 	SourceConnectionStatusConnected SourceConnectionStatus = "connected"
 	SourceConnectionStatusError     SourceConnectionStatus = "error"
@@ -84,6 +91,7 @@ type Preferences struct {
 	SendConfirmationEnabled bool      `json:"sendConfirmationEnabled"`
 	Theme                   ThemeMode `json:"theme"`
 	DefaultDeviceID         string    `json:"defaultDeviceId"`
+	Locale                  LocalePreference `json:"locale"`
 }
 
 type ServiceBinding struct {
@@ -283,6 +291,7 @@ func SeedState(now time.Time) State {
 			SendConfirmationEnabled: true,
 			Theme:                   ThemeModeLight,
 			DefaultDeviceID:         "device-desk",
+			Locale:                  LocalePreferenceSystem,
 		},
 		ServiceBinding: ServiceBinding{
 			ProviderName: nil,
@@ -303,6 +312,7 @@ func EmptyState() State {
 			LoginProtectionEnabled:  false,
 			SendConfirmationEnabled: true,
 			Theme:                   ThemeModeLight,
+			Locale:                  LocalePreferenceSystem,
 		},
 		ServiceBinding: ServiceBinding{
 			ProviderName: nil,
@@ -330,6 +340,9 @@ func NormalizeState(state State) State {
 	}
 	if state.Preferences.Theme == "" {
 		state.Preferences.Theme = ThemeModeLight
+	}
+	if state.Preferences.Locale == "" {
+		state.Preferences.Locale = LocalePreferenceSystem
 	}
 	if state.Preferences.DefaultDeviceID == "" && len(state.Devices) > 0 {
 		state.Preferences.DefaultDeviceID = state.Devices[0].ID

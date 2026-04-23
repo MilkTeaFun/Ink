@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
@@ -22,12 +23,24 @@ import {
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
 const { adminPlugins, aiConfigSummary, availablePlugins } = storeToRefs(workspaceStore);
+const { t } = useI18n();
 
-const themes = [
-  { label: "浅色", value: "light" },
-  { label: "深色", value: "dark" },
-  { label: "跟随系统", value: "system" },
-] as const;
+const themes = computed(
+  () =>
+    [
+      { label: t("theme.light"), value: "light" },
+      { label: t("theme.dark"), value: "dark" },
+      { label: t("theme.system"), value: "system" },
+    ] as const,
+);
+const localeOptions = computed(
+  () =>
+    [
+      { label: t("settings.language.options.system"), value: "system" },
+      { label: t("settings.language.options.zhCN"), value: "zh-CN" },
+      { label: t("settings.language.options.enUS"), value: "en-US" },
+    ] as const,
+);
 
 const currentPassword = ref("");
 const newPassword = ref("");
@@ -256,7 +269,7 @@ async function handlePluginInstallFromGit() {
   const repoSubdir = pluginGitRepoSubdir.value.trim();
 
   if (!repoUrl) {
-    pluginGitInstallError.value = "请输入 Git 仓库地址。";
+    pluginGitInstallError.value = t("settings.plugins.addDialog.errors.repoUrlRequired");
     return;
   }
 
@@ -310,7 +323,7 @@ async function handlePluginTest(plugin: PluginDetails) {
   );
 
   pluginTestMessages.value[plugin.installation.id] = result?.valid
-    ? "连接测试通过。"
+    ? t("settings.plugins.testPassed")
     : result?.errors?.map((error) => error.message).join("；") || workspaceStore.pluginActionError;
 }
 
@@ -340,17 +353,17 @@ async function handlePasswordSubmit() {
   const confirmNextPassword = confirmPassword.value;
 
   if (!currentPassword.value.trim()) {
-    passwordFormError.value = "请输入当前密码。";
+    passwordFormError.value = t("settings.account.passwordDialog.errors.currentPasswordRequired");
     return;
   }
 
   if (nextPassword.length < 8) {
-    passwordFormError.value = "新密码至少需要 8 位。";
+    passwordFormError.value = t("settings.account.passwordDialog.errors.passwordTooShort");
     return;
   }
 
   if (nextPassword !== confirmNextPassword) {
-    passwordFormError.value = "两次输入的新密码不一致。";
+    passwordFormError.value = t("settings.account.passwordDialog.errors.passwordMismatch");
     return;
   }
 
@@ -376,12 +389,12 @@ async function handleCreateAccountSubmit() {
   newAccountFormError.value = "";
 
   if (!newAccountEmail.value.trim()) {
-    newAccountFormError.value = "请输入新账号。";
+    newAccountFormError.value = t("settings.account.createAccountDialog.errors.accountRequired");
     return;
   }
 
   if (newAccountPassword.value.trim().length < 8) {
-    newAccountFormError.value = "新账号密码至少需要 8 位。";
+    newAccountFormError.value = t("settings.account.createAccountDialog.errors.passwordTooShort");
     return;
   }
 
@@ -406,17 +419,17 @@ async function handleAIConfigSubmit() {
   aiFormError.value = "";
 
   if (!aiBaseUrl.value.trim()) {
-    aiFormError.value = "请输入兼容接口的 API URL。";
+    aiFormError.value = t("settings.ai.dialog.errors.baseUrlRequired");
     return;
   }
 
   if (!aiModel.value.trim()) {
-    aiFormError.value = "请输入默认模型名称。";
+    aiFormError.value = t("settings.ai.dialog.errors.modelRequired");
     return;
   }
 
   if (!aiApiKey.value.trim() && !workspaceStore.aiConfigSummary.keyConfigured) {
-    aiFormError.value = "请先输入 API Key。";
+    aiFormError.value = t("settings.ai.dialog.errors.apiKeyRequired");
     return;
   }
 
@@ -498,7 +511,9 @@ void closeAccountCreationDialog;
 <template>
   <section class="mx-auto max-w-5xl space-y-8 pt-4">
     <div class="max-w-2xl">
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">设置</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+        {{ t("navigation.settings.label") }}
+      </h2>
     </div>
 
     <div class="space-y-12">
@@ -506,15 +521,19 @@ void closeAccountCreationDialog;
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">账号管理</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.account.title") }}
+          </h3>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">当前账号</p>
+                <p class="text-sm font-medium text-stone-900">
+                  {{ t("settings.account.currentAccount") }}
+                </p>
                 <p class="mt-0.5 text-sm text-stone-500">
-                  {{ workspaceStore.authUser?.email ?? "当前未登录" }}
+                  {{ workspaceStore.authUser?.email ?? t("settings.account.signedOut") }}
                 </p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
@@ -529,18 +548,20 @@ void closeAccountCreationDialog;
                   class="ui-btn-secondary px-3 py-1.5 text-sm"
                   @click="handleLogout"
                 >
-                  退出
+                  {{ t("common.actions.logout") }}
                 </button>
               </div>
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">登录保护</p>
+                <p class="text-sm font-medium text-stone-900">
+                  {{ t("settings.account.loginProtection") }}
+                </p>
                 <p class="mt-0.5 text-sm text-stone-500">
                   {{
                     workspaceStore.loginProtectionEnabled
-                      ? "关闭浏览器后需要重新登录"
-                      : "关闭浏览器后保留登录状态"
+                      ? t("settings.account.loginProtectionEnabled")
+                      : t("settings.account.loginProtectionDisabled")
                   }}
                 </p>
               </div>
@@ -548,7 +569,11 @@ void closeAccountCreationDialog;
                 type="button"
                 class="ui-toggle"
                 :class="{ 'is-on': workspaceStore.loginProtectionEnabled }"
-                :aria-label="`${workspaceStore.loginProtectionEnabled ? '关闭' : '开启'}登录保护`"
+                :aria-label="
+                  workspaceStore.loginProtectionEnabled
+                    ? t('settings.account.toggleAria.disableLoginProtection')
+                    : t('settings.account.toggleAria.enableLoginProtection')
+                "
                 :aria-pressed="workspaceStore.loginProtectionEnabled"
                 @click="workspaceStore.setLoginProtection(!workspaceStore.loginProtectionEnabled)"
               >
@@ -558,9 +583,11 @@ void closeAccountCreationDialog;
             <div class="rounded-xl border border-stone-200 bg-white p-4">
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p class="text-sm font-medium text-stone-900">修改密码</p>
+                  <p class="text-sm font-medium text-stone-900">
+                    {{ t("settings.account.passwordCard.title") }}
+                  </p>
                   <p class="mt-1 text-sm text-stone-500">
-                    密码编辑收进独立窗口，设置页只保留安全状态摘要。
+                    {{ t("settings.account.passwordCard.description") }}
                   </p>
                 </div>
                 <button
@@ -568,21 +595,25 @@ void closeAccountCreationDialog;
                   class="ui-btn-primary px-4 py-2 text-sm"
                   @click="openPasswordDialog"
                 >
-                  修改密码
+                  {{ t("settings.account.passwordCard.action") }}
                 </button>
               </div>
               <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    安全规则
+                    {{ t("settings.account.passwordCard.securityRule") }}
                   </p>
-                  <p class="mt-1 text-sm text-stone-900">新密码至少 8 位</p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ t("settings.account.passwordCard.securityRuleValue") }}
+                  </p>
                 </div>
                 <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    提交结果
+                    {{ t("settings.account.passwordCard.result") }}
                   </p>
-                  <p class="mt-1 text-sm text-stone-900">更新后会跳回登录页重新认证</p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ t("settings.account.passwordCard.resultValue") }}
+                  </p>
                 </div>
               </div>
             </div>
@@ -592,9 +623,11 @@ void closeAccountCreationDialog;
             >
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p class="text-sm font-medium text-stone-900">创建新账号</p>
+                  <p class="text-sm font-medium text-stone-900">
+                    {{ t("settings.account.createAccountCard.title") }}
+                  </p>
                   <p class="mt-1 text-sm text-stone-500">
-                    为成员创建独立账号，登录后会加载各自的工作区。
+                    {{ t("settings.account.createAccountCard.description") }}
                   </p>
                 </div>
                 <div class="flex items-center gap-3">
@@ -606,36 +639,42 @@ void closeAccountCreationDialog;
                     class="ui-btn-primary px-4 py-2 text-sm"
                     @click="openAccountCreationDialog"
                   >
-                    创建账号
+                    {{ t("settings.account.createAccountCard.action") }}
                   </button>
                 </div>
               </div>
               <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    账号形式
+                    {{ t("settings.account.createAccountCard.accountType") }}
                   </p>
-                  <p class="mt-1 text-sm text-stone-900">推荐使用简短用户名，例如 alice</p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ t("settings.account.createAccountCard.accountTypeValue") }}
+                  </p>
                 </div>
                 <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    初始权限
+                    {{ t("settings.account.createAccountCard.initialRole") }}
                   </p>
-                  <p class="mt-1 text-sm text-stone-900">新账号默认创建为成员角色</p>
+                  <p class="mt-1 text-sm text-stone-900">
+                    {{ t("settings.account.createAccountCard.initialRoleValue") }}
+                  </p>
                 </div>
               </div>
             </div>
 
             <AppDialog
               :open="passwordDialogOpen"
-              title="修改密码"
-              description="输入当前密码并设置新的登录密码。提交成功后会回到登录页重新认证。"
+              :title="t('settings.account.passwordDialog.title')"
+              :description="t('settings.account.passwordDialog.description')"
               @close="closePasswordDialog"
             >
               <form class="space-y-4" @submit.prevent="handlePasswordSubmit">
                 <div class="grid gap-4 md:grid-cols-3">
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">当前密码</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.passwordDialog.currentPassword") }}
+                    </span>
                     <div
                       class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
                     >
@@ -650,12 +689,18 @@ void closeAccountCreationDialog;
                         class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
                         @click="currentPasswordVisible = !currentPasswordVisible"
                       >
-                        {{ currentPasswordVisible ? "隐藏" : "显示" }}
+                        {{
+                          currentPasswordVisible
+                            ? t("common.actions.hide")
+                            : t("common.actions.show")
+                        }}
                       </button>
                     </div>
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">新密码</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.passwordDialog.newPassword") }}
+                    </span>
                     <div
                       class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
                     >
@@ -670,12 +715,16 @@ void closeAccountCreationDialog;
                         class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
                         @click="newPasswordVisible = !newPasswordVisible"
                       >
-                        {{ newPasswordVisible ? "隐藏" : "显示" }}
+                        {{
+                          newPasswordVisible ? t("common.actions.hide") : t("common.actions.show")
+                        }}
                       </button>
                     </div>
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">确认新密码</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.passwordDialog.confirmPassword") }}
+                    </span>
                     <div
                       class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
                     >
@@ -690,7 +739,11 @@ void closeAccountCreationDialog;
                         class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
                         @click="confirmPasswordVisible = !confirmPasswordVisible"
                       >
-                        {{ confirmPasswordVisible ? "隐藏" : "显示" }}
+                        {{
+                          confirmPasswordVisible
+                            ? t("common.actions.hide")
+                            : t("common.actions.show")
+                        }}
                       </button>
                     </div>
                   </label>
@@ -707,14 +760,18 @@ void closeAccountCreationDialog;
                     class="ui-btn-secondary px-4 py-2 text-sm"
                     @click="closePasswordDialog"
                   >
-                    取消
+                    {{ t("common.actions.cancel") }}
                   </button>
                   <button
                     type="submit"
                     class="ui-btn-primary px-4 py-2 text-sm"
                     :disabled="workspaceStore.passwordChangeLoading"
                   >
-                    {{ workspaceStore.passwordChangeLoading ? "提交中..." : "更新密码" }}
+                    {{
+                      workspaceStore.passwordChangeLoading
+                        ? t("settings.account.passwordDialog.submitting")
+                        : t("settings.account.passwordDialog.submit")
+                    }}
                   </button>
                 </div>
               </form>
@@ -722,33 +779,41 @@ void closeAccountCreationDialog;
 
             <AppDialog
               :open="accountCreationDialogOpen"
-              title="创建新账号"
-              description="为成员创建独立登录账号，提交后会立即同步到当前工作区。"
+              :title="t('settings.account.createAccountDialog.title')"
+              :description="t('settings.account.createAccountDialog.description')"
               @close="closeAccountCreationDialog"
             >
               <form class="space-y-4" @submit.prevent="handleCreateAccountSubmit">
                 <div class="grid gap-4 md:grid-cols-3">
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">账号</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.createAccountDialog.account") }}
+                    </span>
                     <input
                       v-model="newAccountEmail"
                       type="text"
                       autocomplete="username"
-                      placeholder="例如：alice"
+                      :placeholder="t('settings.account.createAccountDialog.placeholders.account')"
                       class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                     />
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">显示名称</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.createAccountDialog.displayName") }}
+                    </span>
                     <input
                       v-model="newAccountName"
                       type="text"
-                      placeholder="例如：Alice"
+                      :placeholder="
+                        t('settings.account.createAccountDialog.placeholders.displayName')
+                      "
                       class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                     />
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">初始密码</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.account.createAccountDialog.initialPassword") }}
+                    </span>
                     <div
                       class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3"
                     >
@@ -763,7 +828,11 @@ void closeAccountCreationDialog;
                         class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
                         @click="newAccountPasswordVisible = !newAccountPasswordVisible"
                       >
-                        {{ newAccountPasswordVisible ? "隐藏" : "显示" }}
+                        {{
+                          newAccountPasswordVisible
+                            ? t("common.actions.hide")
+                            : t("common.actions.show")
+                        }}
                       </button>
                     </div>
                   </label>
@@ -780,14 +849,18 @@ void closeAccountCreationDialog;
                     class="ui-btn-secondary px-4 py-2 text-sm"
                     @click="closeAccountCreationDialog"
                   >
-                    取消
+                    {{ t("common.actions.cancel") }}
                   </button>
                   <button
                     type="submit"
                     class="ui-btn-primary px-4 py-2 text-sm"
                     :disabled="workspaceStore.accountCreationLoading"
                   >
-                    {{ workspaceStore.accountCreationLoading ? "创建中..." : "创建账号" }}
+                    {{
+                      workspaceStore.accountCreationLoading
+                        ? t("settings.account.createAccountDialog.submitting")
+                        : t("settings.account.createAccountDialog.submit")
+                    }}
                   </button>
                 </div>
               </form>
@@ -800,19 +873,25 @@ void closeAccountCreationDialog;
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">打印设置</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.printing.title") }}
+          </h3>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
             <div v-if="workspaceStore.workspaceSyncError" class="rounded-xl bg-amber-50 p-4">
-              <p class="text-sm font-medium text-amber-900">账号数据同步异常</p>
+              <p class="text-sm font-medium text-amber-900">
+                {{ t("settings.printing.syncErrorTitle") }}
+              </p>
               <p class="mt-1 text-sm text-amber-700">
                 {{ workspaceStore.workspaceSyncError }}
               </p>
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">默认设备</p>
+                <p class="text-sm font-medium text-stone-900">
+                  {{ t("settings.printing.defaultDevice") }}
+                </p>
               </div>
               <select
                 :value="workspaceStore.defaultDeviceId"
@@ -824,7 +903,7 @@ void closeAccountCreationDialog;
                   v-if="workspaceStore.devices.every((device) => device.status === 'offline')"
                   value=""
                 >
-                  暂未设置设备
+                  {{ t("settings.printing.noDefaultDevice") }}
                 </option>
                 <option
                   v-for="device in workspaceStore.devices.filter(
@@ -839,12 +918,14 @@ void closeAccountCreationDialog;
             </div>
             <div class="ui-settings-row">
               <div class="ui-settings-copy">
-                <p class="text-sm font-medium text-stone-900">教程标签</p>
+                <p class="text-sm font-medium text-stone-900">
+                  {{ t("settings.printing.tutorialTab") }}
+                </p>
                 <p class="mt-0.5 text-sm text-stone-500">
                   {{
                     workspaceStore.tutorialTabEnabled
-                      ? "顶部和底部导航会显示“教程”标签。"
-                      : "顶部和底部导航会隐藏“教程”标签。"
+                      ? t("settings.printing.tutorialTabShown")
+                      : t("settings.printing.tutorialTabHidden")
                   }}
                 </p>
               </div>
@@ -852,7 +933,11 @@ void closeAccountCreationDialog;
                 type="button"
                 class="ui-toggle"
                 :class="{ 'is-on': workspaceStore.tutorialTabEnabled }"
-                :aria-label="`${workspaceStore.tutorialTabEnabled ? '关闭' : '开启'}教程标签`"
+                :aria-label="
+                  workspaceStore.tutorialTabEnabled
+                    ? t('settings.printing.toggleAria.disableTutorialTab')
+                    : t('settings.printing.toggleAria.enableTutorialTab')
+                "
                 :aria-pressed="workspaceStore.tutorialTabEnabled"
                 @click="workspaceStore.setTutorialTabEnabled(!workspaceStore.tutorialTabEnabled)"
               >
@@ -867,7 +952,9 @@ void closeAccountCreationDialog;
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">页面主题</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.appearance.title") }}
+          </h3>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-choice-grid">
@@ -888,10 +975,14 @@ void closeAccountCreationDialog;
             </button>
           </div>
           <p class="mt-2 text-sm text-stone-500">
-            当前主题：{{ getThemeDescription(workspaceStore.selectedTheme) }}
+            {{
+              t("settings.appearance.currentTheme", {
+                value: getThemeDescription(workspaceStore.selectedTheme),
+              })
+            }}
           </p>
           <p class="mt-1 text-sm text-stone-500">
-            选择“跟随系统”后，会自动根据设备当前的深浅色设置切换。
+            {{ t("settings.appearance.description") }}
           </p>
         </div>
       </article>
@@ -900,7 +991,50 @@ void closeAccountCreationDialog;
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">AI 服务</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.language.title") }}
+          </h3>
+        </div>
+        <div class="min-w-0">
+          <div class="ui-settings-choice-grid">
+            <button
+              v-for="option in localeOptions"
+              :key="option.value"
+              type="button"
+              class="ui-btn-secondary justify-center py-2 text-sm"
+              :class="
+                option.value === workspaceStore.localePreference
+                  ? 'border-stone-300 bg-white text-stone-900 ring-1 ring-stone-200/70'
+                  : 'border-transparent bg-transparent text-stone-600 shadow-none hover:border-stone-200 hover:bg-white'
+              "
+              :aria-pressed="option.value === workspaceStore.localePreference"
+              @click="workspaceStore.setLocale(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <p class="mt-2 text-sm text-stone-500">
+            {{
+              t("settings.language.current", {
+                value:
+                  localeOptions.find((option) => option.value === workspaceStore.localePreference)
+                    ?.label ?? workspaceStore.localePreference,
+              })
+            }}
+          </p>
+          <p class="mt-1 text-sm text-stone-500">
+            {{ t("settings.language.description") }}
+          </p>
+        </div>
+      </article>
+
+      <article
+        class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
+      >
+        <div>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.ai.title") }}
+          </h3>
         </div>
         <div class="min-w-0">
           <div class="ui-settings-group">
@@ -908,7 +1042,7 @@ void closeAccountCreationDialog;
               v-if="workspaceStore.aiConfigLoading"
               class="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"
             >
-              <p class="text-sm text-stone-600">正在加载当前 AI 配置…</p>
+              <p class="text-sm text-stone-600">{{ t("settings.ai.loading") }}</p>
             </div>
 
             <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
@@ -917,7 +1051,11 @@ void closeAccountCreationDialog;
                   class="ui-status-badge"
                   :class="getServiceBindingStatusBadgeClass(workspaceStore.aiConfigSummary.bound)"
                 >
-                  {{ workspaceStore.aiConfigSummary.bound ? "已配置" : "未配置" }}
+                  {{
+                    workspaceStore.aiConfigSummary.bound
+                      ? t("settings.ai.configured")
+                      : t("settings.ai.notConfigured")
+                  }}
                 </span>
                 <button
                   v-if="workspaceStore.isAdmin"
@@ -925,74 +1063,88 @@ void closeAccountCreationDialog;
                   class="ui-btn-primary px-4 py-2 text-sm"
                   @click="openAIConfigDialog"
                 >
-                  编辑 AI 配置
+                  {{ t("settings.ai.edit") }}
                 </button>
               </div>
 
               <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                    服务商
+                    {{ t("settings.ai.provider") }}
                   </p>
                   <p class="mt-1 text-sm text-stone-900">
                     {{
                       workspaceStore.aiConfigSummary.bound
                         ? workspaceStore.aiConfigSummary.providerName || AI_PROVIDER_NAME_FALLBACK
-                        : "未配置"
+                        : t("settings.ai.notConfigured")
                     }}
                   </p>
                 </div>
                 <div>
-                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">模型</p>
+                  <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
+                    {{ t("settings.ai.model") }}
+                  </p>
                   <p class="mt-1 text-sm text-stone-900">
                     {{
                       workspaceStore.aiConfigSummary.bound
                         ? workspaceStore.aiConfigSummary.model || AI_MODEL_FALLBACK
-                        : "未配置"
+                        : t("settings.ai.notConfigured")
                     }}
                   </p>
                 </div>
               </div>
             </div>
 
-            <AppDialog :open="aiConfigDialogOpen" title="AI 配置" @close="closeAIConfigDialog">
+            <AppDialog
+              :open="aiConfigDialogOpen"
+              :title="t('settings.ai.dialog.title')"
+              @close="closeAIConfigDialog"
+            >
               <form class="space-y-4" @submit.prevent="handleAIConfigSubmit">
                 <div class="grid gap-4 md:grid-cols-2">
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">供应商名称</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.ai.dialog.providerName") }}
+                    </span>
                     <input
                       v-model="aiProviderName"
                       type="text"
-                      placeholder="例如：OpenAI Compatible"
+                      :placeholder="t('settings.ai.dialog.placeholders.providerName')"
                       class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                     />
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">API URL</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.ai.dialog.apiUrl") }}
+                    </span>
                     <input
                       v-model="aiBaseUrl"
                       type="url"
-                      placeholder="例如：https://api.openai.com/v1"
+                      :placeholder="t('settings.ai.dialog.placeholders.apiUrl')"
                       class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                     />
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">默认模型</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.ai.dialog.defaultModel") }}
+                    </span>
                     <input
                       v-model="aiModel"
                       type="text"
-                      placeholder="例如：gpt-4.1-mini"
+                      :placeholder="t('settings.ai.dialog.placeholders.defaultModel')"
                       class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                     />
                   </label>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-stone-900">API Key</span>
+                    <span class="mb-2 block text-sm font-medium text-stone-900">
+                      {{ t("settings.ai.dialog.apiKey") }}
+                    </span>
                     <input
                       v-model="aiApiKey"
                       :placeholder="
                         workspaceStore.aiConfigSummary.keyConfigured
-                          ? '留空则沿用当前服务端密钥'
-                          : '输入新的服务端密钥'
+                          ? t('settings.ai.dialog.apiKeyPlaceholderConfigured')
+                          : t('settings.ai.dialog.apiKeyPlaceholderEmpty')
                       "
                       type="password"
                       autocomplete="off"
@@ -1014,14 +1166,18 @@ void closeAccountCreationDialog;
                     class="ui-btn-secondary px-4 py-2 text-sm"
                     @click="closeAIConfigDialog"
                   >
-                    取消
+                    {{ t("common.actions.cancel") }}
                   </button>
                   <button
                     type="submit"
                     class="ui-btn-primary px-4 py-2 text-sm"
                     :disabled="workspaceStore.aiConfigSaving || workspaceStore.aiConfigLoading"
                   >
-                    {{ workspaceStore.aiConfigSaving ? "保存中..." : "保存 AI 配置" }}
+                    {{
+                      workspaceStore.aiConfigSaving
+                        ? t("settings.ai.dialog.saving")
+                        : t("settings.ai.dialog.submit")
+                    }}
                   </button>
                 </div>
               </form>
@@ -1034,7 +1190,9 @@ void closeAccountCreationDialog;
         class="grid grid-cols-1 items-start gap-x-10 gap-y-5 md:grid-cols-[minmax(0,13rem)_1fr]"
       >
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">插件</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("settings.plugins.title") }}
+          </h3>
         </div>
         <div class="min-w-0 space-y-4">
           <template v-if="workspaceStore.isAuthenticated">
@@ -1042,20 +1200,24 @@ void closeAccountCreationDialog;
               <div
                 class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4"
               >
-                <p class="text-sm font-medium text-stone-900">已安装插件</p>
+                <p class="text-sm font-medium text-stone-900">
+                  {{ t("settings.plugins.installed") }}
+                </p>
                 <button
                   v-if="workspaceStore.isAdmin"
                   type="button"
                   class="ui-btn-primary px-4 py-2 text-sm"
                   @click="openPluginAddDialog()"
                 >
-                  添加插件
+                  {{ t("settings.plugins.add") }}
                 </button>
               </div>
 
               <div v-if="pluginInstallations.length === 0" class="ui-settings-row !items-start">
                 <div class="ui-settings-copy">
-                  <p class="text-sm font-medium text-stone-900">还没有插件</p>
+                  <p class="text-sm font-medium text-stone-900">
+                    {{ t("settings.plugins.empty") }}
+                  </p>
                 </div>
               </div>
 
@@ -1085,9 +1247,12 @@ void closeAccountCreationDialog;
                       </span>
                     </div>
                     <p class="mt-2 text-xs text-stone-500">
-                      {{ plugin.installation.sourceType === "git" ? "GitHub" : "ZIP" }} · v{{
-                        plugin.installation.version
+                      {{
+                        plugin.installation.sourceType === "git"
+                          ? t("settings.plugins.sourceTypeGit")
+                          : t("settings.plugins.sourceTypeZip")
                       }}
+                      · v{{ plugin.installation.version }}
                     </p>
                     <p
                       v-if="plugin.binding?.lastError || plugin.installation.lastError"
@@ -1108,7 +1273,7 @@ void closeAccountCreationDialog;
                       class="ui-btn-primary px-4 py-2 text-sm"
                       @click="openPluginConfigDialog(plugin)"
                     >
-                      配置插件
+                      {{ t("settings.plugins.configure") }}
                     </button>
                     <button
                       v-if="plugin.installation.status !== 'disabled' && workspaceStore.isAdmin"
@@ -1123,8 +1288,8 @@ void closeAccountCreationDialog;
                       {{
                         workspaceStore.pluginSaving &&
                         workspaceStore.pluginSavingId === plugin.installation.id
-                          ? "停用中..."
-                          : "停用"
+                          ? t("settings.plugins.disabling")
+                          : t("settings.plugins.disable")
                       }}
                     </button>
                   </div>
@@ -1132,7 +1297,11 @@ void closeAccountCreationDialog;
               </div>
             </section>
 
-            <AppDialog :open="pluginAddDialogOpen" title="添加插件" @close="closePluginAddDialog">
+            <AppDialog
+              :open="pluginAddDialogOpen"
+              :title="t('settings.plugins.addDialog.title')"
+              @close="closePluginAddDialog"
+            >
               <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-2">
                   <button
@@ -1146,7 +1315,7 @@ void closeAccountCreationDialog;
                     :aria-pressed="pluginAddMode === 'zip'"
                     @click="pluginAddMode = 'zip'"
                   >
-                    ZIP 上传
+                    {{ t("settings.plugins.addDialog.zipUpload") }}
                   </button>
                   <button
                     type="button"
@@ -1159,7 +1328,7 @@ void closeAccountCreationDialog;
                     :aria-pressed="pluginAddMode === 'github'"
                     @click="pluginAddMode = 'github'"
                   >
-                    GitHub 导入
+                    {{ t("settings.plugins.addDialog.githubImport") }}
                   </button>
                 </div>
 
@@ -1174,14 +1343,22 @@ void closeAccountCreationDialog;
                       :disabled="workspaceStore.pluginUploadLoading"
                       @change="handlePluginUpload"
                     />
-                    {{ workspaceStore.pluginUploadLoading ? "上传中..." : "选择 ZIP 文件" }}
+                    {{
+                      workspaceStore.pluginUploadLoading
+                        ? t("settings.plugins.addDialog.uploading")
+                        : t("settings.plugins.addDialog.chooseZip")
+                    }}
                   </label>
 
                   <p
                     v-if="workspaceStore.pluginUploadLoading && workspaceStore.pluginUploadingName"
                     class="text-sm text-stone-500"
                   >
-                    正在处理 {{ workspaceStore.pluginUploadingName }}
+                    {{
+                      t("settings.plugins.addDialog.processing", {
+                        name: workspaceStore.pluginUploadingName,
+                      })
+                    }}
                   </p>
 
                   <p
@@ -1195,31 +1372,37 @@ void closeAccountCreationDialog;
                 <form v-else class="space-y-4" @submit.prevent="handlePluginInstallFromGit">
                   <div class="grid gap-4">
                     <label class="block">
-                      <span class="mb-2 block text-sm font-medium text-stone-900">仓库地址</span>
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ t("settings.plugins.addDialog.repoUrl") }}
+                      </span>
                       <input
                         v-model="pluginGitRepoUrl"
                         type="url"
-                        placeholder="例如：https://github.com/MilkTeaFun/Ink-plugin.git"
+                        :placeholder="t('settings.plugins.addDialog.placeholders.repoUrl')"
                         class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                       />
                     </label>
 
                     <label class="block">
-                      <span class="mb-2 block text-sm font-medium text-stone-900">分支</span>
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ t("settings.plugins.addDialog.repoRef") }}
+                      </span>
                       <input
                         v-model="pluginGitRepoRef"
                         type="text"
-                        placeholder="默认 main"
+                        :placeholder="t('settings.plugins.addDialog.placeholders.repoRef')"
                         class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                       />
                     </label>
 
                     <label class="block">
-                      <span class="mb-2 block text-sm font-medium text-stone-900">子目录</span>
+                      <span class="mb-2 block text-sm font-medium text-stone-900">
+                        {{ t("settings.plugins.addDialog.repoSubdir") }}
+                      </span>
                       <input
                         v-model="pluginGitRepoSubdir"
                         type="text"
-                        placeholder="例如：plugins/acme-source"
+                        :placeholder="t('settings.plugins.addDialog.placeholders.repoSubdir')"
                         class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                       />
                     </label>
@@ -1238,14 +1421,18 @@ void closeAccountCreationDialog;
                       class="ui-btn-secondary px-4 py-2 text-sm"
                       @click="closePluginAddDialog"
                     >
-                      取消
+                      {{ t("common.actions.cancel") }}
                     </button>
                     <button
                       type="submit"
                       class="ui-btn-primary px-4 py-2 text-sm"
                       :disabled="workspaceStore.pluginGitInstallLoading"
                     >
-                      {{ workspaceStore.pluginGitInstallLoading ? "导入中..." : "导入插件" }}
+                      {{
+                        workspaceStore.pluginGitInstallLoading
+                          ? t("settings.plugins.addDialog.importing")
+                          : t("settings.plugins.addDialog.submit")
+                      }}
                     </button>
                   </div>
                 </form>
@@ -1254,7 +1441,10 @@ void closeAccountCreationDialog;
 
             <AppDialog
               :open="activePluginConfig !== null"
-              :title="activePluginConfig?.installation.displayName ?? '插件配置'"
+              :title="
+                activePluginConfig?.installation.displayName ??
+                t('settings.plugins.configDialog.fallbackTitle')
+              "
               :description="activePluginConfig?.manifest.description"
               @close="closePluginConfigDialog"
             >
@@ -1262,7 +1452,7 @@ void closeAccountCreationDialog;
                 <div class="grid gap-3 md:grid-cols-2">
                   <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                     <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                      安装状态
+                      {{ t("settings.plugins.configDialog.installStatus") }}
                     </p>
                     <div class="mt-2 flex flex-wrap items-center gap-2">
                       <span
@@ -1287,16 +1477,24 @@ void closeAccountCreationDialog;
                   </div>
                   <div class="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3">
                     <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                      抓取策略
+                      {{ t("settings.plugins.configDialog.fetchPolicy") }}
                     </p>
                     <p class="mt-2 text-sm text-stone-900">
-                      每 {{ activePluginConfig.manifest.fetchPolicy.minutes }} 分钟抓取一次
+                      {{
+                        t("settings.plugins.configDialog.fetchEveryMinutes", {
+                          minutes: activePluginConfig.manifest.fetchPolicy.minutes,
+                        })
+                      }}
                     </p>
                     <p class="mt-1 text-xs text-stone-500">
                       {{
                         activePluginConfig.binding?.nextFetchAt
-                          ? `下次抓取 ${new Date(activePluginConfig.binding.nextFetchAt).toLocaleString()}`
-                          : "当前未安排自动抓取"
+                          ? t("settings.plugins.configDialog.nextFetchAt", {
+                              time: new Date(activePluginConfig.binding.nextFetchAt).toLocaleString(
+                                workspaceStore.effectiveLocale,
+                              ),
+                            })
+                          : t("settings.plugins.configDialog.noFetchScheduled")
                       }}
                     </p>
                   </div>
@@ -1308,10 +1506,10 @@ void closeAccountCreationDialog;
                   >
                     <div>
                       <span class="block text-sm font-medium text-stone-900">
-                        启用当前工作区绑定
+                        {{ t("settings.plugins.configDialog.enableWorkspaceBinding") }}
                       </span>
                       <span class="mt-1 block text-sm text-stone-500">
-                        启用后，这个工作区就可以测试该插件并创建相关定时任务。
+                        {{ t("settings.plugins.configDialog.enableWorkspaceBindingHint") }}
                       </span>
                     </div>
                     <input
@@ -1330,7 +1528,7 @@ void closeAccountCreationDialog;
                     <p
                       class="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-sm text-stone-500"
                     >
-                      这个插件没有工作区级配置项，直接测试或保存即可。
+                      {{ t("settings.plugins.configDialog.noWorkspaceConfig") }}
                     </p>
                   </div>
 
@@ -1381,7 +1579,9 @@ void closeAccountCreationDialog;
                           @change="handlePluginCheckbox(activePluginConfig, field, $event)"
                         />
                         <span class="text-sm text-stone-700">
-                          {{ field.description || "启用此选项" }}
+                          {{
+                            field.description || t("settings.plugins.configDialog.checkboxFallback")
+                          }}
                         </span>
                       </label>
 
@@ -1398,7 +1598,9 @@ void closeAccountCreationDialog;
                                 : 'text'
                         "
                         :placeholder="
-                          field.type === 'secret' ? '留空则保持当前密钥' : field.description || ''
+                          field.type === 'secret'
+                            ? t('settings.plugins.configDialog.secretPlaceholder')
+                            : field.description || ''
                         "
                         autocomplete="off"
                         class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
@@ -1429,8 +1631,8 @@ void closeAccountCreationDialog;
                     >
                       {{
                         workspaceStore.pluginTestingId === activePluginConfig.installation.id
-                          ? "测试中..."
-                          : "测试插件"
+                          ? t("settings.plugins.configDialog.testing")
+                          : t("settings.plugins.configDialog.test")
                       }}
                     </button>
                     <button
@@ -1442,8 +1644,8 @@ void closeAccountCreationDialog;
                     >
                       {{
                         workspaceStore.pluginSavingId === activePluginConfig.installation.id
-                          ? "保存中..."
-                          : "保存配置"
+                          ? t("settings.plugins.configDialog.saving")
+                          : t("settings.plugins.configDialog.save")
                       }}
                     </button>
                   </div>
@@ -1470,7 +1672,11 @@ void closeAccountCreationDialog;
                 class="ui-btn-secondary px-3 py-1.5 text-sm"
                 @click="workspaceStore.toggleSourceConnection(source.id)"
               >
-                {{ source.status === "connected" ? "解绑" : "连接" }}
+                {{
+                  source.status === "connected"
+                    ? t("settings.plugins.anonymousActions.disconnect")
+                    : t("settings.plugins.anonymousActions.connect")
+                }}
               </button>
             </div>
           </div>

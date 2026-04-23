@@ -197,6 +197,7 @@ function createWorkspaceState() {
       tutorialTabEnabled: true,
       theme: "light" as const,
       defaultDeviceId: "device-1",
+      locale: "system" as const,
     },
     serviceBinding: {
       providerName: null,

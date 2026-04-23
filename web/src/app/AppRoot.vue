@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
+import { useRoute } from "vue-router";
 
+import { translate } from "@/i18n";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { resolveThemeMode } from "@/utils/workspace";
 
+const route = useRoute();
 const workspaceStore = useWorkspaceStore();
 const themeColors = {
   light: "#fafaf9",
@@ -57,12 +60,17 @@ watchEffect(() => {
     return;
   }
 
+  document.documentElement.lang = workspaceStore.effectiveLocale;
+
   const resolvedTheme = resolveThemeMode(workspaceStore.selectedTheme, prefersDark.value);
   const root = document.documentElement;
 
   root.dataset.theme = workspaceStore.selectedTheme;
   root.dataset.colorMode = resolvedTheme;
   root.style.colorScheme = resolvedTheme;
+  document.title = route.meta.titleKey
+    ? `${translate("app.name")} · ${translate(route.meta.titleKey)}`
+    : translate("app.name");
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", themeColors[resolvedTheme] ?? themeColors.light);

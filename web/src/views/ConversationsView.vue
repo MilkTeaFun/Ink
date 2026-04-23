@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
+const { t } = useI18n();
 
 const hasMessages = computed(() => (workspaceStore.activeConversation?.messages.length ?? 0) > 0);
 const hasConversationHistory = computed(() =>
@@ -13,8 +15,8 @@ const hasConversationHistory = computed(() =>
 );
 const emptyStateHint = computed(() =>
   hasConversationHistory.value
-    ? "输入内容后即可开始新的对话。"
-    : "还没有历史对话，直接输入第一条消息即可开始。",
+    ? t("conversations.emptyState.withHistory")
+    : t("conversations.emptyState.firstConversation"),
 );
 const feedbackOpen = ref(false);
 const feedbackDraft = ref("");
@@ -34,7 +36,7 @@ function handleDeleteCurrentConversation() {
 
   const hasContent = current.messages.length > 0 || current.draft.trim().length > 0;
   if (hasContent && typeof window !== "undefined") {
-    const confirmed = window.confirm(`删除“${current.title}”？`);
+    const confirmed = window.confirm(t("conversations.confirmDelete", { title: current.title }));
     if (!confirmed) {
       return;
     }
@@ -58,7 +60,7 @@ async function handleFeedbackSubmit() {
   feedbackFormError.value = "";
 
   if (!feedbackDraft.value.trim()) {
-    feedbackFormError.value = "请先输入反馈内容。";
+    feedbackFormError.value = t("feedback.errors.required");
     return;
   }
 
@@ -76,16 +78,18 @@ async function handleFeedbackSubmit() {
 <template>
   <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
     <div>
-      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">对话</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+        {{ t("navigation.conversations.label") }}
+      </h2>
     </div>
 
     <section class="space-y-4 lg:hidden">
       <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
         <div class="flex flex-col gap-3">
           <div>
-            <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
+            <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
             <p class="mt-1 text-sm leading-6 text-stone-500">
-              这里的反馈会提醒作者，适合提交使用中遇到的问题、建议或吐槽。
+              {{ t("feedback.card.description") }}
             </p>
           </div>
           <button
@@ -93,20 +97,22 @@ async function handleFeedbackSubmit() {
             class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
             @click="openFeedbackDialog"
           >
-            反馈给作者
+            {{ t("feedback.card.action") }}
           </button>
         </div>
       </div>
 
       <div class="flex items-center justify-between gap-3">
         <div>
-          <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
+          <h3 class="text-base leading-6 font-semibold text-stone-900">
+            {{ t("conversations.recent") }}
+          </h3>
         </div>
         <button
           class="ui-btn-secondary px-3 py-1.5 text-sm"
           @click="workspaceStore.createConversation"
         >
-          新建
+          {{ t("common.actions.new") }}
         </button>
       </div>
 
@@ -160,9 +166,9 @@ async function handleFeedbackSubmit() {
         <div class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
           <div class="flex flex-col gap-3">
             <div>
-              <p class="text-sm font-medium text-stone-900">问题 / 建议 / 吐槽反馈</p>
+              <p class="text-sm font-medium text-stone-900">{{ t("feedback.card.title") }}</p>
               <p class="mt-1 text-sm leading-6 text-stone-500">
-                这里的反馈会提醒作者，适合提交使用中遇到的问题、建议或吐槽。
+                {{ t("feedback.card.description") }}
               </p>
             </div>
             <button
@@ -170,20 +176,22 @@ async function handleFeedbackSubmit() {
               class="ui-btn-secondary w-full px-3 py-1.5 text-sm"
               @click="openFeedbackDialog"
             >
-              反馈给作者
+              {{ t("feedback.card.action") }}
             </button>
           </div>
         </div>
 
         <div class="flex items-center justify-between">
           <div>
-            <h3 class="text-base leading-6 font-semibold text-stone-900">最近对话</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("conversations.recent") }}
+            </h3>
           </div>
           <button
             class="ui-btn-secondary px-3 py-1.5 text-sm"
             @click="workspaceStore.createConversation"
           >
-            新建
+            {{ t("common.actions.new") }}
           </button>
         </div>
 
@@ -233,10 +241,16 @@ async function handleFeedbackSubmit() {
         >
           <div>
             <h3 class="text-base leading-6 font-semibold text-stone-900">
-              {{ workspaceStore.activeConversation?.title ?? "当前对话" }}
+              {{
+                workspaceStore.activeConversation?.title ?? t("conversations.currentConversation")
+              }}
             </h3>
             <p class="mt-1 text-sm text-stone-500">
-              默认发往：{{ workspaceStore.activeDeviceLabel || "尚未设置" }}
+              {{
+                t("conversations.defaultDevice", {
+                  value: workspaceStore.activeDeviceLabel || t("common.labels.notSet"),
+                })
+              }}
             </p>
           </div>
           <div class="flex w-full sm:w-auto">
@@ -245,7 +259,7 @@ async function handleFeedbackSubmit() {
               class="ui-btn-secondary w-full px-3 py-1.5 text-sm sm:w-auto"
               @click="handleDeleteCurrentConversation"
             >
-              删除对话
+              {{ t("conversations.actions.deleteConversation") }}
             </button>
           </div>
         </div>
@@ -255,7 +269,9 @@ async function handleFeedbackSubmit() {
           class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 text-center"
         >
           <div class="space-y-2">
-            <h4 class="text-base font-semibold text-stone-900">这里还没有消息</h4>
+            <h4 class="text-base font-semibold text-stone-900">
+              {{ t("conversations.emptyState.title") }}
+            </h4>
             <p class="text-sm leading-6 text-stone-500">
               {{ emptyStateHint }}
             </p>
@@ -298,8 +314,8 @@ async function handleFeedbackSubmit() {
                 "
                 :aria-label="
                   workspaceStore.selectedConversationMessageIds.includes(message.id)
-                    ? '取消选择这条消息'
-                    : '选择这条消息'
+                    ? t('conversations.selection.deselect')
+                    : t('conversations.selection.select')
                 "
                 :aria-pressed="workspaceStore.selectedConversationMessageIds.includes(message.id)"
                 @click="workspaceStore.toggleConversationMessageSelection(message.id)"
@@ -320,7 +336,7 @@ async function handleFeedbackSubmit() {
             v-if="workspaceStore.isGenerating"
             class="max-w-[85%] rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-5 py-3.5 text-[15px] leading-relaxed text-stone-500 shadow-sm"
           >
-            正在整理新的回复...
+            {{ t("conversations.generating") }}
           </article>
         </div>
 
@@ -331,13 +347,13 @@ async function handleFeedbackSubmit() {
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.createPrintFromSelectedMessages"
               >
-                打印选中问答
+                {{ t("conversations.actions.printSelected") }}
               </button>
               <button
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.createPrintFromConversation"
               >
-                打印当前对话
+                {{ t("conversations.actions.printConversation") }}
               </button>
             </div>
             <div class="flex items-center gap-2">
@@ -345,11 +361,11 @@ async function handleFeedbackSubmit() {
                 class="ui-btn-secondary whitespace-nowrap"
                 @click="workspaceStore.saveCurrentDraft"
               >
-                保存草稿
+                {{ t("conversations.actions.saveDraft") }}
               </button>
-              <RouterLink to="/prints" class="ui-btn-secondary whitespace-nowrap"
-                >查看打印队列</RouterLink
-              >
+              <RouterLink to="/prints" class="ui-btn-secondary whitespace-nowrap">
+                {{ t("conversations.actions.viewPrintQueue") }}
+              </RouterLink>
             </div>
           </div>
 
@@ -366,7 +382,7 @@ async function handleFeedbackSubmit() {
             <textarea
               :value="workspaceStore.activeConversation?.draft ?? ''"
               rows="4"
-              placeholder="发送消息..."
+              :placeholder="t('conversations.draftPlaceholder')"
               class="w-full resize-none border-0 bg-transparent p-4 text-[15px] leading-relaxed text-stone-900 placeholder:text-stone-400 focus:ring-0 focus:outline-none"
               @input="handleDraftInput"
             />
@@ -374,12 +390,18 @@ async function handleFeedbackSubmit() {
               class="flex flex-col gap-3 rounded-b-xl border-t border-stone-100 bg-stone-50/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div class="flex flex-wrap items-center gap-2 text-xs text-stone-500">
-                <span>已选中 {{ workspaceStore.selectedConversationMessageIds.length }} 条</span>
+                <span>
+                  {{
+                    t("conversations.selectedCount", {
+                      count: workspaceStore.selectedConversationMessageIds.length,
+                    })
+                  }}
+                </span>
               </div>
               <div class="flex gap-2">
                 <button
                   class="rounded-md p-1.5 text-stone-500 transition-colors hover:bg-stone-200/50 hover:text-stone-900"
-                  title="重新生成"
+                  :title="t('conversations.actions.regenerate')"
                   :disabled="workspaceStore.isGenerating"
                   @click="workspaceStore.regenerateLatestReply"
                 >
@@ -397,7 +419,11 @@ async function handleFeedbackSubmit() {
                   :disabled="workspaceStore.isGenerating"
                   @click="workspaceStore.sendCurrentDraft"
                 >
-                  {{ workspaceStore.isGenerating ? "生成中..." : "发送" }}
+                  {{
+                    workspaceStore.isGenerating
+                      ? t("conversations.sending")
+                      : t("conversations.actions.send")
+                  }}
                 </button>
               </div>
             </div>
@@ -408,17 +434,19 @@ async function handleFeedbackSubmit() {
 
     <AppDialog
       :open="feedbackOpen"
-      title="反馈"
-      description="这里适合提交问题、建议或吐槽；提交后会提醒作者。"
+      :title="t('feedback.dialog.title')"
+      :description="t('feedback.dialog.description')"
       @close="closeFeedbackDialog"
     >
       <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">反馈内容</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("feedback.dialog.contentLabel") }}
+          </span>
           <textarea
             v-model="feedbackDraft"
             rows="6"
-            placeholder="反馈（功能 / 建议 / 吐槽）"
+            :placeholder="t('feedback.dialog.placeholder')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
@@ -433,13 +461,17 @@ async function handleFeedbackSubmit() {
             class="ui-btn-secondary px-4 py-2.5 text-sm"
             @click="closeFeedbackDialog"
           >
-            取消
+            {{ t("common.actions.cancel") }}
           </button>
           <button
             class="ui-btn-primary px-4 py-2.5 text-sm"
             :disabled="workspaceStore.feedbackSubmitting"
           >
-            {{ workspaceStore.feedbackSubmitting ? "发送中..." : "提交反馈" }}
+            {{
+              workspaceStore.feedbackSubmitting
+                ? t("feedback.dialog.submitting")
+                : t("feedback.dialog.submit")
+            }}
           </button>
         </div>
       </form>

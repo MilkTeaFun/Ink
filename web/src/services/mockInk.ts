@@ -2,6 +2,8 @@ interface ReplyPayload {
   prompt: string;
 }
 
+import { translate } from "@/i18n";
+
 const NETWORK_DELAY_MS = 80;
 
 function wait(ms = NETWORK_DELAY_MS) {
@@ -12,11 +14,15 @@ export async function generateReplyWithMockService({ prompt }: ReplyPayload): Pr
   await wait();
 
   if (prompt.toLowerCase().includes("[error]")) {
-    throw new Error("暂时没能生成回复，请稍后重试。");
+    throw new Error(translate("mockInk.error"));
   }
 
   const trimmedPrompt = prompt.trim().replace(/\s+/g, " ");
-  const summary = "先把最重要的一件事做好，处理完就停一下，给自己留一点缓冲和休息。";
+  const summary = translate("mockInk.summary");
+  const promptSuffix = trimmedPrompt.endsWith("。") || trimmedPrompt.endsWith(".") ? "" : "。";
 
-  return `当然可以。你可以这样写：${trimmedPrompt}${trimmedPrompt.endsWith("。") ? "" : "。"}${summary}留一行空白，会更适合打印在纸条上。`;
+  return translate("mockInk.reply", {
+    prompt: `${trimmedPrompt}${promptSuffix}`,
+    summary,
+  });
 }

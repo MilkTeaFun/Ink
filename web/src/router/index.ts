@@ -6,6 +6,7 @@ import {
 } from "vue-router";
 import type { RouterHistory } from "vue-router";
 
+import { translate } from "@/i18n";
 import AppShell from "@/layouts/AppShell.vue";
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
 import { pinia } from "@/stores/pinia";
@@ -19,10 +20,10 @@ import TutorialView from "@/views/TutorialView.vue";
 
 declare module "vue-router" {
   interface RouteMeta {
-    label?: string;
-    title?: string;
-    description?: string;
-    navHint?: string;
+    labelKey?: string;
+    titleKey?: string;
+    descriptionKey?: string;
+    navHintKey?: string;
     requiresAuth?: boolean;
     showInNav?: boolean;
   }
@@ -34,10 +35,10 @@ const shellChildren: RouteRecordRaw[] = [
     name: "conversations",
     component: ConversationsView,
     meta: {
-      label: "对话",
-      title: "内容对话",
-      description: "像聊天一样整理内容，确认满意后，再把它发去打印。",
-      navHint: "整理内容",
+      labelKey: "navigation.conversations.label",
+      titleKey: "navigation.conversations.title",
+      descriptionKey: "navigation.conversations.description",
+      navHintKey: "navigation.conversations.navHint",
     },
   },
   {
@@ -45,10 +46,10 @@ const shellChildren: RouteRecordRaw[] = [
     name: "status",
     component: StatusView,
     meta: {
-      label: "设备",
-      title: "设备",
-      description: "查看设备绑定情况、定时任务和最近的打印记录。",
-      navHint: "设备与任务",
+      labelKey: "navigation.status.label",
+      titleKey: "navigation.status.title",
+      descriptionKey: "navigation.status.description",
+      navHintKey: "navigation.status.navHint",
     },
   },
   {
@@ -56,10 +57,10 @@ const shellChildren: RouteRecordRaw[] = [
     name: "prints",
     component: PrintsView,
     meta: {
-      label: "打印",
-      title: "打印",
-      description: "管理待确认内容、定时任务和打印记录，把打印流程集中在一起。",
-      navHint: "打印流程",
+      labelKey: "navigation.prints.label",
+      titleKey: "navigation.prints.title",
+      descriptionKey: "navigation.prints.description",
+      navHintKey: "navigation.prints.navHint",
     },
   },
   {
@@ -67,10 +68,10 @@ const shellChildren: RouteRecordRaw[] = [
     name: "tutorial",
     component: TutorialView,
     meta: {
-      label: "教程",
-      title: "教程",
-      description: "了解如何绑定咕咕机、配置 AI，并打印第一张纸条。",
-      navHint: "使用指南",
+      labelKey: "navigation.tutorial.label",
+      titleKey: "navigation.tutorial.title",
+      descriptionKey: "navigation.tutorial.description",
+      navHintKey: "navigation.tutorial.navHint",
     },
   },
   {
@@ -78,10 +79,10 @@ const shellChildren: RouteRecordRaw[] = [
     name: "settings",
     component: SettingsView,
     meta: {
-      label: "设置",
-      title: "偏好设置",
-      description: "调整默认设备、助手风格和打印习惯，让每次使用都更顺手。",
-      navHint: "习惯与偏好",
+      labelKey: "navigation.settings.label",
+      titleKey: "navigation.settings.title",
+      descriptionKey: "navigation.settings.description",
+      navHintKey: "navigation.settings.navHint",
       requiresAuth: true,
     },
   },
@@ -92,8 +93,8 @@ export const navigationItems = shellChildren
   .map((route) => ({
     name: route.name as string,
     path: `/${route.path}`,
-    label: route.meta?.label as string,
-    navHint: route.meta?.navHint as string,
+    labelKey: route.meta?.labelKey as string,
+    navHintKey: route.meta?.navHintKey as string,
   }));
 
 export const routes: RouteRecordRaw[] = [
@@ -108,8 +109,8 @@ export const routes: RouteRecordRaw[] = [
     name: "login",
     component: LoginView,
     meta: {
-      title: "欢迎使用 Ink",
-      description: "登录后就可以继续管理设备、整理对话内容，并把纸条发到你想要的咕咕机。",
+      titleKey: "navigation.login.title",
+      descriptionKey: "navigation.login.description",
     },
   },
   {
@@ -157,7 +158,9 @@ export function createAppRouter(
   });
 
   router.afterEach((to) => {
-    const title = to.meta.title ? `Ink · ${to.meta.title}` : "Ink";
+    const title = to.meta.titleKey
+      ? `${translate("app.name")} · ${translate(to.meta.titleKey)}`
+      : translate("app.name");
     document.title = title;
   });
 

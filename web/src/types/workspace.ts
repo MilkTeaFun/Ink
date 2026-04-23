@@ -4,6 +4,8 @@ export type ConversationMessageRole = "user" | "assistant";
 export type ThemeMode = "light" | "dark" | "system";
 export type SourceConnectionStatus = "connected" | "disconnected" | "error";
 export type UserRole = "admin" | "member";
+export type LocaleCode = "zh-CN" | "en-US";
+export type LocalePreference = "system" | LocaleCode;
 
 export interface User {
   id: string;
@@ -75,6 +77,7 @@ export interface Preferences {
   tutorialTabEnabled: boolean;
   theme: ThemeMode;
   defaultDeviceId: string;
+  locale: LocalePreference;
 }
 
 export interface ServiceBinding {

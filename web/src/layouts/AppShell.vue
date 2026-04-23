@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
@@ -10,20 +11,24 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const route = useRoute();
 const router = useRouter();
 const workspaceStore = useWorkspaceStore();
-const postLoginTutorialSteps = [
-  {
-    title: "双击开机键，先打印状态纸条",
-    detail: "只看 Device ID 那一行，别把 WiFi Name 或 MAC Address 填进设备编号。",
-  },
-  {
-    title: "回到 Ink，把 Device ID 完整填进添加设备",
-    detail: "设备名称和备注按习惯填写，真正决定能否绑定成功的是那串 Device ID。",
-  },
-  {
-    title: "绑定后设为默认，再去试打一张",
-    detail: "之后你在对话页生成的新内容，就会按当前默认设置直接进入打印队列。",
-  },
-] as const;
+const { t } = useI18n();
+const postLoginTutorialSteps = computed(
+  () =>
+    [
+      {
+        title: t("shell.postLoginTutorial.steps.powerOn.title"),
+        detail: t("shell.postLoginTutorial.steps.powerOn.detail"),
+      },
+      {
+        title: t("shell.postLoginTutorial.steps.bind.title"),
+        detail: t("shell.postLoginTutorial.steps.bind.detail"),
+      },
+      {
+        title: t("shell.postLoginTutorial.steps.default.title"),
+        detail: t("shell.postLoginTutorial.steps.default.detail"),
+      },
+    ] as const,
+);
 
 const pendingBadge = computed(() =>
   workspaceStore.pendingConfirmationCount > 0 ? workspaceStore.pendingConfirmationCount : "",
@@ -37,7 +42,13 @@ const showAnonymousDemoBanner = computed(
   () => !workspaceStore.isAuthenticated && anonymousDemoRouteNames.has(String(route.name ?? "")),
 );
 const visibleNavigationItems = computed(() =>
-  navigationItems.filter((item) => item.name !== "tutorial" || workspaceStore.tutorialTabEnabled),
+  navigationItems
+    .filter((item) => item.name !== "tutorial" || workspaceStore.tutorialTabEnabled)
+    .map((item) => ({
+      ...item,
+      label: t(item.labelKey),
+      navHint: t(item.navHintKey),
+    })),
 );
 
 function closePostLoginTutorial() {
@@ -59,8 +70,8 @@ async function handleLogout() {
   <div class="flex min-h-[100dvh] flex-col bg-white text-stone-900">
     <AppDialog
       :open="workspaceStore.postLoginTutorialOpen"
-      title="登录成功后先绑定设备"
-      description="绑定教程现在统一放在这里。先按下面三步完成咕咕机绑定，之后你在对话页生成的内容就能直接发往默认设备。"
+      :title="t('shell.postLoginTutorial.title')"
+      :description="t('shell.postLoginTutorial.description')"
       @close="closePostLoginTutorial"
     >
       <div class="space-y-4">
@@ -70,7 +81,7 @@ async function handleLogout() {
           class="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3"
         >
           <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-            步骤 {{ index + 1 }}
+            {{ t("shell.postLoginTutorial.stepLabel", { index: index + 1 }) }}
           </p>
           <p class="mt-1 text-sm font-medium text-stone-900">{{ step.title }}</p>
           <p class="mt-1 text-sm leading-6 text-stone-600">{{ step.detail }}</p>
@@ -82,14 +93,14 @@ async function handleLogout() {
             class="ui-btn-secondary px-4 py-2 text-sm"
             @click="closePostLoginTutorial"
           >
-            稍后再看
+            {{ t("shell.postLoginTutorial.actions.later") }}
           </button>
           <button
             type="button"
             class="ui-btn-primary px-4 py-2 text-sm"
             @click="handlePostLoginTutorialNavigate('/tutorial')"
           >
-            去看教程
+            {{ t("shell.postLoginTutorial.actions.viewTutorial") }}
           </button>
         </div>
       </div>
@@ -114,7 +125,13 @@ async function handleLogout() {
           </div>
           <div class="hidden sm:block">
             <p class="text-xs text-stone-500">
-              {{ route.meta.navHint ?? route.meta.title ?? "纸条工作区" }}
+              {{
+                route.meta.navHintKey
+                  ? t(route.meta.navHintKey)
+                  : route.meta.titleKey
+                    ? t(route.meta.titleKey)
+                    : t("common.labels.workspace")
+              }}
             </p>
           </div>
         </div>
@@ -125,14 +142,14 @@ async function handleLogout() {
           class="text-sm font-medium text-stone-600 hover:text-stone-900"
           @click="handleLogout"
         >
-          退出
+          {{ t("common.actions.logout") }}
         </button>
         <RouterLink
           v-else
           :to="loginTarget"
           class="text-sm font-medium text-stone-600 hover:text-stone-900"
         >
-          登录
+          {{ t("common.actions.login") }}
         </RouterLink>
       </div>
 
@@ -182,7 +199,7 @@ async function handleLogout() {
               class="text-sm font-medium text-stone-600 hover:text-stone-900"
               @click="handleLogout"
             >
-              退出
+              {{ t("common.actions.logout") }}
             </button>
           </template>
           <RouterLink
@@ -190,7 +207,7 @@ async function handleLogout() {
             :to="loginTarget"
             class="text-sm font-medium text-stone-600 hover:text-stone-900"
           >
-            登录
+            {{ t("common.actions.login") }}
           </RouterLink>
         </div>
       </div>
@@ -219,12 +236,12 @@ async function handleLogout() {
       <div
         class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
-        <p class="leading-6">当前设备、对话、打印页均为演示内容，具体使用请登录后继续。</p>
+        <p class="leading-6">{{ t("shell.demoBanner.body") }}</p>
         <RouterLink
           :to="loginTarget"
           class="inline-flex items-center justify-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-100"
         >
-          去登录
+          {{ t("shell.demoBanner.action") }}
         </RouterLink>
       </div>
     </div>

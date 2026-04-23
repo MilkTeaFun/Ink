@@ -1,6 +1,14 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
+import {
+  normalizeLocalePreference,
+  resolveLocalePreference,
+  setI18nLocale,
+  translate,
+} from "@/i18n";
+import { getLocalizedErrorMessage } from "@/i18n/errors";
+import { formatScheduleLabelForLocale } from "@/i18n/formatters";
 import type { AIConfigSummary } from "@/services/ai";
 import { fetchAIConfigSummary, generateAIReply, saveAIConfig } from "@/services/ai";
 import {
@@ -48,6 +56,8 @@ import type {
   Conversation,
   ConversationMessage,
   Device,
+  LocaleCode,
+  LocalePreference,
   PersistedWorkspaceState,
   Preferences,
   PrintJob,
@@ -96,8 +106,8 @@ function getNow() {
 function createEmptyConversation(): Conversation {
   return {
     id: createId("conversation"),
-    title: "新对话",
-    preview: "从这里开始整理新的内容",
+    title: translate("store.seed.newConversation.title"),
+    preview: translate("store.seed.newConversation.preview"),
     updatedAt: getNow(),
     draft: "",
     messages: [],
@@ -129,24 +139,34 @@ function createInitialMessages(): ConversationMessage[] {
     {
       id: createId("message"),
       role: "user",
-      text: "帮我整理一张温柔一点的今日提醒，适合打印在小纸条上。",
+      text: translate("store.seed.initialConversation.user"),
       createdAt,
     },
     {
       id: createId("message"),
       role: "assistant",
-      text: "当然可以。你可以写成：今天也别太赶，先把最重要的一件事做好，晚一点记得给自己买杯热饮。",
+      text: translate("store.seed.initialConversation.assistant"),
       createdAt: new Date(Date.now() - 1000 * 60 * 9).toISOString(),
     },
   ];
 }
 
-function mapRemoteScheduleToActiveSchedule(schedule: PrintScheduleView): ActiveSchedule {
+function mapRemoteScheduleToActiveSchedule(
+  schedule: PrintScheduleView,
+  locale: LocaleCode,
+): ActiveSchedule {
   return {
     id: schedule.id,
     title: schedule.title,
     source: schedule.sourceLabel,
-    timeLabel: schedule.timeLabel,
+    timeLabel: formatScheduleLabelForLocale(
+      schedule.frequencyType,
+      schedule.hour,
+      schedule.minute,
+      schedule.weekdays,
+      locale,
+      schedule.timeLabel,
+    ),
     deviceId: schedule.deviceId,
     enabled: schedule.enabled,
     pluginInstallationId: schedule.pluginInstallationId,
@@ -190,50 +210,50 @@ function createSeedState(): PersistedWorkspaceState {
   const conversationList: Conversation[] = [
     {
       id: "conv-today",
-      title: "今日待办",
-      preview: "下班前要记得买牛奶和胶带",
+      title: translate("store.seed.conversations.today.title"),
+      preview: translate("store.seed.conversations.today.preview"),
       updatedAt: new Date(now - 1000 * 60 * 2).toISOString(),
       draft: "",
       messages: primaryMessages,
     },
     {
       id: "conv-birthday",
-      title: "生日祝福",
-      preview: "想写一句温柔一点的话",
+      title: translate("store.seed.conversations.birthday.title"),
+      preview: translate("store.seed.conversations.birthday.preview"),
       updatedAt: new Date(now - 1000 * 60 * 10).toISOString(),
       draft: "",
       messages: [
         {
           id: createId("message"),
           role: "user",
-          text: "想给朋友写一句生日祝福，语气轻一点。",
+          text: translate("store.seed.conversations.birthday.user"),
           createdAt: new Date(now - 1000 * 60 * 12).toISOString(),
         },
         {
           id: createId("message"),
           role: "assistant",
-          text: "生日快乐，愿你这一岁也有被认真照顾、被温柔对待的日子。",
+          text: translate("store.seed.conversations.birthday.assistant"),
           createdAt: new Date(now - 1000 * 60 * 11).toISOString(),
         },
       ],
     },
     {
       id: "conv-shopping",
-      title: "购物清单",
-      preview: "鸡蛋、吐司、番茄、酸奶",
+      title: translate("store.seed.conversations.shopping.title"),
+      preview: translate("store.seed.conversations.shopping.preview"),
       updatedAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
-      draft: "记得补充家里常备的食物。",
+      draft: translate("store.seed.conversations.shopping.draft"),
       messages: [
         {
           id: createId("message"),
           role: "user",
-          text: "帮我整理一个简洁一点的购物清单。",
+          text: translate("store.seed.conversations.shopping.user"),
           createdAt: new Date(now - 1000 * 60 * 60 * 18).toISOString(),
         },
         {
           id: createId("message"),
           role: "assistant",
-          text: "鸡蛋、吐司、番茄、酸奶，先买这四样就够了。",
+          text: translate("store.seed.conversations.shopping.assistant"),
           createdAt: new Date(now - 1000 * 60 * 60 * 17).toISOString(),
         },
       ],
@@ -242,39 +262,39 @@ function createSeedState(): PersistedWorkspaceState {
   const devices: Device[] = [
     {
       id: "device-desk",
-      name: "书桌咕咕机",
+      name: translate("store.seed.devices.desk.name"),
       status: "connected",
-      note: "默认设备",
+      note: translate("store.seed.devices.desk.note"),
     },
     {
       id: "device-bedroom",
-      name: "卧室咕咕机",
+      name: translate("store.seed.devices.bedroom.name"),
       status: "pending",
-      note: "睡前提醒",
+      note: translate("store.seed.devices.bedroom.note"),
     },
   ];
   const schedules: Schedule[] = [
     {
       id: "schedule-morning",
-      title: "早报摘要",
-      source: "晨间订阅",
-      timeLabel: "每天 08:00",
+      title: translate("store.seed.schedules.morning.title"),
+      source: translate("store.seed.schedules.morning.source"),
+      timeLabel: formatScheduleLabelForLocale("daily", 8, 0, []),
       deviceId: "device-desk",
       enabled: true,
     },
     {
       id: "schedule-night",
-      title: "晚安提醒",
-      source: "睡前便签",
-      timeLabel: "每天 22:00",
+      title: translate("store.seed.schedules.night.title"),
+      source: translate("store.seed.schedules.night.source"),
+      timeLabel: formatScheduleLabelForLocale("daily", 22, 0, []),
       deviceId: "device-bedroom",
       enabled: true,
     },
     {
       id: "schedule-weekend",
-      title: "周末清单",
-      source: "家庭计划",
-      timeLabel: "周六 09:30",
+      title: translate("store.seed.schedules.weekend.title"),
+      source: translate("store.seed.schedules.weekend.source"),
+      timeLabel: formatScheduleLabelForLocale("weekly", 9, 30, [6]),
       deviceId: "device-desk",
       enabled: false,
     },
@@ -282,65 +302,65 @@ function createSeedState(): PersistedWorkspaceState {
   const printJobs: PrintJob[] = [
     {
       id: "print-pending-message",
-      title: "晚安留言",
-      source: "对话草稿",
+      title: translate("store.seed.printJobs.pending.title"),
+      source: translate("store.seed.printJobs.pending.source"),
       deviceId: "device-bedroom",
       status: "pending",
       createdAt: new Date(now - 1000 * 60 * 30).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 30).toISOString(),
-      content: "早点休息，今天已经做得很好了。",
+      content: translate("store.seed.printJobs.pending.content"),
     },
     {
       id: "print-queued-report",
-      title: "明日早报",
-      source: "晨间订阅",
+      title: translate("store.seed.printJobs.queued.title"),
+      source: translate("store.seed.printJobs.queued.source"),
       deviceId: "device-desk",
       status: "queued",
       createdAt: new Date(now - 1000 * 60 * 25).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 25).toISOString(),
-      content: "明天上午天气晴，记得带水出门。",
+      content: translate("store.seed.printJobs.queued.content"),
     },
     {
       id: "print-done-todo",
-      title: "今日待办",
-      source: "手动打印",
+      title: translate("store.seed.printJobs.completedTodo.title"),
+      source: translate("store.seed.printJobs.completedTodo.source"),
       deviceId: "device-desk",
       status: "completed",
       createdAt: new Date(now - 1000 * 60 * 70).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 68).toISOString(),
-      content: "先完成最重要的一件事。",
+      content: translate("store.seed.printJobs.completedTodo.content"),
     },
     {
       id: "print-done-shopping",
-      title: "购物清单",
-      source: "手动打印",
+      title: translate("store.seed.printJobs.completedShopping.title"),
+      source: translate("store.seed.printJobs.completedShopping.source"),
       deviceId: "device-desk",
       status: "completed",
       createdAt: new Date(now - 1000 * 60 * 95).toISOString(),
       updatedAt: new Date(now - 1000 * 60 * 93).toISOString(),
-      content: "鸡蛋、吐司、番茄、酸奶。",
+      content: translate("store.seed.printJobs.completedShopping.content"),
     },
   ];
   const sources: SourceConnection[] = [
     {
       id: "source-worth",
-      name: "今天值得看",
-      type: "RSS",
-      note: "每日文章摘要",
+      name: translate("store.seed.sources.worth.name"),
+      type: translate("store.seed.sources.worth.type"),
+      note: translate("store.seed.sources.worth.note"),
       status: "connected",
     },
     {
       id: "source-weather",
-      name: "天气提醒",
-      type: "在线服务",
-      note: "晨间天气简报",
+      name: translate("store.seed.sources.weather.name"),
+      type: translate("store.seed.sources.weather.type"),
+      note: translate("store.seed.sources.weather.note"),
       status: "connected",
     },
     {
       id: "source-calendar",
-      name: "家庭日历",
-      type: "日历",
-      note: "最近同步失败，请重新授权",
+      name: translate("store.seed.sources.calendar.name"),
+      type: translate("store.seed.sources.calendar.type"),
+      note: translate("store.seed.sources.calendar.note"),
       status: "error",
     },
   ];
@@ -350,6 +370,7 @@ function createSeedState(): PersistedWorkspaceState {
     tutorialTabEnabled: true,
     theme: "light",
     defaultDeviceId: "device-desk",
+    locale: "system",
   };
   const serviceBinding: ServiceBinding = {
     providerName: null,
@@ -392,6 +413,7 @@ function normalizeWorkspaceState(state: Partial<WorkspaceState>): WorkspaceState
         state.preferences?.tutorialTabEnabled ?? seed.preferences.tutorialTabEnabled,
       theme: normalizeThemeMode(state.preferences?.theme ?? seed.preferences.theme),
       defaultDeviceId: state.preferences?.defaultDeviceId ?? seed.preferences.defaultDeviceId,
+      locale: normalizeLocalePreference(state.preferences?.locale ?? seed.preferences.locale),
     },
     serviceBinding: {
       providerName: state.serviceBinding?.providerName ?? seed.serviceBinding.providerName,
@@ -505,17 +527,23 @@ function mapPluginToSource(plugin: PluginDetails): SourceConnection {
     plugin.binding?.lastError ||
     plugin.installation.lastError ||
     (plugin.installation.sourceType === "git" && plugin.installation.repoUrl
-      ? `Git 仓库：${plugin.installation.repoUrl}`
+      ? translate("store.labels.pluginGitRepo", { url: plugin.installation.repoUrl })
       : "") ||
     plugin.installation.description ||
-    "可作为定时打印内容来源";
+    translate("store.labels.pluginDefaultNote");
 
   return {
     id: plugin.installation.id,
     name: plugin.installation.displayName,
-    type: `${
-      plugin.installation.runtimeType === "node" ? "Node" : "Python"
-    } ${plugin.installation.sourceType === "git" ? "Git 插件" : "上传插件"}`,
+    type: `${translate(
+      plugin.installation.runtimeType === "node"
+        ? "store.labels.pluginRuntimeNode"
+        : "store.labels.pluginRuntimePython",
+    )} ${translate(
+      plugin.installation.sourceType === "git"
+        ? "store.labels.pluginSourceGit"
+        : "store.labels.pluginSourceUpload",
+    )}`,
     note,
     status:
       plugin.installation.status === "disabled" || !plugin.binding?.enabled
@@ -574,6 +602,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const tutorialTabEnabled = ref(persisted.preferences.tutorialTabEnabled);
   const selectedTheme = ref<ThemeMode>(persisted.preferences.theme);
   const defaultDeviceId = ref(persisted.preferences.defaultDeviceId);
+  const localePreference = ref<LocalePreference>(persisted.preferences.locale);
+  const effectiveLocale = computed(() => resolveLocalePreference(localePreference.value));
 
   const serviceBinding = ref<ServiceBinding>(persisted.serviceBinding);
   const aiConfigSummary = ref<AIConfigSummary>({
@@ -625,11 +655,12 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sortedPrintJobs.value.filter((job) => job.status === "pending" || job.status === "queued"),
   );
   const recentPrintJobs = computed(() => sortedPrintJobs.value.slice(0, 5));
-  const activeSchedules = computed(() =>
-    isAuthenticated.value
-      ? remoteSchedules.value.map(mapRemoteScheduleToActiveSchedule)
-      : schedules.value.map(mapLocalScheduleToActiveSchedule),
-  );
+  const activeSchedules = computed(() => {
+    const locale = effectiveLocale.value;
+    return isAuthenticated.value
+      ? remoteSchedules.value.map((schedule) => mapRemoteScheduleToActiveSchedule(schedule, locale))
+      : schedules.value.map(mapLocalScheduleToActiveSchedule);
+  });
   const activeSources = computed(() =>
     isAuthenticated.value ? availablePlugins.value.map(mapPluginToSource) : sources.value,
   );
@@ -657,7 +688,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     () => aiConfigSummary.value.model || serviceBinding.value.modelName,
   );
   const todayPrintCount = computed(() => todayCompletedCount.value);
-  const welcomeLabel = computed(() => "整理内容，准备打印");
+  const welcomeLabel = computed(() => {
+    void effectiveLocale.value;
+    return translate("store.summary.welcomeLabel");
+  });
   const isConfigured = computed(() => activeDeviceLabel.value !== "");
   const isAuthenticated = computed(() => authUser.value !== null && authSession.value !== null);
   const isAdmin = computed(() => authUser.value?.role === "admin");
@@ -665,20 +699,23 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     () => isAuthenticated.value && printJobs.value.some((job) => job.status === "queued"),
   );
 
-  const summaryCards = computed(() => [
-    {
-      label: "已绑定设备",
-      value: `${devices.value.length} 台`,
-    },
-    {
-      label: "已启用任务",
-      value: `${enabledSchedulesCount.value} 条`,
-    },
-    {
-      label: "今日完成",
-      value: `${todayCompletedCount.value} 条`,
-    },
-  ]);
+  const summaryCards = computed(() => {
+    void effectiveLocale.value;
+    return [
+      {
+        label: translate("store.summary.boundDevices"),
+        value: translate("store.summary.deviceCount", { count: devices.value.length }),
+      },
+      {
+        label: translate("store.summary.enabledSchedules"),
+        value: translate("store.summary.scheduleCount", { count: enabledSchedulesCount.value }),
+      },
+      {
+        label: translate("store.summary.completedToday"),
+        value: translate("store.summary.printCount", { count: todayCompletedCount.value }),
+      },
+    ];
+  });
 
   const workspaceState = computed<WorkspaceState>(() => ({
     devices: devices.value,
@@ -693,6 +730,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       tutorialTabEnabled: tutorialTabEnabled.value,
       theme: selectedTheme.value,
       defaultDeviceId: defaultDeviceId.value,
+      locale: localePreference.value,
     },
     serviceBinding: serviceBinding.value,
   }));
@@ -701,6 +739,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     authUser: loginProtectionEnabled.value || !authSession.value ? null : authUser.value,
     ...workspaceState.value,
   }));
+
+  watch(
+    effectiveLocale,
+    (locale) => {
+      setI18nLocale(locale);
+    },
+    { immediate: true },
+  );
 
   watch(
     persistableState,
@@ -772,6 +818,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     tutorialTabEnabled.value = normalized.preferences.tutorialTabEnabled;
     selectedTheme.value = normalized.preferences.theme;
     defaultDeviceId.value = normalized.preferences.defaultDeviceId;
+    localePreference.value = normalized.preferences.locale;
     serviceBinding.value = normalized.serviceBinding;
     selectedConversationMessageIds.value = [];
     generationError.value = "";
@@ -849,8 +896,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         printJobs.value = latestPrintJobs;
         printerSyncError.value = "";
       } catch (error) {
-        printerSyncError.value =
-          error instanceof Error ? error.message : "同步打印状态失败，请稍后重试。";
+        printerSyncError.value = getErrorMessage(error, "store.errors.syncPrintStatus");
       } finally {
         remotePrintStatusPromise = null;
 
@@ -905,8 +951,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         await saveWorkspaceStateWithApi(currentSession.accessToken, workspaceState.value);
         return true;
       } catch (error) {
-        workspaceSyncError.value =
-          error instanceof Error ? error.message : "同步数据失败，请稍后重试。";
+        workspaceSyncError.value = getErrorMessage(error, "store.errors.syncWorkspace");
         return false;
       } finally {
         workspaceSyncing.value = false;
@@ -946,8 +991,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       workspaceOwnerId.value = currentUser.id;
       return true;
     } catch (error) {
-      workspaceSyncError.value =
-        error instanceof Error ? error.message : "加载账号数据失败，请稍后重试。";
+      workspaceSyncError.value = getErrorMessage(error, "store.errors.loadAccountData");
       return false;
     } finally {
       workspaceHydrating.value = false;
@@ -984,8 +1028,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         adminPlugins.value = [];
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "加载插件、设备与 AI 配置失败，请稍后重试。";
+      const message = getErrorMessage(error, "store.errors.loadIntegrations");
       aiConfigError.value = message;
       printerSyncError.value = message;
       pluginError.value = message;
@@ -1008,6 +1051,18 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         flashMessage.value = "";
       }, 2600);
     }
+  }
+
+  function showFlashKey(
+    key: string,
+    tone: "success" | "error" | "info" = "info",
+    values?: Record<string, unknown>,
+  ) {
+    showFlash(translate(key, values), tone);
+  }
+
+  function getErrorMessage(error: unknown, fallbackKey: string) {
+    return getLocalizedErrorMessage(error, fallbackKey);
   }
 
   function updateConversation(
@@ -1063,7 +1118,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     conversations.value = [conversation, ...conversations.value];
     selectConversation(conversation.id);
-    showFlash("已创建新的对话草稿。");
+    showFlashKey("store.flash.conversationCreated");
   }
 
   function deleteConversation(conversationId: string) {
@@ -1080,7 +1135,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
       conversations.value = [replacement];
       selectConversation(replacement.id);
-      showFlash("对话已删除。", "success");
+      showFlashKey("store.flash.conversationDeleted", "success");
       return true;
     }
 
@@ -1092,7 +1147,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     selectedConversationMessageIds.value = [];
     generationError.value = "";
-    showFlash("对话已删除。", "success");
+    showFlashKey("store.flash.conversationDeleted", "success");
     return true;
   }
 
@@ -1109,7 +1164,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   function saveCurrentDraft() {
     ensureActiveConversation();
 
-    showFlash("草稿已保存。", "success");
+    showFlashKey("store.flash.draftSaved", "success");
   }
 
   async function sendCurrentDraft() {
@@ -1122,7 +1177,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const prompt = conversation.draft.trim();
 
     if (!prompt) {
-      generationError.value = "请先输入要整理的内容。";
+      generationError.value = translate("store.errors.promptRequired");
       return false;
     }
 
@@ -1138,7 +1193,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     updateConversation(conversation.id, (current) => ({
       ...current,
-      title: current.messages.length === 0 ? prompt.slice(0, 8) || "新对话" : current.title,
+      title:
+        current.messages.length === 0
+          ? prompt.slice(0, 8) || translate("store.labels.conversationUntitled")
+          : current.title,
       preview: prompt.slice(0, 22),
       updatedAt: getNow(),
       draft: "",
@@ -1170,11 +1228,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         messages: [...current.messages, assistantMessage],
       }));
       touchConversation(conversation.id);
-      showFlash("新回复已生成。", "success");
+      showFlashKey("store.flash.replyGenerated", "success");
       return true;
     } catch (error) {
-      generationError.value =
-        error instanceof Error ? error.message : "暂时没能生成回复，请稍后重试。";
+      generationError.value = getErrorMessage(error, "store.errors.generateReply");
       showFlash(generationError.value, "error");
       return false;
     } finally {
@@ -1196,7 +1253,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     }
 
     if (!conversation || !latestUserMessage || isGenerating.value) {
-      generationError.value = "当前没有可重新生成的内容。";
+      generationError.value = translate("store.errors.regenerateUnavailable");
       return false;
     }
 
@@ -1237,10 +1294,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         messages: [...current.messages, assistantMessage],
       }));
       touchConversation(conversation.id);
-      showFlash("已经重新生成一版回复。", "success");
+      showFlashKey("store.flash.replyRegenerated", "success");
       return true;
     } catch (error) {
-      generationError.value = error instanceof Error ? error.message : "重新生成失败，请稍后再试。";
+      generationError.value = getErrorMessage(error, "store.errors.regenerateReply");
       showFlash(generationError.value, "error");
       return false;
     } finally {
@@ -1292,7 +1349,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     try {
       if (isAuthenticated.value && authSession.value) {
         if (!defaultDeviceId.value) {
-          showFlash("请先绑定咕咕机并设为默认设备。", "error");
+          showFlashKey("store.errors.defaultDeviceRequired", "error");
           return null;
         }
 
@@ -1304,19 +1361,19 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           submitImmediately: true,
         });
         upsertPrintJob(job);
-        showFlash("内容已直接加入打印队列。", "success");
+        showFlashKey("store.flash.printQueuedDirectly", "success");
         return job;
       }
 
       const job = buildPrintJob(title, content, source);
       printJobs.value = [job, ...printJobs.value];
 
-      showFlash("内容已直接加入打印队列。", "success");
+      showFlashKey("store.flash.printQueuedDirectly", "success");
       await maybeCompleteQueuedJob(job.id);
 
       return job;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "创建打印任务失败，请稍后重试。";
+      const message = getErrorMessage(error, "store.errors.createPrint");
       showFlash(message, "error");
       return null;
     } finally {
@@ -1326,36 +1383,58 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   async function createPrintFromSelectedMessages() {
     if (selectedConversationMessages.value.length === 0) {
-      showFlash("请先选中至少一条消息。", "error");
+      showFlashKey("store.errors.selectMessagesRequired", "error");
       return null;
     }
 
     const content = selectedConversationMessages.value
-      .map((message) => `${message.role === "user" ? "我" : "Ink"}：${message.text}`)
+      .map(
+        (message) =>
+          `${translate(
+            message.role === "user"
+              ? "store.labels.messageAuthorUser"
+              : "store.labels.messageAuthorAssistant",
+          )}：${message.text}`,
+      )
       .join("\n\n");
 
-    return addPrintJob(activeConversation.value?.title ?? "选中问答", content, "对话选中问答");
+    return addPrintJob(
+      activeConversation.value?.title ?? translate("store.labels.selectedMessagesTitle"),
+      content,
+      translate("store.labels.selectedMessagesSource"),
+    );
   }
 
   async function createPrintFromConversation() {
     const conversation = activeConversation.value;
 
     if (!conversation || conversation.messages.length === 0) {
-      showFlash("当前对话还没有内容可打印。", "error");
+      showFlashKey("store.errors.conversationEmpty", "error");
       return null;
     }
 
     const content = conversation.messages
-      .map((message) => `${message.role === "user" ? "我" : "Ink"}：${message.text}`)
+      .map(
+        (message) =>
+          `${translate(
+            message.role === "user"
+              ? "store.labels.messageAuthorUser"
+              : "store.labels.messageAuthorAssistant",
+          )}：${message.text}`,
+      )
       .join("\n\n");
-    return addPrintJob(conversation.title, content, "当前对话");
+    return addPrintJob(
+      conversation.title,
+      content,
+      translate("store.labels.currentConversationSource"),
+    );
   }
 
   async function createManualPrint(options?: { title?: string; content?: string }) {
     return addPrintJob(
-      options?.title?.trim() || "手动新建纸条",
-      options?.content?.trim() || "新的打印内容已创建，你可以稍后继续编辑。",
-      "手动打印",
+      options?.title?.trim() || translate("store.labels.manualPrintTitle"),
+      options?.content?.trim() || translate("store.labels.manualPrintContent"),
+      translate("store.labels.manualPrintSource"),
     );
   }
 
@@ -1370,10 +1449,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         const submitted = await submitPrintJob(authSession.value.accessToken, jobId);
         upsertPrintJob(submitted);
-        showFlash("已加入打印队列。", "success");
+        showFlashKey("store.flash.printQueued", "success");
         return true;
       } catch (error) {
-        showFlash(error instanceof Error ? error.message : "提交打印失败，请稍后重试。", "error");
+        showFlash(getErrorMessage(error, "store.errors.submitPrint"), "error");
         return false;
       }
     }
@@ -1387,7 +1466,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
-    showFlash("已加入打印队列。", "success");
+    showFlashKey("store.flash.printQueued", "success");
     await maybeCompleteQueuedJob(jobId);
     return true;
   }
@@ -1403,10 +1482,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         const cancelled = await cancelPrintJob(authSession.value.accessToken, jobId);
         upsertPrintJob(cancelled);
-        showFlash("已取消打印。", "success");
+        showFlashKey("store.flash.printCancelled", "success");
         return true;
       } catch (error) {
-        showFlash(error instanceof Error ? error.message : "取消打印失败，请稍后重试。", "error");
+        showFlash(getErrorMessage(error, "store.errors.cancelPrint"), "error");
         return false;
       }
     }
@@ -1420,7 +1499,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
-    showFlash("已取消打印。", "success");
+    showFlashKey("store.flash.printCancelled", "success");
     return true;
   }
 
@@ -1431,13 +1510,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           printerBindingId: deviceId,
         });
         upsertPrintJob(updated);
-        showFlash("打印目标设备已更新。", "success");
+        showFlashKey("store.flash.printDeviceUpdated", "success");
         return;
       } catch (error) {
-        showFlash(
-          error instanceof Error ? error.message : "更新打印设备失败，请稍后重试。",
-          "error",
-        );
+        showFlash(getErrorMessage(error, "store.errors.updatePrintDevice"), "error");
         return;
       }
     }
@@ -1451,7 +1527,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : job,
     );
-    showFlash("打印目标设备已更新。", "success");
+    showFlashKey("store.flash.printDeviceUpdated", "success");
   }
 
   async function addDevice(options?: {
@@ -1464,12 +1540,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         const deviceIdentifier = options?.deviceId?.trim() ?? "";
         if (!deviceIdentifier) {
-          showFlash("请填写咕咕机设备编号。", "error");
+          showFlashKey("store.errors.deviceIdRequired", "error");
           return null;
         }
 
         const device = await bindPrinter(authSession.value.accessToken, {
-          name: options?.name?.trim() || `咕咕机 ${devices.value.length + 1}`,
+          name:
+            options?.name?.trim() ||
+            translate("store.labels.deviceName", { count: devices.value.length + 1 }),
           note: options?.note?.trim() || "",
           deviceId: deviceIdentifier,
         });
@@ -1477,10 +1555,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         if (options?.setAsDefault || !defaultDeviceId.value) {
           defaultDeviceId.value = device.id;
         }
-        showFlash("设备已绑定。", "success");
+        showFlashKey("store.flash.deviceBound", "success");
         return device;
       } catch (error) {
-        showFlash(error instanceof Error ? error.message : "绑定设备失败，请稍后重试。", "error");
+        showFlash(getErrorMessage(error, "store.errors.bindDevice"), "error");
         return null;
       }
     }
@@ -1488,16 +1566,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const nextIndex = devices.value.length + 1;
     const device: Device = {
       id: createId("device"),
-      name: options?.name?.trim() || `咕咕机 ${nextIndex}`,
+      name: options?.name?.trim() || translate("store.labels.deviceName", { count: nextIndex }),
       status: "pending",
-      note: options?.note?.trim() || "等待绑定",
+      note: options?.note?.trim() || translate("store.labels.devicePendingNote"),
     };
 
     devices.value = [...devices.value, device];
     if (options?.setAsDefault) {
       defaultDeviceId.value = device.id;
     }
-    showFlash("已添加新设备。", "success");
+    showFlashKey("store.flash.deviceAdded", "success");
     return device;
   }
 
@@ -1512,7 +1590,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         await deletePrinter(authSession.value.accessToken, deviceId);
       } catch (error) {
-        showFlash(error instanceof Error ? error.message : "删除设备失败，请稍后重试。", "error");
+        showFlash(getErrorMessage(error, "store.errors.deleteDevice"), "error");
         return false;
       }
 
@@ -1528,7 +1606,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         (schedule) => schedule.deviceId !== deviceId,
       );
       defaultDeviceId.value = fallbackDeviceId;
-      showFlash("设备已删除。", "success");
+      showFlashKey("store.flash.deviceDeleted", "success");
       return true;
     }
 
@@ -1555,7 +1633,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           }
         : schedule,
     );
-    showFlash(target.status === "pending" ? "已移除设备。" : "已删除设备。", "success");
+    showFlashKey(
+      target.status === "pending" ? "store.flash.deviceRemoved" : "store.flash.deviceDeleted",
+      "success",
+    );
     return true;
   }
 
@@ -1588,13 +1669,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       try {
         const updated = await togglePrintSchedule(authSession.value.accessToken, scheduleId);
         upsertRemoteSchedule(updated);
-        showFlash("定时任务状态已更新。", "success");
+        showFlashKey("store.flash.scheduleUpdated", "success");
         return true;
       } catch (error) {
-        showFlash(
-          error instanceof Error ? error.message : "更新定时任务失败，请稍后重试。",
-          "error",
-        );
+        showFlash(getErrorMessage(error, "store.errors.updateSchedule"), "error");
         return false;
       }
     }
@@ -1602,13 +1680,14 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, enabled: !schedule.enabled } : schedule,
     );
-    showFlash("定时任务状态已更新。", "success");
+    showFlashKey("store.flash.scheduleUpdated", "success");
     return true;
   }
 
   async function createSchedule(options?: {
     title?: string;
     source?: string;
+    timeLabel?: string;
     deviceId?: string;
     pluginInstallationId?: string;
     frequencyType?: "daily" | "weekly";
@@ -1622,20 +1701,20 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const targetDevice = devices.value.find((device) => device.id === nextDeviceId);
 
     if (!targetDevice || targetDevice.status === "offline") {
-      showFlash("请先选择可用设备。", "error");
+      showFlashKey("store.errors.scheduleDeviceRequired", "error");
       return null;
     }
 
     if (isAuthenticated.value && authSession.value) {
       const pluginInstallationId = options?.pluginInstallationId?.trim() ?? "";
       if (!pluginInstallationId) {
-        showFlash("请选择插件来源。", "error");
+        showFlashKey("store.errors.pluginSourceRequired", "error");
         return null;
       }
 
       try {
         const schedule = await createPrintSchedule(authSession.value.accessToken, {
-          title: options?.title?.trim() || "新的定时任务",
+          title: options?.title?.trim() || translate("store.labels.scheduleTitle"),
           pluginInstallationId,
           frequencyType: options?.frequencyType || "daily",
           timezone: options?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -1649,28 +1728,25 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           enabled: true,
         });
         upsertRemoteSchedule(schedule);
-        showFlash("已创建新的定时任务。", "success");
+        showFlashKey("store.flash.scheduleCreated", "success");
         return schedule;
       } catch (error) {
-        showFlash(
-          error instanceof Error ? error.message : "创建定时任务失败，请稍后重试。",
-          "error",
-        );
+        showFlash(getErrorMessage(error, "store.errors.createSchedule"), "error");
         return null;
       }
     }
 
     const schedule: Schedule = {
       id: createId("schedule"),
-      title: options?.title?.trim() || "新的定时任务",
-      source: options?.source?.trim() || "手动创建",
-      timeLabel: "每天 19:30",
+      title: options?.title?.trim() || translate("store.labels.scheduleTitle"),
+      source: options?.source?.trim() || translate("store.labels.scheduleManualSource"),
+      timeLabel: options?.timeLabel?.trim() || translate("store.labels.scheduleTimeFallback"),
       deviceId: nextDeviceId,
       enabled: true,
     };
 
     schedules.value = [schedule, ...schedules.value];
-    showFlash("已创建新的定时任务。", "success");
+    showFlashKey("store.flash.scheduleCreated", "success");
     return schedule;
   }
 
@@ -1678,7 +1754,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const targetDevice = devices.value.find((device) => device.id === deviceId);
 
     if (!targetDevice || targetDevice.status === "offline") {
-      showFlash("请先选择可用设备。", "error");
+      showFlashKey("store.errors.scheduleDeviceRequired", "error");
       return;
     }
 
@@ -1704,13 +1780,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
           enabled: current.enabled,
         });
         upsertRemoteSchedule(updated);
-        showFlash("定时任务设备已更新。", "success");
+        showFlashKey("store.flash.scheduleDeviceUpdated", "success");
         return;
       } catch (error) {
-        showFlash(
-          error instanceof Error ? error.message : "更新定时任务失败，请稍后重试。",
-          "error",
-        );
+        showFlash(getErrorMessage(error, "store.errors.updateSchedule"), "error");
         return;
       }
     }
@@ -1718,7 +1791,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     schedules.value = schedules.value.map((schedule) =>
       schedule.id === scheduleId ? { ...schedule, deviceId } : schedule,
     );
-    showFlash("定时任务设备已更新。", "success");
+    showFlashKey("store.flash.scheduleDeviceUpdated", "success");
   }
 
   async function deleteSchedule(scheduleId: string) {
@@ -1728,19 +1801,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         remoteSchedules.value = remoteSchedules.value.filter(
           (schedule) => schedule.id !== scheduleId,
         );
-        showFlash("定时任务已删除。", "success");
+        showFlashKey("store.flash.scheduleDeleted", "success");
         return true;
       } catch (error) {
-        showFlash(
-          error instanceof Error ? error.message : "删除定时任务失败，请稍后重试。",
-          "error",
-        );
+        showFlash(getErrorMessage(error, "store.errors.deleteSchedule"), "error");
         return false;
       }
     }
 
     schedules.value = schedules.value.filter((schedule) => schedule.id !== scheduleId);
-    showFlash("定时任务已删除。", "success");
+    showFlashKey("store.flash.scheduleDeleted", "success");
     return true;
   }
 
@@ -1757,11 +1827,17 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         ? {
             ...source,
             status: nextStatus,
-            note: nextStatus === "connected" ? "连接正常" : "尚未连接到此来源",
+            note:
+              nextStatus === "connected"
+                ? translate("store.labels.sourceConnectedNote")
+                : translate("store.labels.sourceDisconnectedNote"),
           }
         : source,
     );
-    showFlash(nextStatus === "connected" ? "插件已连接。" : "插件已解绑。", "success");
+    showFlashKey(
+      nextStatus === "connected" ? "store.flash.sourceConnected" : "store.flash.sourceDisconnected",
+      "success",
+    );
     return true;
   }
 
@@ -1769,7 +1845,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      pluginActionError.value = "登录状态已失效，请重新登录。";
+      pluginActionError.value = translate("store.errors.authRequired");
       return null;
     }
 
@@ -1784,11 +1860,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         const adminResponse = await fetchAdminPlugins(current.accessToken);
         adminPlugins.value = adminResponse.plugins;
       }
-      showFlash("插件已上传并完成安装。", "success");
+      showFlashKey("store.flash.pluginUploaded", "success");
       return uploaded;
     } catch (error) {
-      pluginActionError.value =
-        error instanceof Error ? error.message : "上传插件失败，请稍后重试。";
+      pluginActionError.value = getErrorMessage(error, "store.errors.uploadPlugin");
       showFlash(pluginActionError.value, "error");
       return null;
     } finally {
@@ -1805,7 +1880,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      pluginActionError.value = "登录状态已失效，请重新登录。";
+      pluginActionError.value = translate("store.errors.authRequired");
       return null;
     }
 
@@ -1823,11 +1898,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         const adminResponse = await fetchAdminPlugins(current.accessToken);
         adminPlugins.value = adminResponse.plugins;
       }
-      showFlash("插件仓库已拉取并完成安装。", "success");
+      showFlashKey("store.flash.pluginInstalledFromGit", "success");
       return installed;
     } catch (error) {
-      pluginActionError.value =
-        error instanceof Error ? error.message : "从 Git 安装插件失败，请稍后重试。";
+      pluginActionError.value = getErrorMessage(error, "store.errors.installPluginFromGit");
       showFlash(pluginActionError.value, "error");
       return null;
     } finally {
@@ -1839,7 +1913,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      pluginActionError.value = "登录状态已失效，请重新登录。";
+      pluginActionError.value = translate("store.errors.authRequired");
       return null;
     }
 
@@ -1861,11 +1935,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
             }
           : plugin,
       );
-      showFlash("插件已停用。", "success");
+      showFlashKey("store.flash.pluginDisabled", "success");
       return updated;
     } catch (error) {
-      pluginActionError.value =
-        error instanceof Error ? error.message : "停用插件失败，请稍后重试。";
+      pluginActionError.value = getErrorMessage(error, "store.errors.disablePlugin");
       showFlash(pluginActionError.value, "error");
       return null;
     } finally {
@@ -1883,7 +1956,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      pluginActionError.value = "登录状态已失效，请重新登录。";
+      pluginActionError.value = translate("store.errors.authRequired");
       return null;
     }
 
@@ -1896,14 +1969,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         config,
         secrets,
       });
-      showFlash(
-        result.valid ? "插件连接测试通过。" : "插件连接测试未通过。",
+      showFlashKey(
+        result.valid ? "store.flash.pluginTestPassed" : "store.flash.pluginTestFailed",
         result.valid ? "success" : "error",
       );
       return result;
     } catch (error) {
-      pluginActionError.value =
-        error instanceof Error ? error.message : "测试插件连接失败，请稍后重试。";
+      pluginActionError.value = getErrorMessage(error, "store.errors.testPlugin");
       showFlash(pluginActionError.value, "error");
       return null;
     } finally {
@@ -1920,7 +1992,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      pluginActionError.value = "登录状态已失效，请重新登录。";
+      pluginActionError.value = translate("store.errors.authRequired");
       return null;
     }
 
@@ -1935,11 +2007,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         secrets,
       });
       upsertPlugin(updated);
-      showFlash(enabled ? "插件配置已保存并启用。" : "插件配置已保存。", "success");
+      showFlashKey(
+        enabled ? "store.flash.pluginConfigEnabled" : "store.flash.pluginConfigSaved",
+        "success",
+      );
       return updated;
     } catch (error) {
-      pluginActionError.value =
-        error instanceof Error ? error.message : "保存插件配置失败，请稍后重试。";
+      pluginActionError.value = getErrorMessage(error, "store.errors.savePluginConfiguration");
       showFlash(pluginActionError.value, "error");
       return null;
     } finally {
@@ -1952,34 +2026,41 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const targetDevice = devices.value.find((device) => device.id === deviceId);
 
     if (!targetDevice || targetDevice.status === "offline") {
-      showFlash("已解绑设备不能设为默认。", "error");
+      showFlashKey("store.errors.defaultDeviceOffline", "error");
       return;
     }
 
     defaultDeviceId.value = deviceId;
-    showFlash("默认设备已更新。", "success");
+    showFlashKey("store.flash.defaultDeviceUpdated", "success");
   }
 
   function setTheme(theme: ThemeMode) {
     selectedTheme.value = theme;
-    showFlash("主题设置已更新。");
+    showFlashKey("store.flash.themeUpdated");
+  }
+
+  function setLocale(nextLocale: LocalePreference) {
+    localePreference.value = normalizeLocalePreference(nextLocale);
+    showFlash(translate("store.flash.localeUpdated"));
   }
 
   function setSendConfirmation(enabled: boolean) {
     sendConfirmationEnabled.value = false;
     if (enabled) {
-      showFlash("新内容会直接进入打印队列。");
+      showFlashKey("store.flash.sendConfirmationEnabled");
     }
   }
 
   function setTutorialTabEnabled(enabled: boolean) {
     tutorialTabEnabled.value = enabled;
-    showFlash(enabled ? "教程标签页已显示。" : "教程标签页已隐藏。");
+    showFlashKey(enabled ? "store.flash.tutorialTabShown" : "store.flash.tutorialTabHidden");
   }
 
   function setLoginProtection(enabled: boolean) {
     loginProtectionEnabled.value = enabled;
-    showFlash(enabled ? "关闭浏览器后会要求重新登录。" : "关闭浏览器后将保留登录状态。");
+    showFlashKey(
+      enabled ? "store.flash.loginProtectionEnabled" : "store.flash.loginProtectionDisabled",
+    );
   }
 
   async function saveAIServiceConfig(config: {
@@ -1992,7 +2073,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      aiConfigError.value = "登录状态已失效，请重新登录。";
+      aiConfigError.value = translate("store.errors.authRequired");
       return false;
     }
 
@@ -2002,11 +2083,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     try {
       const summary = await saveAIConfig(current.accessToken, config);
       applyAIConfig(summary);
-      showFlash("AI 服务配置已保存。", "success");
+      showFlashKey("store.flash.aiConfigSaved", "success");
       return true;
     } catch (error) {
-      aiConfigError.value =
-        error instanceof Error ? error.message : "保存 AI 配置失败，请稍后重试。";
+      aiConfigError.value = getErrorMessage(error, "store.errors.saveAIConfig");
       showFlash(aiConfigError.value, "error");
       return false;
     } finally {
@@ -2096,7 +2176,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       const loaded = await loadRemoteWorkspace();
       if (!loaded) {
         clearAuthState();
-        authError.value = workspaceSyncError.value || "加载账号数据失败，请重新登录。";
+        authError.value =
+          workspaceSyncError.value || translate("store.errors.loadAccountDataRelogin");
         restoreAnonymousWorkspace();
         return false;
       }
@@ -2106,7 +2187,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     } catch (error) {
       clearAuthState();
       restoreAnonymousWorkspace();
-      authError.value = error instanceof Error ? error.message : "登录状态已失效，请重新登录。";
+      authError.value = getErrorMessage(error, "store.errors.authRequired");
       return false;
     } finally {
       authBootstrapping.value = false;
@@ -2123,7 +2204,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       const loaded = await loadRemoteWorkspace();
 
       if (!loaded) {
-        const workspaceError = workspaceSyncError.value || "加载账号数据失败，请稍后重试。";
+        const workspaceError =
+          workspaceSyncError.value || translate("store.errors.loadAccountData");
         clearAuthState();
         restoreAnonymousWorkspace();
         authError.value = workspaceError;
@@ -2131,11 +2213,11 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         return false;
       }
 
-      showFlash("登录成功。", "success");
+      showFlashKey("store.flash.loginSuccess", "success");
       postLoginTutorialOpen.value = devices.value.length === 0;
       return true;
     } catch (error) {
-      authError.value = error instanceof Error ? error.message : "登录失败，请稍后重试。";
+      authError.value = getErrorMessage(error, "store.errors.login");
       postLoginTutorialOpen.value = false;
       showFlash(authError.value, "error");
       return false;
@@ -2148,7 +2230,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      authError.value = "登录状态已失效，请重新登录。";
+      authError.value = translate("store.errors.authRequired");
       return false;
     }
 
@@ -2163,10 +2245,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
       });
       clearAuthState();
       restoreAnonymousWorkspace();
-      showFlash("密码已更新，请重新登录。", "success");
+      showFlashKey("store.flash.passwordUpdated", "success");
       return true;
     } catch (error) {
-      authError.value = error instanceof Error ? error.message : "修改密码失败，请稍后重试。";
+      authError.value = getErrorMessage(error, "store.errors.changePassword");
       showFlash(authError.value, "error");
       return false;
     } finally {
@@ -2179,13 +2261,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const normalizedContent = content.trim();
 
     if (!current) {
-      feedbackError.value = "请先登录后再反馈。";
+      feedbackError.value = translate("store.errors.feedbackLoginRequired");
       showFlash(feedbackError.value, "error");
       return false;
     }
 
     if (!normalizedContent) {
-      feedbackError.value = "请先输入反馈内容。";
+      feedbackError.value = translate("feedback.errors.required");
       return false;
     }
 
@@ -2194,10 +2276,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
     try {
       await submitFeedbackToAdmin(current.accessToken, normalizedContent);
-      showFlash("反馈已发送，作者会直接收到纸条。", "success");
+      showFlashKey("store.flash.feedbackSubmitted", "success");
       return true;
     } catch (error) {
-      feedbackError.value = error instanceof Error ? error.message : "发送反馈失败，请稍后重试。";
+      feedbackError.value = getErrorMessage(error, "store.errors.submitFeedback");
       showFlash(feedbackError.value, "error");
       return false;
     } finally {
@@ -2224,7 +2306,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     clearAuthState();
     restoreAnonymousWorkspace();
     postLoginTutorialOpen.value = false;
-    showFlash("已退出当前账号。");
+    showFlashKey("store.flash.loggedOut");
   }
 
   function closePostLoginTutorial() {
@@ -2235,7 +2317,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     const current = authSession.value;
 
     if (!current) {
-      accountCreationError.value = "登录状态已失效，请重新登录。";
+      accountCreationError.value = translate("store.errors.authRequired");
       return false;
     }
 
@@ -2248,11 +2330,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
         name,
         password,
       });
-      showFlash("新账号已创建。", "success");
+      showFlashKey("store.flash.accountCreated", "success");
       return true;
     } catch (error) {
-      accountCreationError.value =
-        error instanceof Error ? error.message : "创建账号失败，请稍后重试。";
+      accountCreationError.value = getErrorMessage(error, "store.errors.createAccount");
       showFlash(accountCreationError.value, "error");
       return false;
     } finally {
@@ -2261,11 +2342,13 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   }
 
   function formatPrintTime(iso: string) {
+    void effectiveLocale.value;
     return formatRelativeTimestamp(iso);
   }
 
   function getDeviceName(deviceId: string) {
-    return deviceMap.value[deviceId]?.name ?? "未设置设备";
+    void effectiveLocale.value;
+    return deviceMap.value[deviceId]?.name ?? translate("common.labels.notSet");
   }
 
   function toggleConversationMessageSelection(messageId: string) {
@@ -2315,6 +2398,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sendConfirmationEnabled,
     tutorialTabEnabled,
     selectedTheme,
+    localePreference,
+    effectiveLocale,
     defaultDeviceId,
     serviceBinding,
     isGenerating,
@@ -2370,6 +2455,8 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     savePluginConfiguration,
     setDefaultDevice,
     setTheme,
+    setLocale,
+    showFlashKey,
     setSendConfirmation,
     setTutorialTabEnabled,
     setLoginProtection,

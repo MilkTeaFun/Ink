@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
@@ -7,19 +8,26 @@ import { useWorkspaceStore } from "@/stores/workspace";
 import { getPrintStatusBadgeClass, getSourceStatusBadgeClass } from "@/utils/workspace";
 
 const workspaceStore = useWorkspaceStore();
+const { t } = useI18n();
 
-const weekdayOptions = [
-  { label: "周日", value: 0 },
-  { label: "周一", value: 1 },
-  { label: "周二", value: 2 },
-  { label: "周三", value: 3 },
-  { label: "周四", value: 4 },
-  { label: "周五", value: 5 },
-  { label: "周六", value: 6 },
-] as const;
+const weekdayOptions = computed(
+  () =>
+    [
+      { label: t("weekdays.short.0"), value: 0 },
+      { label: t("weekdays.short.1"), value: 1 },
+      { label: t("weekdays.short.2"), value: 2 },
+      { label: t("weekdays.short.3"), value: 3 },
+      { label: t("weekdays.short.4"), value: 4 },
+      { label: t("weekdays.short.5"), value: 5 },
+      { label: t("weekdays.short.6"), value: 6 },
+    ] as const,
+);
 
 const defaultSettings = computed(() => [
-  { label: "默认设备", value: workspaceStore.activeDeviceLabel || "暂未设置" },
+  {
+    label: t("prints.defaultSettings.defaultDevice"),
+    value: workspaceStore.activeDeviceLabel || t("prints.defaultSettings.notSet"),
+  },
 ]);
 
 const printDialogOpen = ref(false);
@@ -29,7 +37,7 @@ const printContent = ref("");
 const printError = ref("");
 const scheduleTitle = ref("");
 const scheduleSource = ref("");
-const scheduleTime = ref("每天 19:30");
+const scheduleTime = ref(t("prints.scheduleDialog.placeholders.time"));
 const schedulePluginInstallationId = ref("");
 const scheduleFrequencyType = ref<"daily" | "weekly">("daily");
 const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai");
@@ -41,7 +49,7 @@ const scheduleDeviceId = ref("");
 const scheduleError = ref("");
 
 function getInvalidBatchSizeMessage() {
-  return "每次打印条数必须是正整数。";
+  return t("prints.errors.invalidBatchSize");
 }
 
 const connectedPlugins = computed(() =>
@@ -71,7 +79,7 @@ function handleScheduleDeviceChange(scheduleId: string, event: Event) {
 }
 
 async function handleScheduleDelete(scheduleId: string) {
-  if (typeof window !== "undefined" && !window.confirm("确认删除这条定时任务吗？")) {
+  if (typeof window !== "undefined" && !window.confirm(t("prints.confirmDeleteSchedule"))) {
     return;
   }
 
@@ -81,7 +89,7 @@ async function handleScheduleDelete(scheduleId: string) {
 function toggleWeekday(weekday: number) {
   scheduleWeekdays.value = scheduleWeekdays.value.includes(weekday)
     ? scheduleWeekdays.value.filter((value) => value !== weekday)
-    : weekdayOptions
+    : weekdayOptions.value
         .map((option) => option.value)
         .filter((value) => [...scheduleWeekdays.value, weekday].includes(value));
 }
@@ -101,12 +109,12 @@ async function submitPrintDialog() {
   printError.value = "";
 
   if (!printTitle.value.trim()) {
-    printError.value = "请输入打印标题。";
+    printError.value = t("prints.printDialog.errors.titleRequired");
     return;
   }
 
   if (!printContent.value.trim()) {
-    printError.value = "请输入打印内容。";
+    printError.value = t("prints.printDialog.errors.contentRequired");
     return;
   }
 
@@ -117,7 +125,9 @@ async function submitPrintDialog() {
 
   if (!created) {
     printError.value =
-      workspaceStore.flashTone === "error" ? workspaceStore.flashMessage : "创建打印失败。";
+      workspaceStore.flashTone === "error"
+        ? workspaceStore.flashMessage
+        : t("prints.printDialog.errors.createFailed");
     return;
   }
 
@@ -128,7 +138,7 @@ function openScheduleDialog() {
   scheduleDialogOpen.value = true;
   scheduleTitle.value = "";
   scheduleSource.value = "";
-  scheduleTime.value = "每天 19:30";
+  scheduleTime.value = t("prints.scheduleDialog.placeholders.time");
   schedulePluginInstallationId.value = connectedPlugins.value[0]?.installation.id ?? "";
   scheduleFrequencyType.value = "daily";
   scheduleTimezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
@@ -148,23 +158,23 @@ async function submitScheduleDialog() {
   scheduleError.value = "";
 
   if (!scheduleTitle.value.trim()) {
-    scheduleError.value = "请输入任务名称。";
+    scheduleError.value = t("prints.scheduleDialog.errors.titleRequired");
     return;
   }
 
   if (!(scheduleDeviceId.value || workspaceStore.defaultDeviceId)) {
-    scheduleError.value = "请先绑定设备，再创建定时任务。";
+    scheduleError.value = t("prints.scheduleDialog.errors.deviceRequired");
     return;
   }
 
   if (workspaceStore.isAuthenticated) {
     if (!schedulePluginInstallationId.value) {
-      scheduleError.value = "请先选择一个已启用的插件来源。";
+      scheduleError.value = t("prints.scheduleDialog.errors.pluginRequired");
       return;
     }
 
     if (scheduleFrequencyType.value === "weekly" && scheduleWeekdays.value.length === 0) {
-      scheduleError.value = "每周任务至少选择一天。";
+      scheduleError.value = t("prints.scheduleDialog.errors.weekdayRequired");
       return;
     }
 
@@ -187,7 +197,9 @@ async function submitScheduleDialog() {
 
     if (!created) {
       scheduleError.value =
-        workspaceStore.flashTone === "error" ? workspaceStore.flashMessage : "创建定时任务失败。";
+        workspaceStore.flashTone === "error"
+          ? workspaceStore.flashMessage
+          : t("prints.scheduleDialog.errors.createFailed");
       return;
     }
 
@@ -196,13 +208,14 @@ async function submitScheduleDialog() {
   }
 
   if (!scheduleTime.value.trim()) {
-    scheduleError.value = "请输入执行时间。";
+    scheduleError.value = t("prints.scheduleDialog.errors.timeRequired");
     return;
   }
 
   await workspaceStore.createSchedule({
     title: scheduleTitle.value,
-    source: scheduleSource.value || "手动创建",
+    source: scheduleSource.value || t("prints.scheduleDialog.manualSourceFallback"),
+    timeLabel: scheduleTime.value,
     deviceId: scheduleDeviceId.value || workspaceStore.defaultDeviceId,
   });
   closeScheduleDialog();
@@ -213,17 +226,19 @@ async function submitScheduleDialog() {
   <section class="mx-auto max-w-5xl space-y-6 pt-4 sm:space-y-8">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h2 class="text-2xl font-semibold tracking-tight text-stone-900">打印</h2>
+        <h2 class="text-2xl font-semibold tracking-tight text-stone-900">
+          {{ t("navigation.prints.label") }}
+        </h2>
       </div>
       <div class="flex flex-wrap gap-2">
         <RouterLink to="/tutorial" class="ui-btn-secondary px-3 py-1.5 text-sm">
-          绑定教程
+          {{ t("prints.actions.bindingTutorial") }}
         </RouterLink>
         <button class="ui-btn-primary px-3 py-1.5 text-sm" @click="openPrintDialog">
-          新建打印
+          {{ t("prints.actions.newPrint") }}
         </button>
         <button class="ui-btn-secondary px-3 py-1.5 text-sm" @click="openScheduleDialog">
-          新建定时任务
+          {{ t("prints.actions.newSchedule") }}
         </button>
       </div>
     </div>
@@ -234,25 +249,29 @@ async function submitScheduleDialog() {
           v-if="workspaceStore.printerSyncError"
           class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4"
         >
-          <p class="text-sm font-medium text-amber-900">设备状态同步异常</p>
+          <p class="text-sm font-medium text-amber-900">{{ t("prints.syncErrorTitle") }}</p>
           <p class="mt-1 text-sm text-amber-700">{{ workspaceStore.printerSyncError }}</p>
         </section>
 
         <section>
           <div class="mb-4">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">待处理打印</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("prints.pending.title") }}
+            </h3>
           </div>
 
           <div
             v-if="workspaceStore.pendingPrintJobs.length === 0"
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
-            <h4 class="text-base font-semibold text-stone-900">当前没有待处理打印</h4>
+            <h4 class="text-base font-semibold text-stone-900">
+              {{ t("prints.pending.emptyTitle") }}
+            </h4>
             <p class="mt-2 text-sm text-stone-500">
               {{
                 workspaceStore.isAuthenticated
-                  ? "绑定设备后可以先在对话页生成内容，再回到这里确认是否出纸。"
-                  : "当前未登录时显示的是演示数据流，登录后会切到各账号自己的真实打印记录。"
+                  ? t("prints.pending.emptyAuthenticated")
+                  : t("prints.pending.emptyAnonymous")
               }}
             </p>
           </div>
@@ -290,20 +309,22 @@ async function submitScheduleDialog() {
                     class="ui-btn-primary px-3 py-1.5 text-sm whitespace-nowrap"
                     @click="workspaceStore.confirmPrint(item.id)"
                   >
-                    确认打印
+                    {{ t("prints.actions.confirmPrint") }}
                   </button>
                   <button
                     v-if="!workspaceStore.isAuthenticated || item.status === 'pending'"
                     class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
                     @click="workspaceStore.cancelPrint(item.id)"
                   >
-                    取消打印
+                    {{ t("prints.actions.cancelPrint") }}
                   </button>
                 </div>
               </div>
 
               <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                <label class="text-sm font-medium text-stone-700">目标设备</label>
+                <label class="text-sm font-medium text-stone-700">
+                  {{ t("prints.pending.targetDevice") }}
+                </label>
                 <select
                   :value="item.deviceId"
                   :disabled="workspaceStore.isAuthenticated && item.status === 'queued'"
@@ -324,7 +345,7 @@ async function submitScheduleDialog() {
                   v-if="workspaceStore.isAuthenticated && item.status === 'queued'"
                   class="text-sm text-stone-500"
                 >
-                  已提交到咕咕机后不能再取消或改绑设备。
+                  {{ t("prints.pending.queuedHint") }}
                 </p>
               </div>
             </article>
@@ -333,14 +354,18 @@ async function submitScheduleDialog() {
 
         <section>
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">定时任务</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("prints.schedules.title") }}
+            </h3>
           </div>
 
           <div
             v-if="workspaceStore.activeSchedules.length === 0"
             class="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-6 py-10 text-center"
           >
-            <h4 class="text-base font-semibold text-stone-900">还没有定时任务</h4>
+            <h4 class="text-base font-semibold text-stone-900">
+              {{ t("prints.schedules.emptyTitle") }}
+            </h4>
           </div>
 
           <div v-else class="ui-list-card">
@@ -353,17 +378,29 @@ async function submitScheduleDialog() {
                 <div class="min-w-0">
                   <p class="text-sm font-medium text-stone-900">{{ task.title }}</p>
                   <p class="mt-1 text-sm text-stone-500">
-                    {{ task.source }} · {{ task.timeLabel }} · 发往
-                    {{ workspaceStore.getDeviceName(task.deviceId) }}
+                    {{ task.source }} · {{ task.timeLabel }} ·
+                    {{
+                      t("prints.schedules.sendToDevice", {
+                        device: workspaceStore.getDeviceName(task.deviceId),
+                      })
+                    }}
                   </p>
                   <p v-if="task.nextRunAt" class="mt-1 text-xs text-stone-500">
-                    下次执行 {{ workspaceStore.formatPrintTime(task.nextRunAt) }}
+                    {{
+                      t("prints.schedules.nextRunAt", {
+                        time: workspaceStore.formatPrintTime(task.nextRunAt),
+                      })
+                    }}
                   </p>
                   <p
                     v-if="workspaceStore.isAuthenticated && task.printPolicy?.batchSize"
                     class="mt-1 text-xs text-stone-500"
                   >
-                    每次打印 {{ task.printPolicy.batchSize }} 条，按已抓取内容的最早顺序递送。
+                    {{
+                      t("prints.schedules.batchSizeHint", {
+                        count: task.printPolicy.batchSize,
+                      })
+                    }}
                   </p>
                   <p
                     v-if="task.lastError"
@@ -379,13 +416,20 @@ async function submitScheduleDialog() {
                     class="ui-btn-secondary px-3 py-1.5 text-sm whitespace-nowrap"
                     @click="handleScheduleDelete(task.id)"
                   >
-                    删除
+                    {{ t("common.actions.delete") }}
                   </button>
                   <button
                     type="button"
                     class="ui-toggle"
                     :class="{ 'is-on': task.enabled }"
-                    :aria-label="`${task.enabled ? '关闭' : '开启'}${task.title}`"
+                    :aria-label="
+                      t(
+                        task.enabled
+                          ? 'prints.schedules.disableTask'
+                          : 'prints.schedules.enableTask',
+                        { title: task.title },
+                      )
+                    "
                     :aria-pressed="task.enabled"
                     @click="workspaceStore.toggleSchedule(task.id)"
                   >
@@ -395,7 +439,9 @@ async function submitScheduleDialog() {
               </div>
 
               <div class="flex flex-col gap-2 md:flex-row md:items-center">
-                <label class="text-sm font-medium text-stone-700">发送设备</label>
+                <label class="text-sm font-medium text-stone-700">
+                  {{ t("prints.schedules.deviceLabel") }}
+                </label>
                 <select
                   :value="task.deviceId"
                   class="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 md:w-auto"
@@ -418,7 +464,9 @@ async function submitScheduleDialog() {
 
         <section>
           <div class="mb-4">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">最近打印</h3>
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("prints.recentPrints") }}
+            </h3>
           </div>
 
           <div class="ui-list-card p-4">
@@ -453,10 +501,12 @@ async function submitScheduleDialog() {
         <section>
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 class="text-base leading-6 font-semibold text-stone-900">默认打印设置</h3>
+              <h3 class="text-base leading-6 font-semibold text-stone-900">
+                {{ t("prints.defaultSettings.title") }}
+              </h3>
             </div>
             <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm">
-              调整
+              {{ t("prints.defaultSettings.adjust") }}
             </RouterLink>
           </div>
 
@@ -467,16 +517,18 @@ async function submitScheduleDialog() {
             </div>
           </div>
           <p class="mt-3 text-sm text-stone-500">
-            如果你还没绑定咕咕机，先去教程页拿到设备编号，再回到设备页完成绑定。
+            {{ t("prints.defaultSettings.hint") }}
           </p>
         </section>
 
         <section>
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 class="text-base leading-6 font-semibold text-stone-900">已连接插件</h3>
-            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm"
-              >更多设置</RouterLink
-            >
+            <h3 class="text-base leading-6 font-semibold text-stone-900">
+              {{ t("prints.connectedPlugins") }}
+            </h3>
+            <RouterLink to="/settings" class="ui-btn-secondary px-3 py-1.5 text-sm">{{
+              t("prints.moreSettings")
+            }}</RouterLink>
           </div>
 
           <div class="ui-list-card">
@@ -502,27 +554,31 @@ async function submitScheduleDialog() {
 
     <AppDialog
       :open="printDialogOpen"
-      title="新建打印"
-      description="创建一条新的打印内容。"
+      :title="t('prints.printDialog.title')"
+      :description="t('prints.printDialog.description')"
       @close="closePrintDialog"
     >
       <form class="space-y-4" @submit.prevent="submitPrintDialog">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">打印标题</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("prints.printDialog.fields.title") }}
+          </span>
           <input
             v-model="printTitle"
             type="text"
-            placeholder="例如：晚安留言"
+            :placeholder="t('prints.printDialog.placeholders.title')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">打印内容</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("prints.printDialog.fields.content") }}
+          </span>
           <textarea
             v-model="printContent"
             rows="4"
-            placeholder="输入要打印的内容"
+            :placeholder="t('prints.printDialog.placeholders.content')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
@@ -537,42 +593,48 @@ async function submitScheduleDialog() {
             class="ui-btn-secondary px-4 py-2 text-sm"
             @click="closePrintDialog"
           >
-            取消
+            {{ t("common.actions.cancel") }}
           </button>
-          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">创建打印</button>
+          <button type="submit" class="ui-btn-primary px-4 py-2 text-sm">
+            {{ t("prints.printDialog.submit") }}
+          </button>
         </div>
       </form>
     </AppDialog>
 
     <AppDialog
       :open="scheduleDialogOpen"
-      title="新建定时任务"
+      :title="t('prints.scheduleDialog.title')"
       :description="
         workspaceStore.isAuthenticated
-          ? '选择已连接插件作为来源，并配置执行时间。'
-          : '创建一条自动打印计划。'
+          ? t('prints.scheduleDialog.description.authenticated')
+          : t('prints.scheduleDialog.description.anonymous')
       "
       @close="closeScheduleDialog"
     >
       <form class="space-y-4" @submit.prevent="submitScheduleDialog">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">任务名称</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("prints.scheduleDialog.fields.title") }}
+          </span>
           <input
             v-model="scheduleTitle"
             type="text"
-            placeholder="例如：晨间提醒"
+            :placeholder="t('prints.scheduleDialog.placeholders.title')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
 
         <template v-if="workspaceStore.isAuthenticated">
           <label class="block">
-            <span class="mb-2 block text-sm font-medium text-stone-900">来源插件</span>
+            <span class="mb-2 block text-sm font-medium text-stone-900">
+              {{ t("prints.scheduleDialog.fields.plugin") }}
+            </span>
             <select
               v-model="schedulePluginInstallationId"
               class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             >
-              <option value="">请选择一个插件</option>
+              <option value="">{{ t("prints.scheduleDialog.placeholders.plugin") }}</option>
               <option
                 v-for="plugin in connectedPlugins"
                 :key="plugin.installation.id"
@@ -587,27 +649,31 @@ async function submitScheduleDialog() {
             v-if="connectedPlugins.length === 0"
             class="rounded-lg bg-stone-50 px-4 py-3 text-sm text-stone-500"
           >
-            当前没有可用插件，请先去设置页完成插件安装和工作区配置。
+            {{ t("prints.scheduleDialog.emptyPlugins") }}
           </div>
 
           <div class="grid gap-4 sm:grid-cols-2">
             <label class="block">
-              <span class="mb-2 block text-sm font-medium text-stone-900">频率</span>
+              <span class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("prints.scheduleDialog.fields.frequency") }}
+              </span>
               <select
                 v-model="scheduleFrequencyType"
                 class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
               >
-                <option value="daily">每天</option>
-                <option value="weekly">每周</option>
+                <option value="daily">{{ t("prints.scheduleDialog.frequency.daily") }}</option>
+                <option value="weekly">{{ t("prints.scheduleDialog.frequency.weekly") }}</option>
               </select>
             </label>
 
             <label class="block">
-              <span class="mb-2 block text-sm font-medium text-stone-900">时区</span>
+              <span class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("prints.scheduleDialog.fields.timezone") }}
+              </span>
               <input
                 v-model="scheduleTimezone"
                 type="text"
-                placeholder="例如：Asia/Shanghai"
+                :placeholder="t('prints.scheduleDialog.placeholders.timezone')"
                 class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
               />
             </label>
@@ -615,7 +681,9 @@ async function submitScheduleDialog() {
 
           <div class="grid gap-4 sm:grid-cols-2">
             <label class="block">
-              <span class="mb-2 block text-sm font-medium text-stone-900">小时</span>
+              <span class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("prints.scheduleDialog.fields.hour") }}
+              </span>
               <input
                 v-model.number="scheduleHour"
                 type="number"
@@ -626,7 +694,9 @@ async function submitScheduleDialog() {
             </label>
 
             <label class="block">
-              <span class="mb-2 block text-sm font-medium text-stone-900">分钟</span>
+              <span class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("prints.scheduleDialog.fields.minute") }}
+              </span>
               <input
                 v-model.number="scheduleMinute"
                 type="number"
@@ -638,7 +708,9 @@ async function submitScheduleDialog() {
           </div>
 
           <div v-if="scheduleFrequencyType === 'weekly'" class="block">
-            <span class="mb-2 block text-sm font-medium text-stone-900">执行日期</span>
+            <span class="mb-2 block text-sm font-medium text-stone-900">
+              {{ t("prints.scheduleDialog.fields.weekdays") }}
+            </span>
             <div class="flex flex-wrap gap-2">
               <button
                 v-for="weekday in weekdayOptions"
@@ -671,39 +743,55 @@ async function submitScheduleDialog() {
                 </p>
               </div>
               <span class="text-xs text-stone-500">
-                {{ selectedSchedulePlugin.installation.runtimeType === "node" ? "Node" : "Python" }}
+                {{
+                  selectedSchedulePlugin.installation.runtimeType === "node"
+                    ? t("store.labels.pluginRuntimeNode")
+                    : t("store.labels.pluginRuntimePython")
+                }}
               </span>
             </div>
 
             <div class="mt-4 grid gap-4 md:grid-cols-2">
               <div class="rounded-lg border border-dashed border-stone-200 bg-white px-4 py-3">
                 <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                  抓取频率
+                  {{ t("prints.scheduleDialog.pluginDetails.fetchFrequency") }}
                 </p>
                 <p class="mt-1 text-sm text-stone-900">
-                  每 {{ selectedSchedulePlugin.manifest.fetchPolicy.minutes }} 分钟抓取一次
+                  {{
+                    t("prints.scheduleDialog.pluginDetails.fetchEveryMinutes", {
+                      minutes: selectedSchedulePlugin.manifest.fetchPolicy.minutes,
+                    })
+                  }}
                 </p>
                 <p class="mt-1 text-xs text-stone-500">
-                  抓取由插件 binding 独立执行，定时任务只消费已抓取内容。
+                  {{ t("prints.scheduleDialog.pluginDetails.fetchHint") }}
                 </p>
               </div>
 
               <div class="rounded-lg border border-dashed border-stone-200 bg-white px-4 py-3">
                 <p class="text-xs font-medium tracking-[0.12em] text-stone-500 uppercase">
-                  抓取状态
+                  {{ t("prints.scheduleDialog.pluginDetails.fetchStatus") }}
                 </p>
                 <p class="mt-1 text-sm text-stone-900">
                   {{
                     selectedSchedulePlugin.binding?.lastFetchAt
-                      ? `最近抓取 ${workspaceStore.formatPrintTime(selectedSchedulePlugin.binding.lastFetchAt)}`
-                      : "尚未抓取过"
+                      ? t("prints.scheduleDialog.pluginDetails.lastFetchedAt", {
+                          time: workspaceStore.formatPrintTime(
+                            selectedSchedulePlugin.binding.lastFetchAt,
+                          ),
+                        })
+                      : t("prints.scheduleDialog.pluginDetails.neverFetched")
                   }}
                 </p>
                 <p class="mt-1 text-xs text-stone-500">
                   {{
                     selectedSchedulePlugin.binding?.nextFetchAt
-                      ? `下次抓取 ${workspaceStore.formatPrintTime(selectedSchedulePlugin.binding.nextFetchAt)}`
-                      : "当前未安排自动抓取"
+                      ? t("prints.scheduleDialog.pluginDetails.nextFetchAt", {
+                          time: workspaceStore.formatPrintTime(
+                            selectedSchedulePlugin.binding.nextFetchAt,
+                          ),
+                        })
+                      : t("prints.scheduleDialog.pluginDetails.noNextFetch")
                   }}
                 </p>
                 <p
@@ -716,7 +804,9 @@ async function submitScheduleDialog() {
             </div>
 
             <label class="mt-4 block">
-              <span class="mb-2 block text-sm font-medium text-stone-900">每次打印条数</span>
+              <span class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("prints.scheduleDialog.fields.batchSize") }}
+              </span>
               <input
                 v-model.number="scheduleBatchSize"
                 type="number"
@@ -724,7 +814,7 @@ async function submitScheduleDialog() {
                 class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
               />
               <span class="mt-2 block text-xs text-stone-500">
-                每次 schedule tick 会按最早抓取、尚未由此任务递送的内容，最多打印这几个条目。
+                {{ t("prints.scheduleDialog.pluginDetails.batchSizeHint") }}
               </span>
             </label>
           </div>
@@ -733,34 +823,40 @@ async function submitScheduleDialog() {
             v-else
             class="rounded-xl border border-dashed border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-500"
           >
-            请选择一个已连接插件，然后设置这个任务每次打印多少条已抓取内容。
+            {{ t("prints.scheduleDialog.emptyPluginSelection") }}
           </div>
         </template>
 
         <template v-else>
           <label class="block">
-            <span class="mb-2 block text-sm font-medium text-stone-900">内容来源</span>
+            <span class="mb-2 block text-sm font-medium text-stone-900">
+              {{ t("prints.scheduleDialog.fields.source") }}
+            </span>
             <input
               v-model="scheduleSource"
               type="text"
-              placeholder="例如：手动创建"
+              :placeholder="t('prints.scheduleDialog.placeholders.source')"
               class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             />
           </label>
 
           <label class="block">
-            <span class="mb-2 block text-sm font-medium text-stone-900">执行时间</span>
+            <span class="mb-2 block text-sm font-medium text-stone-900">
+              {{ t("prints.scheduleDialog.fields.time") }}
+            </span>
             <input
               v-model="scheduleTime"
               type="text"
-              placeholder="例如：每天 19:30"
+              :placeholder="t('prints.scheduleDialog.placeholders.time')"
               class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
             />
           </label>
         </template>
 
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">发送设备</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("prints.scheduleDialog.fields.device") }}
+          </span>
           <select
             v-model="scheduleDeviceId"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
@@ -787,14 +883,14 @@ async function submitScheduleDialog() {
             class="ui-btn-secondary px-4 py-2 text-sm"
             @click="closeScheduleDialog"
           >
-            取消
+            {{ t("common.actions.cancel") }}
           </button>
           <button
             type="submit"
             class="ui-btn-primary px-4 py-2 text-sm"
             :disabled="workspaceStore.isAuthenticated && connectedPlugins.length === 0"
           >
-            创建任务
+            {{ t("prints.scheduleDialog.submit") }}
           </button>
         </div>
       </form>

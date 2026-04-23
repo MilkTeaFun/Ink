@@ -117,6 +117,7 @@ describe("router configuration", () => {
               tutorialTabEnabled: true,
               theme: "light",
               defaultDeviceId: "",
+              locale: "system",
             },
             serviceBinding: {
               providerName: null,

@@ -1,52 +1,60 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { RouterLink } from "vue-router";
 
 import AppDialog from "@/components/AppDialog.vue";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 const workspaceStore = useWorkspaceStore();
+const { t } = useI18n();
 
-const steps = [
-  {
-    number: "01",
-    title: "在对话页通过聊天整理后打印",
-    body: "想到什么就直接输入，Ink 会把内容整理成更适合打印的小纸条。你可以边聊边改，满意后直接发去打印。",
-    note: "适合提醒、留言、鼓励语和临时清单。",
-  },
-  {
-    number: "02",
-    title: "在打印页直接新建并打印",
-    body: "如果你已经想好内容，可以直接去打印页手动创建纸条，不需要先走对话流程。",
-    note: "适合快速打印一句固定文案或临时通知。",
-  },
-  {
-    number: "03",
-    title: "用定时打印安排固定内容",
-    body: "你可以在打印页设置自动任务，让某些内容按固定时间发送到设备，比如晨间提醒、晚安便签或周期性通知。",
-    note: "适合重复出现、想稳定出纸的内容。",
-  },
-] as const;
+const steps = computed(
+  () =>
+    [
+      {
+        number: "01",
+        title: t("tutorial.steps.chat.title"),
+        body: t("tutorial.steps.chat.body"),
+        note: t("tutorial.steps.chat.note"),
+      },
+      {
+        number: "02",
+        title: t("tutorial.steps.print.title"),
+        body: t("tutorial.steps.print.body"),
+        note: t("tutorial.steps.print.note"),
+      },
+      {
+        number: "03",
+        title: t("tutorial.steps.schedule.title"),
+        body: t("tutorial.steps.schedule.body"),
+        note: t("tutorial.steps.schedule.note"),
+      },
+    ] as const,
+);
 
-const faqs = [
-  {
-    question: "我应该先用对话页还是打印页？",
-    answer:
-      "如果你还在想内容、想让 Ink 帮你润色，就先去对话页；如果内容已经确定，只想立刻出纸，就直接去打印页。",
-  },
-  {
-    question: "定时打印适合拿来做什么？",
-    answer: "适合每天、每周都要重复发送的内容，比如固定提醒、待办摘要或周期性问候。",
-  },
-  {
-    question: "对话里的内容会不会太长，不适合打印？",
-    answer: "可以直接继续追问，让 Ink 帮你压缩成更短、更适合出纸的小段内容，再发送打印。",
-  },
-  {
-    question: "为什么纸条没有马上打印出来？",
-    answer: "先到打印页确认当前状态；定时内容会在设定时刻执行，手动发送的内容一般会很快开始处理。",
-  },
-] as const;
+const faqs = computed(
+  () =>
+    [
+      {
+        question: t("tutorial.faqs.chatOrPrint.question"),
+        answer: t("tutorial.faqs.chatOrPrint.answer"),
+      },
+      {
+        question: t("tutorial.faqs.scheduleUse.question"),
+        answer: t("tutorial.faqs.scheduleUse.answer"),
+      },
+      {
+        question: t("tutorial.faqs.contentTooLong.question"),
+        answer: t("tutorial.faqs.contentTooLong.answer"),
+      },
+      {
+        question: t("tutorial.faqs.notPrinted.question"),
+        answer: t("tutorial.faqs.notPrinted.answer"),
+      },
+    ] as const,
+);
 
 const feedbackOpen = ref(false);
 const feedbackDraft = ref("");
@@ -67,7 +75,7 @@ async function handleFeedbackSubmit() {
   feedbackFormError.value = "";
 
   if (!feedbackDraft.value.trim()) {
-    feedbackFormError.value = "请先输入反馈内容。";
+    feedbackFormError.value = t("feedback.errors.required");
     return;
   }
 
@@ -86,17 +94,19 @@ async function handleFeedbackSubmit() {
   <section class="mx-auto max-w-6xl space-y-6 pt-4 sm:space-y-8 lg:space-y-10">
     <AppDialog
       :open="feedbackOpen"
-      title="反馈"
-      description="这里适合提交问题、建议或吐槽；提交后会提醒作者。"
+      :title="t('feedback.dialog.title')"
+      :description="t('feedback.dialog.description')"
       @close="closeFeedbackDialog"
     >
       <form class="space-y-4" @submit.prevent="handleFeedbackSubmit">
         <label class="block">
-          <span class="mb-2 block text-sm font-medium text-stone-900">反馈内容</span>
+          <span class="mb-2 block text-sm font-medium text-stone-900">
+            {{ t("feedback.dialog.contentLabel") }}
+          </span>
           <textarea
             v-model="feedbackDraft"
             rows="6"
-            placeholder="反馈（功能 / 建议 / 吐槽）"
+            :placeholder="t('feedback.dialog.placeholder')"
             class="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm leading-7 text-stone-900 placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
           />
         </label>
@@ -111,13 +121,17 @@ async function handleFeedbackSubmit() {
             class="ui-btn-secondary px-4 py-2.5 text-sm"
             @click="closeFeedbackDialog"
           >
-            取消
+            {{ t("common.actions.cancel") }}
           </button>
           <button
             class="ui-btn-primary px-4 py-2.5 text-sm"
             :disabled="workspaceStore.feedbackSubmitting"
           >
-            {{ workspaceStore.feedbackSubmitting ? "发送中..." : "提交反馈" }}
+            {{
+              workspaceStore.feedbackSubmitting
+                ? t("feedback.dialog.submitting")
+                : t("feedback.dialog.submit")
+            }}
           </button>
         </div>
       </form>
@@ -137,13 +151,15 @@ async function handleFeedbackSubmit() {
 
       <div class="relative space-y-6">
         <div class="space-y-4">
-          <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">使用教程</p>
+          <p class="text-sm font-medium tracking-[0.2em] text-stone-500 uppercase">
+            {{ t("tutorial.hero.eyebrow") }}
+          </p>
           <div class="space-y-3">
             <h2
               class="max-w-4xl text-[clamp(2rem,4.8vw,3.5rem)] font-semibold tracking-tight text-stone-900"
             >
-              Ink 里最常用的三种打印方式
-              <span class="block text-stone-600">对话打印、直接打印、定时打印</span>
+              {{ t("tutorial.hero.title") }}
+              <span class="block text-stone-600">{{ t("tutorial.hero.subtitle") }}</span>
             </h2>
           </div>
         </div>
@@ -153,31 +169,43 @@ async function handleFeedbackSubmit() {
             to="/conversations"
             class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
-            <p class="text-sm font-semibold text-stone-900">对话页</p>
-            <p class="mt-2 text-sm leading-6 text-stone-600">边聊边整理内容，再直接发去打印。</p>
+            <p class="text-sm font-semibold text-stone-900">
+              {{ t("tutorial.features.chat.title") }}
+            </p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">
+              {{ t("tutorial.features.chat.body") }}
+            </p>
           </RouterLink>
           <RouterLink
             to="/prints"
             class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
-            <p class="text-sm font-semibold text-stone-900">打印页</p>
-            <p class="mt-2 text-sm leading-6 text-stone-600">手动新建纸条，适合快速直接出纸。</p>
+            <p class="text-sm font-semibold text-stone-900">
+              {{ t("tutorial.features.print.title") }}
+            </p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">
+              {{ t("tutorial.features.print.body") }}
+            </p>
           </RouterLink>
           <RouterLink
             to="/prints"
             class="tutorial-feature-card rounded-2xl border px-4 py-4 shadow-sm backdrop-blur transition-colors"
           >
-            <p class="text-sm font-semibold text-stone-900">定时打印</p>
-            <p class="mt-2 text-sm leading-6 text-stone-600">设置固定时间，按计划自动发送内容。</p>
+            <p class="text-sm font-semibold text-stone-900">
+              {{ t("tutorial.features.schedule.title") }}
+            </p>
+            <p class="mt-2 text-sm leading-6 text-stone-600">
+              {{ t("tutorial.features.schedule.body") }}
+            </p>
           </RouterLink>
         </div>
 
         <div class="flex flex-col gap-3 sm:flex-row">
           <RouterLink to="/conversations" class="ui-btn-primary px-4 py-2.5 text-center text-sm">
-            去对话页
+            {{ t("tutorial.actions.goToConversations") }}
           </RouterLink>
           <RouterLink to="/prints" class="ui-btn-secondary px-4 py-2.5 text-center text-sm">
-            去打印页
+            {{ t("tutorial.actions.goToPrints") }}
           </RouterLink>
         </div>
       </div>
@@ -186,9 +214,11 @@ async function handleFeedbackSubmit() {
     <div class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_0.85fr]">
       <article class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
         <div class="max-w-2xl">
-          <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">操作步骤</p>
+          <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
+            {{ t("tutorial.stepsSection.eyebrow") }}
+          </p>
           <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">
-            三种常用使用方式
+            {{ t("tutorial.stepsSection.title") }}
           </h3>
         </div>
 
@@ -228,19 +258,20 @@ async function handleFeedbackSubmit() {
       <div class="space-y-6">
         <article class="rounded-[1.8rem] border border-stone-200 bg-stone-50 p-6 shadow-sm sm:p-7">
           <p class="text-sm font-medium tracking-[0.18em] text-stone-500 uppercase">
-            作为手机应用使用
+            {{ t("tutorial.mobile.eyebrow") }}
           </p>
           <h3 class="mt-3 text-2xl font-semibold tracking-tight text-stone-900">
-            把 Ink 添加到 iPhone 主屏幕
+            {{ t("tutorial.mobile.title") }}
           </h3>
           <p class="mt-3 text-sm leading-7 text-stone-600">
-            用 Safari 打开 Ink 后，点击底部分享按钮，选择“添加到主屏幕”。之后你可以像普通 App
-            一样从桌面进入 Ink，顶部和底部导航都会按手机安全区适配。
+            {{ t("tutorial.mobile.body") }}
           </p>
         </article>
 
         <article class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
-          <h3 class="text-2xl font-semibold tracking-tight text-stone-900">常见问题</h3>
+          <h3 class="text-2xl font-semibold tracking-tight text-stone-900">
+            {{ t("tutorial.faqSection.title") }}
+          </h3>
           <div class="mt-5 space-y-4">
             <article
               v-for="item in faqs"
@@ -253,34 +284,38 @@ async function handleFeedbackSubmit() {
           </div>
 
           <div class="mt-6 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
-            <p class="text-sm font-semibold text-stone-900">没找到问题？</p>
+            <p class="text-sm font-semibold text-stone-900">
+              {{ t("tutorial.faqSection.missingQuestionTitle") }}
+            </p>
             <p class="mt-2 text-sm leading-7 text-stone-600">
-              可以直接把你的问题、建议或吐槽发给作者。
+              {{ t("tutorial.faqSection.missingQuestionBody") }}
             </p>
             <button
               type="button"
               class="ui-btn-secondary mt-4 w-full px-4 py-2.5 text-sm sm:w-auto"
               @click="openFeedbackDialog"
             >
-              反馈给作者
+              {{ t("feedback.card.action") }}
             </button>
           </div>
         </article>
 
         <aside class="rounded-[1.8rem] border border-stone-200 bg-white p-6 shadow-sm sm:p-7">
-          <h3 class="text-xl font-semibold text-stone-900">开始使用</h3>
+          <h3 class="text-xl font-semibold text-stone-900">
+            {{ t("tutorial.start.title") }}
+          </h3>
           <div class="mt-5 space-y-3">
             <RouterLink
               to="/conversations"
               class="ui-btn-primary block w-full px-4 py-2.5 text-center text-sm"
             >
-              去对话页
+              {{ t("tutorial.actions.goToConversations") }}
             </RouterLink>
             <RouterLink
               to="/prints"
               class="ui-btn-secondary block w-full px-4 py-2.5 text-center text-sm"
             >
-              去打印页
+              {{ t("tutorial.actions.goToPrints") }}
             </RouterLink>
           </div>
         </aside>

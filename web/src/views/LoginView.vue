@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 
 import { DEFAULT_LOGIN_REDIRECT, resolveLoginRedirect } from "@/router/authRedirect";
@@ -8,6 +9,7 @@ import { useWorkspaceStore } from "@/stores/workspace";
 const router = useRouter();
 const route = useRoute();
 const workspaceStore = useWorkspaceStore();
+const { t } = useI18n();
 
 const email = ref("admin");
 const password = ref("");
@@ -18,7 +20,7 @@ const isFormValid = computed(
   () => email.value.trim().length > 0 && password.value.trim().length > 0,
 );
 const noticeMessage = computed(() =>
-  route.query.notice === "password-updated" ? "密码已更新，请使用新密码重新登录。" : "",
+  route.query.notice === "password-updated" ? t("login.notice.passwordUpdated") : "",
 );
 
 function handleBack() {
@@ -34,7 +36,7 @@ async function handleSubmit() {
   formError.value = "";
 
   if (!isFormValid.value) {
-    formError.value = "请输入账号和密码。";
+    formError.value = t("login.errors.missingCredentials");
     return;
   }
 
@@ -60,7 +62,7 @@ async function handleSubmit() {
         @click="handleBack"
       >
         <span aria-hidden="true">←</span>
-        <span>返回</span>
+        <span>{{ t("common.actions.back") }}</span>
       </button>
     </div>
 
@@ -74,15 +76,15 @@ async function handleSubmit() {
           <h1
             class="text-[clamp(2.25rem,7vw,3.5rem)] leading-[1.05] font-semibold tracking-tight text-stone-900"
           >
-            <span class="block">打开 Ink</span>
-            <span class="mt-2 block">继续你的纸条灵感</span>
+            <span class="block">{{ t("login.hero.titleLine1") }}</span>
+            <span class="mt-2 block">{{ t("login.hero.titleLine2") }}</span>
           </h1>
         </section>
 
         <section
           class="mx-auto w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-8 lg:mx-0 lg:max-w-none lg:p-10"
         >
-          <h2 class="text-xl font-semibold text-stone-900">登录账号</h2>
+          <h2 class="text-xl font-semibold text-stone-900">{{ t("login.form.title") }}</h2>
 
           <p
             v-if="noticeMessage"
@@ -93,25 +95,27 @@ async function handleSubmit() {
 
           <form class="mt-6 space-y-4 sm:mt-8 sm:space-y-5" @submit.prevent="handleSubmit">
             <div>
-              <label for="email" class="mb-2 block text-sm font-medium text-stone-900">账号</label>
+              <label for="email" class="mb-2 block text-sm font-medium text-stone-900">
+                {{ t("login.form.accountLabel") }}
+              </label>
               <input
                 id="email"
                 v-model="email"
                 type="text"
-                placeholder="admin"
+                :placeholder="t('login.form.accountPlaceholder')"
                 class="w-full rounded-lg border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
               />
             </div>
             <div>
               <label for="password" class="mb-2 block text-sm font-medium text-stone-900">
-                密码
+                {{ t("login.form.passwordLabel") }}
               </label>
               <div class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3">
                 <input
                   id="password"
                   v-model="password"
                   :type="passwordVisible ? 'text' : 'password'"
-                  placeholder="请输入密码"
+                  :placeholder="t('login.form.passwordPlaceholder')"
                   class="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-sm text-stone-900 transition-colors placeholder:text-stone-400 focus:outline-none"
                 />
                 <button
@@ -119,7 +123,7 @@ async function handleSubmit() {
                   class="shrink-0 text-xs font-medium text-stone-500 hover:text-stone-900"
                   @click="passwordVisible = !passwordVisible"
                 >
-                  {{ passwordVisible ? "隐藏" : "显示" }}
+                  {{ passwordVisible ? t("common.actions.hide") : t("common.actions.show") }}
                 </button>
               </div>
             </div>
@@ -132,7 +136,9 @@ async function handleSubmit() {
                 class="ui-btn-primary w-full px-6 py-2.5 sm:w-auto"
                 :disabled="workspaceStore.authLoading"
               >
-                {{ workspaceStore.authLoading ? "登录中..." : "登录" }}
+                {{
+                  workspaceStore.authLoading ? t("login.form.loggingIn") : t("common.actions.login")
+                }}
               </button>
             </div>
           </form>

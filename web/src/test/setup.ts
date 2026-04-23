@@ -1,6 +1,8 @@
 import { config } from "@vue/test-utils";
 import { beforeEach, vi } from "vitest";
 
+import i18n, { setI18nLocale } from "@/i18n";
+
 type MatchMediaEventHandler = (
   type: string,
   listener: EventListenerOrEventListenerObject | null,
@@ -14,6 +16,12 @@ type MatchMediaFactory = (query: string) => MediaQueryList;
 config.global.stubs = {
   transition: false,
 };
+config.global.plugins = [i18n];
+
+Object.defineProperty(window.navigator, "language", {
+  configurable: true,
+  value: "zh-CN",
+});
 
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -64,9 +72,11 @@ if (!hasStorageApi(window.sessionStorage)) {
 }
 
 beforeEach(() => {
+  setI18nLocale("zh-CN");
   window.localStorage.clear();
   window.sessionStorage.clear();
   document.title = "Ink";
+  document.documentElement.lang = "zh-CN";
   delete document.documentElement.dataset.theme;
   delete document.documentElement.dataset.colorMode;
   document.documentElement.style.colorScheme = "";
