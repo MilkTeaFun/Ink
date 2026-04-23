@@ -12,7 +12,9 @@ Ink is still in early development. Security fixes are applied to:
 
 ## Reporting a vulnerability
 
-Please use GitHub private vulnerability reporting for this repository.
+Please use GitHub private vulnerability reporting for this repository:
+
+- https://github.com/MilkTeaFun/Ink/security/advisories/new
 
 1. Go to the repository Security tab.
 2. Choose **Report a vulnerability**.
@@ -29,6 +31,8 @@ Do not open a public issue for undisclosed vulnerabilities, credentials, token l
 
 ## Response expectations
 
-- We will acknowledge the report after triage.
+- We aim to acknowledge valid vulnerability reports within 3 business days.
+- We aim to provide an initial triage update within 7 calendar days.
 - We may ask follow-up questions or request a minimal reproduction.
 - We will coordinate disclosure timing after a fix or mitigation is ready.
+- When coordinated disclosure is needed, we target public disclosure within 90 days after confirmation unless a longer mitigation window is required.
