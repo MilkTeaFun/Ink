@@ -1,3 +1,3 @@
 #!/bin/sh
 
-pnpm --dir web check
+make check-local-ci

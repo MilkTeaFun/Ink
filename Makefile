@@ -1,4 +1,4 @@
-.PHONY: dev-web test-web build-web check-web setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api lint-api check-api smoke-api
+.PHONY: dev-web test-web build-web check-web check-local-ci act-list setup-api-env dev-db reset-db logs-db migrate-up seed-dev bootstrap-api dev-api test-api build-api lint-api check-api smoke-api
 
 dev-web:
 	cd web && pnpm dev
@@ -11,6 +11,12 @@ build-web:
 
 check-web:
 	cd web && pnpm check
+
+check-local-ci:
+	./scripts/check-local-ci.sh
+
+act-list:
+	act -l
 
 setup-api-env:
 	./server/scripts/ensure_dev_env.sh
