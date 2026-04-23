@@ -23,6 +23,7 @@ func TestValidateGitURL(t *testing.T) {
 		wantHost string
 	}{
 		{name: "ok github", url: "https://github.com/owner/repo.git", wantHost: "github.com"},
+		{name: "ok github mixed case", url: "https://GitHub.Com/owner/repo.git", wantHost: "github.com"},
 		{name: "ok wildcard subdomain", url: "https://source.gitlab.com/owner/repo", wantHost: "source.gitlab.com"},
 		{name: "reject http", url: "http://github.com/owner/repo", wantErr: true},
 		{name: "reject ssh", url: "git@github.com:owner/repo.git", wantErr: true},
@@ -54,6 +55,9 @@ func TestValidateGitURL(t *testing.T) {
 			}
 			if !strings.HasPrefix(normalized, "https://") {
 				t.Fatalf("normalized URL must start with https://, got %q", normalized)
+			}
+			if strings.Contains(normalized, "GitHub.Com") {
+				t.Fatalf("normalized URL must canonicalize host casing, got %q", normalized)
 			}
 		})
 	}

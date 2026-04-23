@@ -122,9 +122,13 @@ func validateGitURL(rawURL string, allowedHosts []string) (string, string, error
 
 	// Reconstruct the URL without query/fragment so callers can't smuggle in
 	// credentials or auth params via the request.
+	normalizedHost := host
+	if port := parsed.Port(); port != "" {
+		normalizedHost = normalizedHost + ":" + port
+	}
 	normalized := &url.URL{
 		Scheme: strings.ToLower(parsed.Scheme),
-		Host:   parsed.Host,
+		Host:   normalizedHost,
 		Path:   parsed.Path,
 	}
 	return normalized.String(), host, nil
