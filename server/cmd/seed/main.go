@@ -59,8 +59,10 @@ func main() {
 	if result.Created {
 		fmt.Println("seeded development admin account")
 		fmt.Printf("admin login: %s\n", result.Login)
-		fmt.Printf("initial password: %s\n", result.Password)
-		fmt.Printf("saved to: %s\n", result.CredentialsPath)
+		if result.CredentialsPath != "" {
+			fmt.Printf("credentials saved to: %s\n", result.CredentialsPath)
+			fmt.Println("read the initial password from the credentials file")
+		}
 		return
 	}
 

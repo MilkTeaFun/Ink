@@ -30,7 +30,6 @@ type DevAdminOptions struct {
 type DevAdminResult struct {
 	Created         bool
 	Login           string
-	Password        string
 	CredentialsPath string
 }
 
@@ -90,7 +89,6 @@ func EnsureDevAdmin(ctx context.Context, db *pgxpool.Pool, options DevAdminOptio
 	}
 
 	result.Created = true
-	result.Password = initialPassword
 	return result, nil
 }
 
