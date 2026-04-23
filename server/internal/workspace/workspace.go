@@ -87,10 +87,10 @@ type SourceConnection struct {
 }
 
 type Preferences struct {
-	LoginProtectionEnabled  bool      `json:"loginProtectionEnabled"`
-	SendConfirmationEnabled bool      `json:"sendConfirmationEnabled"`
-	Theme                   ThemeMode `json:"theme"`
-	DefaultDeviceID         string    `json:"defaultDeviceId"`
+	LoginProtectionEnabled  bool             `json:"loginProtectionEnabled"`
+	SendConfirmationEnabled bool             `json:"sendConfirmationEnabled"`
+	Theme                   ThemeMode        `json:"theme"`
+	DefaultDeviceID         string           `json:"defaultDeviceId"`
 	Locale                  LocalePreference `json:"locale"`
 }
 
