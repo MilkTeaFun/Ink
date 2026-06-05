@@ -103,6 +103,10 @@ function getNow() {
   return new Date().toISOString();
 }
 
+function getErrorMessage(error: unknown, fallbackKey: string) {
+  return getLocalizedErrorMessage(error, fallbackKey);
+}
+
 function createEmptyConversation(): Conversation {
   return {
     id: createId("conversation"),
@@ -1059,10 +1063,6 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     values?: Record<string, unknown>,
   ) {
     showFlash(translate(key, values), tone);
-  }
-
-  function getErrorMessage(error: unknown, fallbackKey: string) {
-    return getLocalizedErrorMessage(error, fallbackKey);
   }
 
   function updateConversation(
