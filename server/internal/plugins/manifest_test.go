@@ -111,7 +111,7 @@ func TestParseManifestRejectsInvalidPermissions(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := ParseManifest([]byte(v2ManifestJSON(`"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },
-				`+testCase.permissions)))
+				` + testCase.permissions)))
 			if !errors.Is(err, ErrInvalidPlugin) {
 				t.Fatalf("expected invalid plugin error, got %v", err)
 			}
