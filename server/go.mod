@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
 	github.com/ruhuang2001/memobird-go v0.0.0-20260409150855-96aef2c49999
 	golang.org/x/crypto v0.52.0
