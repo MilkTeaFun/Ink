@@ -193,6 +193,7 @@ func newGitTestService(t *testing.T, cloner GitCloner, hosts []string) (*Service
 		pluginRoot,
 		5*time.Second,
 		30*time.Second,
+		RuntimeLimits{},
 		cloner,
 		hosts,
 	)
@@ -203,7 +204,7 @@ func newGitTestService(t *testing.T, cloner GitCloner, hosts []string) (*Service
 // install path can be exercised without Node/Python tooling.
 type passthroughRunner struct{}
 
-func (passthroughRunner) Run(_ context.Context, _ string, _ []string, _ []byte) ([]byte, []byte, error) {
+func (passthroughRunner) Run(_ context.Context, _ string, _ []string, _ []byte, _ RunOptions) ([]byte, []byte, error) {
 	return nil, nil, nil
 }
 

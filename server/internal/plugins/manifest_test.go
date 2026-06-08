@@ -46,6 +46,79 @@ func TestParseManifestRejectsInvalidFetchPolicy(t *testing.T) {
 	}
 }
 
+func TestParseManifestAcceptsPermissions(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(v2ManifestJSON(`"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },
+		"permissions": {
+			"network": {
+				"mode": "declared_hosts",
+				"hosts": ["api.example.com", "*.example.org"]
+			},
+			"filesystem": {
+				"temp": true
+			},
+			"installScripts": false
+		},`))
+
+	manifest, err := ParseManifest(raw)
+	if err != nil {
+		t.Fatalf("expected valid manifest, got %v", err)
+	}
+	if manifest.Permissions == nil || manifest.Permissions.Network == nil {
+		t.Fatalf("expected parsed permissions, got %+v", manifest.Permissions)
+	}
+	if manifest.Permissions.Network.Mode != NetworkPermissionDeclaredHosts {
+		t.Fatalf("unexpected network mode: %+v", manifest.Permissions.Network)
+	}
+}
+
+func TestParseManifestRejectsInvalidPermissions(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		permissions string
+	}{
+		{
+			name: "unsupported network mode",
+			permissions: `"permissions": {
+				"network": { "mode": "private_lan" }
+			},`,
+		},
+		{
+			name: "missing declared hosts",
+			permissions: `"permissions": {
+				"network": { "mode": "declared_hosts" }
+			},`,
+		},
+		{
+			name: "host is url",
+			permissions: `"permissions": {
+				"network": { "mode": "declared_hosts", "hosts": ["https://api.example.com"] }
+			},`,
+		},
+		{
+			name: "duplicate host",
+			permissions: `"permissions": {
+				"network": { "mode": "declared_hosts", "hosts": ["api.example.com", "API.example.com"] }
+			},`,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseManifest([]byte(v2ManifestJSON(`"fetchPolicy": { "type": "fixed_interval", "minutes": 15 },
+				`+testCase.permissions)))
+			if !errors.Is(err, ErrInvalidPlugin) {
+				t.Fatalf("expected invalid plugin error, got %v", err)
+			}
+		})
+	}
+}
+
 func v2ManifestJSON(fetchBlock string) string {
 	return fmt.Sprintf(`{
 		"schemaVersion": 2,

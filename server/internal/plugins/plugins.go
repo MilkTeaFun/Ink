@@ -9,6 +9,7 @@ type FieldType string
 type BlockType string
 type TriggerKind string
 type FetchPolicyType string
+type NetworkPermissionMode string
 
 const (
 	SourceTypeUpload SourceType = "upload"
@@ -41,6 +42,10 @@ const (
 	TriggerKindManual    TriggerKind = "manual"
 
 	FetchPolicyTypeFixedInterval FetchPolicyType = "fixed_interval"
+
+	NetworkPermissionNone          NetworkPermissionMode = "none"
+	NetworkPermissionDeclaredHosts NetworkPermissionMode = "declared_hosts"
+	NetworkPermissionAll           NetworkPermissionMode = "all"
 )
 
 type FieldOption struct {
@@ -76,17 +81,34 @@ type Entrypoints struct {
 	Fetch    CommandSpec `json:"fetch"`
 }
 
+type NetworkPermission struct {
+	Mode  NetworkPermissionMode `json:"mode"`
+	Hosts []string              `json:"hosts,omitempty"`
+}
+
+type FilesystemPermission struct {
+	Temp  bool `json:"temp,omitempty"`
+	Cache bool `json:"cache,omitempty"`
+}
+
+type PluginPermissions struct {
+	Network        *NetworkPermission    `json:"network,omitempty"`
+	Filesystem     *FilesystemPermission `json:"filesystem,omitempty"`
+	InstallScripts bool                  `json:"installScripts,omitempty"`
+}
+
 type Manifest struct {
-	SchemaVersion         int         `json:"schemaVersion"`
-	Kind                  string      `json:"kind"`
-	PluginKey             string      `json:"pluginKey"`
-	Name                  string      `json:"name"`
-	Version               string      `json:"version"`
-	Description           string      `json:"description"`
-	Runtime               RuntimeSpec `json:"runtime"`
-	FetchPolicy           FetchPolicy `json:"fetchPolicy"`
-	Entrypoints           Entrypoints `json:"entrypoints"`
-	WorkspaceConfigSchema []FieldSpec `json:"workspaceConfigSchema"`
+	SchemaVersion         int                `json:"schemaVersion"`
+	Kind                  string             `json:"kind"`
+	PluginKey             string             `json:"pluginKey"`
+	Name                  string             `json:"name"`
+	Version               string             `json:"version"`
+	Description           string             `json:"description"`
+	Runtime               RuntimeSpec        `json:"runtime"`
+	FetchPolicy           FetchPolicy        `json:"fetchPolicy"`
+	Entrypoints           Entrypoints        `json:"entrypoints"`
+	Permissions           *PluginPermissions `json:"permissions,omitempty"`
+	WorkspaceConfigSchema []FieldSpec        `json:"workspaceConfigSchema"`
 }
 
 type Installation struct {

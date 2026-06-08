@@ -198,6 +198,28 @@ function createUpdatedPluginDetails() {
   };
 }
 
+function createPermissionedPluginDetails() {
+  const plugin = createPluginDetails();
+
+  return {
+    ...plugin,
+    manifest: {
+      ...plugin.manifest,
+      permissions: {
+        network: {
+          mode: "declared_hosts" as const,
+          hosts: ["api.example.com", "*.example.org"],
+        },
+        filesystem: {
+          temp: true,
+          cache: true,
+        },
+        installScripts: true,
+      },
+    },
+  };
+}
+
 function createSchedule() {
   return {
     id: "schedule-1",
@@ -368,6 +390,23 @@ describe("plugin ui flows", () => {
       },
       true,
     );
+  });
+
+  it("shows plugin permission declarations in settings", async () => {
+    const { pinia, router, store } = await createWorkspaceContext("/settings", "admin");
+    const plugin = createPermissionedPluginDetails();
+    store.availablePlugins = [plugin];
+    store.adminPlugins = [plugin];
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        plugins: [pinia, router],
+      },
+    });
+
+    expect(wrapper.text()).toContain("网络：api.example.com, *.example.org");
+    expect(wrapper.text()).toContain("持久缓存");
+    expect(wrapper.text()).toContain("安装脚本");
   });
 
   it("refreshes plugin drafts after plugin updates and clears secret inputs after save", async () => {

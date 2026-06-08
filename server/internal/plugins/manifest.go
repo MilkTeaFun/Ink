@@ -12,6 +12,7 @@ import (
 )
 
 var pluginKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+var permissionHostPattern = regexp.MustCompile(`^(\*\.)?[A-Za-z0-9][A-Za-z0-9.-]*(:[0-9]{1,5})?$`)
 
 func ParseManifest(raw []byte) (Manifest, error) {
 	var manifest Manifest
@@ -64,11 +65,46 @@ func ValidateManifest(manifest Manifest) error {
 		strings.TrimSpace(manifest.Entrypoints.Fetch.Command[0]) == "" {
 		return fmt.Errorf("%w: entrypoints.fetch.command is required", ErrInvalidPlugin)
 	}
+	if err := validatePermissions(manifest.Permissions); err != nil {
+		return err
+	}
 	if err := validateFieldSpecs(manifest.WorkspaceConfigSchema, true); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func validatePermissions(permissions *PluginPermissions) error {
+	if permissions == nil {
+		return nil
+	}
+	if permissions.Network == nil {
+		return nil
+	}
+
+	switch permissions.Network.Mode {
+	case NetworkPermissionNone, NetworkPermissionAll:
+		return nil
+	case NetworkPermissionDeclaredHosts:
+		if len(permissions.Network.Hosts) == 0 {
+			return fmt.Errorf("%w: permissions.network.hosts is required when mode is declared_hosts", ErrInvalidPlugin)
+		}
+		seenHosts := map[string]struct{}{}
+		for _, host := range permissions.Network.Hosts {
+			normalized := strings.ToLower(strings.TrimSpace(host))
+			if normalized == "" || !permissionHostPattern.MatchString(normalized) {
+				return fmt.Errorf("%w: invalid permissions.network.hosts entry %q", ErrInvalidPlugin, host)
+			}
+			if _, exists := seenHosts[normalized]; exists {
+				return fmt.Errorf("%w: duplicate permissions.network.hosts entry %q", ErrInvalidPlugin, normalized)
+			}
+			seenHosts[normalized] = struct{}{}
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: permissions.network.mode must be none, declared_hosts, or all", ErrInvalidPlugin)
+	}
 }
 
 func validateFieldSpecs(fields []FieldSpec, allowSecret bool) error {

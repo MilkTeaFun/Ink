@@ -192,6 +192,30 @@ function pluginDraftValue(plugin: PluginDetails, field: PluginFieldSpec) {
         getPluginFieldDefaultValue(field));
 }
 
+function pluginPermissionLabels(plugin: PluginDetails) {
+  const permissions = plugin.manifest.permissions;
+  const labels: string[] = [];
+  const network = permissions?.network;
+
+  if (!network || network.mode === "none") {
+    labels.push(t("settings.plugins.permissions.networkNone"));
+  } else if (network.mode === "all") {
+    labels.push(t("settings.plugins.permissions.networkAll"));
+  } else {
+    const hosts = network.hosts?.join(", ") || t("settings.plugins.permissions.unspecifiedHosts");
+    labels.push(t("settings.plugins.permissions.networkHosts", { hosts }));
+  }
+
+  if (permissions?.filesystem?.cache) {
+    labels.push(t("settings.plugins.permissions.cache"));
+  }
+  if (permissions?.installScripts) {
+    labels.push(t("settings.plugins.permissions.installScripts"));
+  }
+
+  return labels;
+}
+
 function updatePluginDraft(plugin: PluginDetails, field: PluginFieldSpec, value: unknown) {
   ensurePluginDraft(plugin);
 
@@ -1254,6 +1278,15 @@ void closeAccountCreationDialog;
                       }}
                       · v{{ plugin.installation.version }}
                     </p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      <span
+                        v-for="label in pluginPermissionLabels(plugin)"
+                        :key="label"
+                        class="ui-status-badge border-stone-200 bg-stone-50 text-stone-600"
+                      >
+                        {{ label }}
+                      </span>
+                    </div>
                     <p
                       v-if="plugin.binding?.lastError || plugin.installation.lastError"
                       class="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700"

@@ -25,6 +25,15 @@ var (
 	ErrNotFound        = errors.New("plugin not found")
 	ErrExecutionFailed = errors.New("plugin execution failed")
 	ErrMissingSecret   = errors.New("plugin encryption secret missing")
+	ErrOutputTooLarge  = errors.New("plugin output exceeded size limit")
+)
+
+const (
+	defaultPluginOutputMaxBytes        int64 = 1 << 20
+	defaultPluginFetchMaxItems               = 100
+	defaultPluginFetchMaxBlocksPerItem       = 80
+	defaultPluginFetchMaxTextBytes           = 32 << 10
+	defaultPluginFetchMaxURLBytes            = 2048
 )
 
 type ValidationFailure struct {
@@ -69,8 +78,22 @@ type Clock interface {
 	Now() time.Time
 }
 
+type RunOptions struct {
+	OutputMaxBytes int64
+	EnvAllowlist   []string
+}
+
 type Runner interface {
-	Run(ctx context.Context, workdir string, command []string, stdin []byte) ([]byte, []byte, error)
+	Run(ctx context.Context, workdir string, command []string, stdin []byte, options RunOptions) ([]byte, []byte, error)
+}
+
+type RuntimeLimits struct {
+	OutputMaxBytes        int64
+	FetchMaxItems         int
+	FetchMaxBlocksPerItem int
+	FetchMaxTextBytes     int
+	FetchMaxURLBytes      int
+	EnvAllowlist          []string
 }
 
 type Service struct {
@@ -83,6 +106,7 @@ type Service struct {
 	pluginRoot      string
 	execTimeout     time.Duration
 	installTimeout  time.Duration
+	runtimeLimits   RuntimeLimits
 	gitCloner       GitCloner
 	gitAllowedHosts []string
 }
@@ -111,6 +135,7 @@ func NewService(
 	pluginRoot string,
 	execTimeout time.Duration,
 	installTimeout time.Duration,
+	runtimeLimits RuntimeLimits,
 	gitCloner GitCloner,
 	gitAllowedHosts []string,
 ) *Service {
@@ -119,6 +144,7 @@ func NewService(
 	}
 
 	hosts := append([]string{}, gitAllowedHosts...)
+	limits := normalizeRuntimeLimits(runtimeLimits)
 
 	return &Service{
 		repo:            repo,
@@ -130,26 +156,161 @@ func NewService(
 		pluginRoot:      pluginRoot,
 		execTimeout:     execTimeout,
 		installTimeout:  installTimeout,
+		runtimeLimits:   limits,
 		gitCloner:       gitCloner,
 		gitAllowedHosts: hosts,
 	}
 }
 
-func (execRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte) ([]byte, []byte, error) {
+func normalizeRuntimeLimits(limits RuntimeLimits) RuntimeLimits {
+	if limits.OutputMaxBytes <= 0 {
+		limits.OutputMaxBytes = defaultPluginOutputMaxBytes
+	}
+	if limits.FetchMaxItems <= 0 {
+		limits.FetchMaxItems = defaultPluginFetchMaxItems
+	}
+	if limits.FetchMaxBlocksPerItem <= 0 {
+		limits.FetchMaxBlocksPerItem = defaultPluginFetchMaxBlocksPerItem
+	}
+	if limits.FetchMaxTextBytes <= 0 {
+		limits.FetchMaxTextBytes = defaultPluginFetchMaxTextBytes
+	}
+	if limits.FetchMaxURLBytes <= 0 {
+		limits.FetchMaxURLBytes = defaultPluginFetchMaxURLBytes
+	}
+	limits.EnvAllowlist = append([]string{}, limits.EnvAllowlist...)
+	return limits
+}
+
+func (execRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte, options RunOptions) ([]byte, []byte, error) {
 	if len(command) == 0 {
 		return nil, nil, fmt.Errorf("empty command")
+	}
+
+	outputLimit := options.OutputMaxBytes
+	if outputLimit <= 0 {
+		outputLimit = defaultPluginOutputMaxBytes
+	}
+
+	tempDir, err := os.MkdirTemp("", "ink-plugin-run-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+	if err := preparePluginTempDirs(tempDir); err != nil {
+		return nil, nil, err
 	}
 
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Dir = workdir
 	cmd.Stdin = bytes.NewReader(stdin)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Env = isolatedPluginEnv(tempDir, options.EnvAllowlist)
+	stdout := newLimitedBuffer(outputLimit)
+	stderr := newLimitedBuffer(outputLimit)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
+	if stdout.Exceeded() || stderr.Exceeded() {
+		return stdout.Bytes(), stderr.Bytes(), ErrOutputTooLarge
+	}
 	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+type limitedBuffer struct {
+	buffer   bytes.Buffer
+	limit    int64
+	exceeded bool
+}
+
+func newLimitedBuffer(limit int64) *limitedBuffer {
+	if limit <= 0 {
+		limit = defaultPluginOutputMaxBytes
+	}
+	return &limitedBuffer{limit: limit}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	remaining := int(b.limit) - b.buffer.Len()
+	if remaining <= 0 {
+		b.exceeded = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		_, _ = b.buffer.Write(p[:remaining])
+		b.exceeded = true
+		return len(p), nil
+	}
+	return b.buffer.Write(p)
+}
+
+func (b *limitedBuffer) Bytes() []byte {
+	return b.buffer.Bytes()
+}
+
+func (b *limitedBuffer) Exceeded() bool {
+	return b.exceeded
+}
+
+func preparePluginTempDirs(tempDir string) error {
+	for _, subdir := range []string{
+		filepath.Join(tempDir, ".cache"),
+		filepath.Join(tempDir, "uv-cache"),
+		filepath.Join(tempDir, "npm-cache"),
+	} {
+		if err := os.MkdirAll(subdir, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isolatedPluginEnv(tempDir string, allowlist []string) []string {
+	env := []string{
+		"PATH=" + pluginPathEnv(),
+		"HOME=" + tempDir,
+		"TMPDIR=" + tempDir,
+		"TEMP=" + tempDir,
+		"TMP=" + tempDir,
+		"XDG_CACHE_HOME=" + filepath.Join(tempDir, ".cache"),
+		"UV_CACHE_DIR=" + filepath.Join(tempDir, "uv-cache"),
+		"npm_config_cache=" + filepath.Join(tempDir, "npm-cache"),
+		"PYTHONUNBUFFERED=1",
+		"NO_COLOR=1",
+	}
+
+	seen := map[string]struct{}{}
+	for _, entry := range env {
+		key := entry
+		if index := strings.Index(entry, "="); index >= 0 {
+			key = entry[:index]
+		}
+		seen[key] = struct{}{}
+	}
+
+	for _, key := range allowlist {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+			seen[key] = struct{}{}
+		}
+	}
+	return env
+}
+
+func pluginPathEnv() string {
+	if path := strings.TrimSpace(os.Getenv("PATH")); path != "" {
+		return path
+	}
+	return "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 }
 
 func (s *Service) ListAdminInstallations(ctx context.Context, accessToken string) ([]PluginDetails, error) {
@@ -784,7 +945,7 @@ func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, b
 	execCtx, cancel := context.WithTimeout(ctx, s.execTimeout)
 	defer cancel()
 
-	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Fetch.Command, input)
+	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Fetch.Command, input, s.runOptions())
 	if err != nil {
 		return FetchOutput{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
 	}
@@ -798,6 +959,9 @@ func (s *Service) ExecuteFetch(ctx context.Context, installation Installation, b
 		if strings.TrimSpace(result.Items[index].SourceLabel) == "" {
 			result.Items[index].SourceLabel = installation.DisplayName
 		}
+	}
+	if err := validateFetchOutputLimits(result, s.runtimeLimits); err != nil {
+		return FetchOutput{}, fmt.Errorf("%w: %s", ErrExecutionFailed, err.Error())
 	}
 
 	return result, nil
@@ -884,7 +1048,7 @@ func (s *Service) runValidation(ctx context.Context, installation Installation, 
 	execCtx, cancel := context.WithTimeout(ctx, s.execTimeout)
 	defer cancel()
 
-	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Validate.Command, input)
+	stdout, stderr, err := s.runner.Run(execCtx, installation.CurrentPath, manifest.Entrypoints.Validate.Command, input, s.runOptions())
 	if err != nil {
 		return ValidationResult{}, fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
 	}
@@ -918,11 +1082,72 @@ func (s *Service) installPlugin(ctx context.Context, pluginDir string, manifest 
 	installCtx, cancel := context.WithTimeout(ctx, s.installTimeout)
 	defer cancel()
 
-	stdout, stderr, err := s.runner.Run(installCtx, pluginDir, command, nil)
+	stdout, stderr, err := s.runner.Run(installCtx, pluginDir, command, nil, s.runOptions())
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrExecutionFailed, trimExecOutput(stdout, stderr, err))
 	}
 
+	return nil
+}
+
+func (s *Service) runOptions() RunOptions {
+	return RunOptions{
+		OutputMaxBytes: s.runtimeLimits.OutputMaxBytes,
+		EnvAllowlist:   s.runtimeLimits.EnvAllowlist,
+	}
+}
+
+func validateFetchOutputLimits(output FetchOutput, limits RuntimeLimits) error {
+	limits = normalizeRuntimeLimits(limits)
+	if len(output.Items) > limits.FetchMaxItems {
+		return fmt.Errorf("fetch returned %d items, limit is %d", len(output.Items), limits.FetchMaxItems)
+	}
+
+	for itemIndex, item := range output.Items {
+		if err := validateItemLimits(item, itemIndex, limits); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateItemLimits(item Item, itemIndex int, limits RuntimeLimits) error {
+	if len(item.ExternalID) > limits.FetchMaxTextBytes {
+		return fmt.Errorf("items[%d].externalId exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
+	}
+	if len(item.Title) > limits.FetchMaxTextBytes {
+		return fmt.Errorf("items[%d].title exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
+	}
+	if len(item.SourceLabel) > limits.FetchMaxTextBytes {
+		return fmt.Errorf("items[%d].sourceLabel exceeds %d bytes", itemIndex, limits.FetchMaxTextBytes)
+	}
+	if len(item.Blocks) > limits.FetchMaxBlocksPerItem {
+		return fmt.Errorf(
+			"items[%d].blocks has %d blocks, limit is %d",
+			itemIndex,
+			len(item.Blocks),
+			limits.FetchMaxBlocksPerItem,
+		)
+	}
+	for blockIndex, block := range item.Blocks {
+		if err := validateBlockLimits(block, itemIndex, blockIndex, limits); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateBlockLimits(block ContentBlock, itemIndex int, blockIndex int, limits RuntimeLimits) error {
+	label := fmt.Sprintf("items[%d].blocks[%d]", itemIndex, blockIndex)
+	if len(block.Text) > limits.FetchMaxTextBytes {
+		return fmt.Errorf("%s.text exceeds %d bytes", label, limits.FetchMaxTextBytes)
+	}
+	if len(block.Alt) > limits.FetchMaxTextBytes {
+		return fmt.Errorf("%s.alt exceeds %d bytes", label, limits.FetchMaxTextBytes)
+	}
+	if len(block.URL) > limits.FetchMaxURLBytes {
+		return fmt.Errorf("%s.url exceeds %d bytes", label, limits.FetchMaxURLBytes)
+	}
 	return nil
 }
 

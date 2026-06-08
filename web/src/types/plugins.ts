@@ -1,5 +1,6 @@
 export type PluginInstallationStatus = "installing" | "ready" | "failed" | "disabled";
 export type PluginBindingStatus = "connected" | "disconnected" | "error";
+export type PluginNetworkPermissionMode = "none" | "declared_hosts" | "all";
 export type PluginFieldType =
   | "text"
   | "secret"
@@ -25,6 +26,18 @@ export interface PluginFieldSpec {
   options?: PluginFieldOption[];
 }
 
+export interface PluginPermissions {
+  network?: {
+    mode: PluginNetworkPermissionMode;
+    hosts?: string[];
+  };
+  filesystem?: {
+    temp?: boolean;
+    cache?: boolean;
+  };
+  installScripts?: boolean;
+}
+
 export interface PluginManifest {
   schemaVersion: number;
   kind: "source";
@@ -47,6 +60,7 @@ export interface PluginManifest {
       command: string[];
     };
   };
+  permissions?: PluginPermissions;
   workspaceConfigSchema: PluginFieldSpec[];
 }
 

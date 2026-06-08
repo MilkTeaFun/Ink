@@ -221,7 +221,7 @@ func (c fakeClock) Now() time.Time {
 
 type installPassthroughRunner struct{}
 
-func (installPassthroughRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte) ([]byte, []byte, error) {
+func (installPassthroughRunner) Run(ctx context.Context, workdir string, command []string, stdin []byte, options RunOptions) ([]byte, []byte, error) {
 	if len(command) >= 2 {
 		if command[0] == "uv" && strings.Join(command[1:], " ") == "sync --frozen" {
 			return nil, nil, nil
@@ -231,7 +231,116 @@ func (installPassthroughRunner) Run(ctx context.Context, workdir string, command
 		}
 	}
 
-	return execRunner{}.Run(ctx, workdir, command, stdin)
+	return execRunner{}.Run(ctx, workdir, command, stdin, options)
+}
+
+func TestExecRunnerUsesIsolatedEnvironment(t *testing.T) {
+	t.Setenv("JWT_SECRET", "server-secret")
+	t.Setenv("INK_PLUGIN_ALLOWED", "visible")
+	workdir := t.TempDir()
+	runner := execRunner{}
+
+	stdout, stderr, err := runner.Run(
+		context.Background(),
+		workdir,
+		[]string{"sh", "-c", `printf "%s" "$JWT_SECRET"`},
+		nil,
+		RunOptions{OutputMaxBytes: 1024},
+	)
+	if err != nil {
+		t.Fatalf("run secret check: %v stderr=%s", err, stderr)
+	}
+	if string(stdout) != "" {
+		t.Fatalf("expected server secret to be hidden, got %q", string(stdout))
+	}
+
+	stdout, stderr, err = runner.Run(
+		context.Background(),
+		workdir,
+		[]string{"sh", "-c", `printf "%s" "$INK_PLUGIN_ALLOWED"`},
+		nil,
+		RunOptions{OutputMaxBytes: 1024, EnvAllowlist: []string{"INK_PLUGIN_ALLOWED"}},
+	)
+	if err != nil {
+		t.Fatalf("run allowlist check: %v stderr=%s", err, stderr)
+	}
+	if string(stdout) != "visible" {
+		t.Fatalf("expected allowlisted env to be visible, got %q", string(stdout))
+	}
+}
+
+func TestExecRunnerEnforcesOutputLimit(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, err := execRunner{}.Run(
+		context.Background(),
+		t.TempDir(),
+		[]string{"sh", "-c", `printf "1234567890"`},
+		nil,
+		RunOptions{OutputMaxBytes: 5},
+	)
+	if !errors.Is(err, ErrOutputTooLarge) {
+		t.Fatalf("expected output limit error, got %v", err)
+	}
+	if string(stdout) != "12345" {
+		t.Fatalf("expected truncated stdout, got %q", string(stdout))
+	}
+}
+
+func TestValidateFetchOutputLimitsRejectsOversizedOutput(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name   string
+		output FetchOutput
+		limits RuntimeLimits
+	}{
+		{
+			name:   "too many items",
+			output: FetchOutput{Items: []Item{{ExternalID: "1"}, {ExternalID: "2"}}},
+			limits: RuntimeLimits{FetchMaxItems: 1},
+		},
+		{
+			name: "too many blocks",
+			output: FetchOutput{Items: []Item{{
+				ExternalID: "1",
+				Title:      "title",
+				Blocks: []ContentBlock{
+					{Type: BlockParagraph, Text: "one"},
+					{Type: BlockParagraph, Text: "two"},
+				},
+			}}},
+			limits: RuntimeLimits{FetchMaxBlocksPerItem: 1},
+		},
+		{
+			name: "text too large",
+			output: FetchOutput{Items: []Item{{
+				ExternalID: "1",
+				Title:      "title",
+				Blocks:     []ContentBlock{{Type: BlockParagraph, Text: "abcdef"}},
+			}}},
+			limits: RuntimeLimits{FetchMaxTextBytes: 3},
+		},
+		{
+			name: "url too large",
+			output: FetchOutput{Items: []Item{{
+				ExternalID: "1",
+				Title:      "title",
+				Blocks:     []ContentBlock{{Type: BlockImage, URL: "https://example.com/image.png"}},
+			}}},
+			limits: RuntimeLimits{FetchMaxURLBytes: 10},
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if err := validateFetchOutputLimits(testCase.output, testCase.limits); err == nil {
+				t.Fatalf("expected limit error")
+			}
+		})
+	}
 }
 
 func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
@@ -256,6 +365,7 @@ func TestUploadPluginSaveBindingAndExecuteFetch(t *testing.T) {
 		pluginRoot,
 		5*time.Second,
 		30*time.Second,
+		RuntimeLimits{},
 		nil,
 		nil,
 	)

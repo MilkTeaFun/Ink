@@ -48,6 +48,17 @@ Ink now splits plugin work into two independent loops:
       "command": ["node", "fetch.mjs"]
     }
   },
+  "permissions": {
+    "network": {
+      "mode": "declared_hosts",
+      "hosts": ["api.example.com"]
+    },
+    "filesystem": {
+      "temp": true,
+      "cache": false
+    },
+    "installScripts": false
+  },
   "workspaceConfigSchema": [
     {
       "key": "feedUrl",
@@ -67,6 +78,7 @@ Ink now splits plugin work into two independent loops:
 - `runtime.type`: `node` or `python`
 - `fetchPolicy.type`: must be `fixed_interval`
 - `fetchPolicy.minutes`: positive integer
+- `permissions`: optional capability declaration for administrator review
 - `workspaceConfigSchema`: binding-level config only
 
 ### Supported config field types
@@ -82,6 +94,25 @@ Ink now splits plugin work into two independent loops:
 `secret` fields are allowed only in `workspaceConfigSchema`. Their values are encrypted in binding storage and are passed to the plugin through the `secrets` object.
 
 ## Entrypoints
+
+Entrypoints are executed as local subprocesses from the installed plugin directory. They receive JSON on stdin, must write one JSON object to stdout, and should reserve stderr for diagnostics.
+
+Ink executes entrypoints with a constrained environment by default. Server process environment variables are not inherited wholesale; only a minimal runtime environment and operator-configured allowlisted variables are exposed. Each invocation receives an isolated temporary home/cache directory, and stdout/stderr are capped by server configuration.
+
+Python plugins that rely on `pyproject.toml` dependencies should prefer `uv run python ...` commands:
+
+```json
+{
+  "entrypoints": {
+    "validate": {
+      "command": ["uv", "run", "python", "validate.py"]
+    },
+    "fetch": {
+      "command": ["uv", "run", "python", "fetch.py"]
+    }
+  }
+}
+```
 
 ### `validate`
 
@@ -187,6 +218,57 @@ Supported block types:
 
 Plugins should emit only simple, already-sanitized printable content.
 
+Recommended local checks for plugin authors:
+
+- run the manifest schema validation from the template repository
+- execute `validate` with a fixture payload and assert `valid: true`
+- execute `fetch` with a fixture payload and validate every emitted item and block
+
+Ink also applies server-side fetch output limits before ingestion:
+
+- maximum items per fetch
+- maximum blocks per item
+- maximum text bytes
+- maximum URL bytes
+- maximum stdout/stderr bytes per entrypoint
+
+Operators can tune these with the `PLUGIN_OUTPUT_MAX_BYTES`, `PLUGIN_FETCH_MAX_ITEMS`, `PLUGIN_FETCH_MAX_BLOCKS_PER_ITEM`, `PLUGIN_FETCH_MAX_TEXT_BYTES`, and `PLUGIN_FETCH_MAX_URL_BYTES` environment variables.
+
+## Permissions
+
+`permissions` is a capability declaration. It lets plugin authors state what the plugin expects and lets administrators review risk before enabling it. The current local runner uses this for visibility and validation; network sandbox enforcement should be added by a stricter runner before exposing untrusted public plugin installation.
+
+Network modes:
+
+- `none`: plugin should not require outbound network access
+- `declared_hosts`: plugin expects outbound access to the listed hostnames
+- `all`: plugin expects general outbound network access
+
+Example:
+
+```json
+{
+  "permissions": {
+    "network": {
+      "mode": "declared_hosts",
+      "hosts": ["api.github.com", "*.example.org"]
+    },
+    "filesystem": {
+      "temp": true,
+      "cache": true
+    },
+    "installScripts": false
+  }
+}
+```
+
+Filesystem flags:
+
+- `temp`: plugin expects invocation-scoped temporary storage
+- `cache`: plugin expects persistent cache storage; the local trusted runner currently gives invocation-scoped cache only
+
+`installScripts` should be `true` only when dependency installation requires package lifecycle scripts or build hooks.
+
 ## Binding Fetch State
 
 Each binding tracks fetch execution separately from print schedules.
@@ -259,6 +341,10 @@ Delivery order is fixed to oldest-first.
   - Manual print tick only
   - Prints already-collected items for that schedule
   - Does not fetch
+
+## Security Model
+
+Ink currently treats installed plugins as trusted server-side code. Plugin entrypoints run as local subprocesses with a constrained environment, isolated temporary directories, execution timeouts, and output limits. Operators should still install plugins only from trusted repositories or uploads, keep the Git host allowlist narrow, and avoid exposing plugin installation as an untrusted public marketplace flow without an additional sandbox.
 
 ## Example Node Fetch Entrypoint
 

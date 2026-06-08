@@ -114,6 +114,14 @@ func main() {
 		cfg.PluginRoot,
 		cfg.PluginExecTimeout,
 		cfg.PluginInstallTimeout,
+		plugins.RuntimeLimits{
+			OutputMaxBytes:        cfg.PluginOutputMaxBytes,
+			FetchMaxItems:         cfg.PluginFetchMaxItems,
+			FetchMaxBlocksPerItem: cfg.PluginFetchMaxBlocksPerItem,
+			FetchMaxTextBytes:     cfg.PluginFetchMaxTextBytes,
+			FetchMaxURLBytes:      cfg.PluginFetchMaxURLBytes,
+			EnvAllowlist:          cfg.PluginEnvAllowlist,
+		},
 		plugins.GoGitCloner{},
 		cfg.PluginGitAllowedHosts,
 	)
